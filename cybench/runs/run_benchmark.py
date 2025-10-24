@@ -1,4 +1,5 @@
 import os
+import time
 from collections import defaultdict
 
 import pandas as pd
@@ -30,28 +31,14 @@ from cybench.models.nn_models import (
     BaselineTransformer,
 )
 
-from cybench.models.residual_models import (
-    RidgeRes,
-    RandomForestRes,
-    LSTMRes,
-    InceptionTimeRes,
-    TransformerRes,
-)
 
 
 _BASELINE_MODEL_CONSTRUCTORS = {
-    "AverageYieldModel": AverageYieldModel,
-    "LinearTrend": TrendModel,
-    "SklearnRidge": SklearnRidge,
-    "RidgeRes": RidgeRes,
-    "SklearnRF": SklearnRandomForest,
-    "RFRes": RandomForestRes,
+    #"AverageYieldModel": AverageYieldModel,
+    #"LinearTrend": TrendModel,
+    #"SklearnRidge": SklearnRidge,
+    #"SklearnRF": SklearnRandomForest,
     "LSTM": BaselineLSTM,
-    "LSTMRes": LSTMRes,
-    "InceptionTime": BaselineInceptionTime,
-    "InceptionTimeRes": InceptionTimeRes,
-    "Transformer": BaselineTransformer,
-    "TransformerRes": TransformerRes,
 }
 
 BASELINE_MODELS = list(_BASELINE_MODEL_CONSTRUCTORS.keys())
@@ -64,29 +51,6 @@ _BASELINE_MODEL_FIT_KWARGS["LSTM"] = {
     "epochs": NN_MODELS_EPOCHS,
     "device": "cuda" if torch.cuda.is_available() else "cpu",
 }
-_BASELINE_MODEL_FIT_KWARGS["LSTMRes"] = {
-    "epochs": NN_MODELS_EPOCHS,
-    "device": "cuda" if torch.cuda.is_available() else "cpu",
-}
-_BASELINE_MODEL_FIT_KWARGS["InceptionTime"] = {
-    "epochs": NN_MODELS_EPOCHS,
-    "device": "cuda" if torch.cuda.is_available() else "cpu",
-}
-_BASELINE_MODEL_FIT_KWARGS["InceptionTimeRes"] = {
-    "epochs": NN_MODELS_EPOCHS,
-    "device": "cuda" if torch.cuda.is_available() else "cpu",
-}
-
-_BASELINE_MODEL_FIT_KWARGS["Transformer"] = {
-    "epochs": NN_MODELS_EPOCHS,
-    "device": "cuda" if torch.cuda.is_available() else "cpu",
-}
-
-_BASELINE_MODEL_FIT_KWARGS["TransformerRes"] = {
-    "epochs": NN_MODELS_EPOCHS,
-    "device": "cuda" if torch.cuda.is_available() else "cpu",
-}
-
 
 def run_benchmark(
     run_name: str,
@@ -164,14 +128,6 @@ def run_benchmark(
         train_years = [y for y in all_years if y != test_year]
         test_years = [test_year]
         train_dataset, test_dataset = dataset.split_on_years((train_years, test_years))
-
-        # TODO: put into generic function
-        models_init_kwargs["Transformer"] = {
-            "seq_len": train_dataset.max_season_window_length,
-        }
-        models_init_kwargs["TransformerRes"] = {
-            "seq_len": train_dataset.max_season_window_length,
-        }
 
         labels = test_dataset.targets()
 
@@ -333,6 +289,7 @@ def run_benchmark_on_all_data():
 
 
 if __name__ == "__main__":
+    start = time.time()
     parser = argparse.ArgumentParser(prog="run_benchmark.py", description="Run cybench")
     parser.add_argument("-r", "--run-name")
     parser.add_argument("-d", "--dataset-name")
@@ -366,9 +323,7 @@ if __name__ == "__main__":
             "AverageYieldModel",
             "LinearTrend",
             "SklearnRidge",
-            "RidgeRes",
             "LSTM",
-            "LSTMRes",
         ]
         # override epochs for nn-models
         nn_models_epochs = 5
@@ -391,3 +346,5 @@ if __name__ == "__main__":
     # Group and average all available metrics
     agg_df = df_metrics.groupby("model")[metric_cols].mean().round(3)
     print(agg_df)
+    print(time.time() - start)
+
