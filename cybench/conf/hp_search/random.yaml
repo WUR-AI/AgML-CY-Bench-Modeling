@@ -1,0 +1,18 @@
+# Random search - quick exploration
+
+study_name: random_search
+n_trials: 50
+timeout: 3600  # 1 hour
+n_jobs: ${experiment.n_jobs}
+
+sampler:
+  _target_: optuna.samplers.RandomSampler
+  seed: ${experiment.seed}
+
+storage:
+  url: sqlite:///optuna_studies.db
+  load_if_exists: true
+
+logging:
+  log_interval: 1
+  show_progress_bar: true

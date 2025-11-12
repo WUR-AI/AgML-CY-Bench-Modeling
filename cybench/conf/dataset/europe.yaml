@@ -1,0 +1,13 @@
+defaults:
+  - target: yield
+  - non_temporal: geometric_transform
+  - temporal: aggregate
+
+# set crop and country | optionally: set multiple countries such as in europe.yaml
+crop: maize
+country:
+  - NL
+  - FR
+
+# name will show in experiment name
+name: europe

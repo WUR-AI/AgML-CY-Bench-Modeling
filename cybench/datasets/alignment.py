@@ -1,14 +1,12 @@
 import pandas as pd
 import numpy as np
 
-from cybench.util.features import dekad_from_date, unpack_time_series
+from cybench.datasets.features import dekad_from_date, unpack_time_series
 from cybench.util.data import data_to_pandas
 from cybench.config import (
     KEY_LOC,
     KEY_YEAR,
     KEY_DATES,
-    SPINUP_DAYS,
-    FORECAST_LEAD_TIME,
     CROP_CALENDAR_DOYS,
     CROP_CALENDAR_DATES,
     TIME_SERIES_INPUTS,
@@ -17,45 +15,45 @@ from cybench.config import (
 )
 
 
-def add_cutoff_days(df: pd.DataFrame, lead_time: str):
+def add_cutoff_days(df: pd.DataFrame, end_of_sequence: str):
     """Add a column with cutoff days relative to end of season.
 
     Args:
         df (pd.DataFrame): time series data
-        lead_time (str): lead_time option
+        end_of_sequence (str): define lead time through a cutoff date. Options: 'eos-xx' (xx days), 'mid-season', 'quarter-season'
 
     Returns:
         the same DataFrame with column added
     """
-    # For lead_time, see FORECAST_LEAD_TIME in config.py.
-    if "day" in lead_time:
-        df["cutoff_days"] = int(lead_time.split("-")[0])
+    if "eos-" in end_of_sequence:
+        df["cutoff_days"] = int(end_of_sequence.split("-")[-1])
     else:
-        assert "season" in lead_time
-        if lead_time == "middle-of-season":
+        if end_of_sequence == "middle-of-season":
             df["cutoff_days"] = (df["season_length"] // 2).astype(int)
-        elif lead_time == "quarter-of-season":
+        elif end_of_sequence == "quarter-of-season":
             df["cutoff_days"] = (df["season_length"] // 4).astype(int)
         else:
-            raise Exception(f'Unrecognized lead time "{lead_time}"')
+            raise Exception(f'Unrecognized setting for end-of-sequence: "{end_of_sequence}"')
 
     return df
 
 
-def compute_crop_season_window(df, min_year, max_year, lead_time=FORECAST_LEAD_TIME):
+def compute_crop_season_window(df, min_year, max_year, start_of_sequence, end_of_sequence):
     """Compute crop season window used for forecasting.
 
     Args:
         df (pd.DataFrame): crop calendar data
         min_year (int): earliest year in target data
         max_year (int): latest year in target data
-        lead_time (str): forecast lead time option
+        start_of_sequence (str): e.g. sos-60 (start-of-season minus x days) | optionally: sos, sos-60, eos-200
+        end_of_sequence (str): e.g. eos-60 (end-of-season minus x days) | optionally: eos, mid-season, quarter-season
 
     Returns:
         the same DataFrame with crop season window information
     """
     df = df[[KEY_LOC] + CROP_CALENDAR_DOYS]
 
+    # round the dates
     df = df.astype({k: int for k in CROP_CALENDAR_DOYS})
     # Check for out-of-range values
     invalid_sos = df[(df["sos"] < 0) | (df["sos"] > 366)]
@@ -70,8 +68,8 @@ def compute_crop_season_window(df, min_year, max_year, lead_time=FORECAST_LEAD_T
         [df.assign(**{KEY_YEAR: yr}) for yr in range(min_year, max_year + 1)],
         ignore_index=True,
     )
-    df["sos_date"] = pd.to_datetime(df[KEY_YEAR] * 1000 + df["sos"], format="%Y%j")
-    df["eos_date"] = pd.to_datetime(df[KEY_YEAR] * 1000 + df["eos"], format="%Y%j")
+    df["sos_date"] = pd.to_datetime(df[KEY_YEAR] * 1000 + df["sos"], format="%Y%j").dt.floor('D')
+    df["eos_date"] = pd.to_datetime(df[KEY_YEAR] * 1000 + df["eos"], format="%Y%j").dt.floor('D')
 
     # Fix sos_date for cases where sos > eos.
     # For example, sos_date is 20011124 and eos_date is 20010615.
@@ -86,9 +84,22 @@ def compute_crop_season_window(df, min_year, max_year, lead_time=FORECAST_LEAD_T
     df["season_length"] = (df["eos_date"] - df["sos_date"]).dt.days
     assert df[df["season_length"] > 366].empty
 
-    df = add_cutoff_days(df, lead_time)
-    df["cutoff_date"] = df["eos_date"] - pd.to_timedelta(df["cutoff_days"], unit="d")
-    df["season_window_length"] = df["season_length"] + SPINUP_DAYS - df["cutoff_days"]
+    if end_of_sequence == "eos":
+        df["end_of_sequence_date"] = df["eos_date"]
+    else:
+        df = add_cutoff_days(df, end_of_sequence)
+        df["end_of_sequence_date"] = df["eos_date"] - pd.to_timedelta(df["cutoff_days"], unit="d")
+
+    if start_of_sequence == "sos":
+        df["start_of_sequence_date"] = df["sos_date"]
+    elif "sos-" in start_of_sequence:
+        df["start_of_sequence_date"] = df["sos_date"] - pd.to_timedelta(int(start_of_sequence.split("-")[-1]), unit="d")
+    elif "sos-" in start_of_sequence:
+        df["start_of_sequence_date"] = df["eos_date"] - pd.to_timedelta(int(start_of_sequence.split("-")[-1]), unit="d")
+    else:
+        raise Exception(f'Unrecognized start of sequence: "{start_of_sequence}"')
+
+    df["season_window_length"] = df["end_of_sequence_date"] - df["start_of_sequence_date"]
 
     # drop redundant information
     df.drop(columns=CROP_CALENDAR_DOYS + ["season_length", "cutoff_days"], inplace=True)
@@ -141,16 +152,16 @@ def process_crop_seasons(
     crop_season_keys,
     sos_dates,
     eos_dates,
-    cutoff_dates,
-    season_window_lengths,
+    start_of_sequence_date,
+    end_of_sequence_date,
 ):
     """Processes crop season data efficiently using NumPy."""
     n_elements = len(locs)
     # Initialize arrays
     sos_values = np.full(n_elements, np.datetime64("NaT"), dtype="datetime64[ns]")
     eos_values = np.full(n_elements, np.datetime64("NaT"), dtype="datetime64[ns]")
-    cutoff_values = np.full(n_elements, np.datetime64("NaT"), dtype="datetime64[ns]")
-    season_window_values = np.zeros(n_elements, dtype=season_window_lengths.dtype)
+    start_of_sequence_values = np.full(n_elements, np.datetime64("NaT"), dtype="datetime64[ns]")
+    end_of_sequence_values = np.full(n_elements, np.datetime64("NaT"), dtype="datetime64[ns]")
 
     # Create crop indices based on (loc, year) mapping
     crop_indices = np.array(
@@ -160,8 +171,8 @@ def process_crop_seasons(
     # Assign values using valid indices
     np.putmask(sos_values, valid_indices, sos_dates[crop_indices])
     np.putmask(eos_values, valid_indices, eos_dates[crop_indices])
-    np.putmask(cutoff_values, valid_indices, cutoff_dates[crop_indices])
-    np.putmask(season_window_values, valid_indices, season_window_lengths[crop_indices])
+    np.putmask(end_of_sequence_values, valid_indices, end_of_sequence_date[crop_indices])
+    np.putmask(start_of_sequence_values, valid_indices, start_of_sequence_date[crop_indices])
 
     del valid_indices, crop_indices
 
@@ -183,12 +194,10 @@ def process_crop_seasons(
     np.putmask(sos_values, beyond_eos & valid_next_years, sos_dates[next_crop_indices])
     np.putmask(eos_values, beyond_eos & valid_next_years, eos_dates[next_crop_indices])
     np.putmask(
-        cutoff_values, beyond_eos & valid_next_years, cutoff_dates[next_crop_indices]
+        start_of_sequence_values, beyond_eos & valid_next_years, start_of_sequence_date[next_crop_indices]
     )
     np.putmask(
-        season_window_values,
-        beyond_eos & valid_next_years,
-        season_window_lengths[next_crop_indices],
+        end_of_sequence_values, beyond_eos & valid_next_years, end_of_sequence_date[next_crop_indices]
     )
     # Boolean mask for rows where the year should be updated
     update_year_mask = beyond_eos & valid_next_years
@@ -203,9 +212,8 @@ def process_crop_seasons(
 
     # Check season window constraints
     season_length_valid = (
-        (cutoff_values - dates).astype("timedelta64[D]").astype(int)
-        <= season_window_values
-    ) & ((cutoff_values - dates).astype("timedelta64[D]").astype(int) >= 0)
+        (start_of_sequence_values - dates).astype("timedelta64[D]").astype(int) <= 0
+    ) & ((end_of_sequence_values - dates).astype("timedelta64[D]").astype(int) >= 0)
 
     keep_mask = valid_date_ranges & season_length_valid  # Initial mask
 
@@ -219,8 +227,8 @@ def align_to_crop_season_window_numpy(
     crop_season_keys: dict,
     sos_dates: np.ndarray,
     eos_dates: np.ndarray,
-    cutoff_dates: np.ndarray,
-    season_window_lengths: np.ndarray,
+    start_of_sequence_date: np.ndarray,
+    end_of_sequence_date: np.ndarray,
 ):
     """
     Aligns time series data using NumPy arrays and full vectorization, with optimized memory.
@@ -232,8 +240,8 @@ def align_to_crop_season_window_numpy(
         crop_season_keys,
         sos_dates,
         eos_dates,
-        cutoff_dates,
-        season_window_lengths,
+        start_of_sequence_date,
+        end_of_sequence_date,
     )
 
     df_minimal = pd.DataFrame(
@@ -273,11 +281,10 @@ def align_to_crop_season_window_numpy(
 
     tolerance = np.timedelta64(10, "D")  # indicators may not come in daily timesteps
     valid_start[valid_mask] = date_min[valid_mask] - tolerance < (
-        cutoff_dates[crop_indices[valid_mask]]
-        - season_window_lengths[crop_indices[valid_mask]].astype("timedelta64[D]")
+        start_of_sequence_date[crop_indices[valid_mask]]
     )
     valid_end[valid_mask] = (
-        date_max[valid_mask] + tolerance >= cutoff_dates[crop_indices[valid_mask]]
+        date_max[valid_mask] + tolerance >= end_of_sequence_date[crop_indices[valid_mask]]
     )
     invalid_season_mask = (~valid_start) | (~valid_end)
     invalid_season_pairs = grouped.index[invalid_season_mask]
@@ -294,62 +301,62 @@ def align_to_crop_season_window_numpy(
     return keep_mask, years
 
 
-def align_to_crop_season_window(df: pd.DataFrame, crop_season_df: pd.DataFrame):
+def align_to_crop_season_window(df_ts: pd.DataFrame, crop_season_df: pd.DataFrame):
     """Align time series data to crop season window (includes lead time and spinup).
 
     Args:
-        df (pd.DataFrame): time series data
+        df_ts (pd.DataFrame): time series data
         crop_season_df (pd.DataFrame): crop season data
         lead_time (str): forecast lead time option
 
     Returns:
         the input DataFrame with data aligned to crop season and trimmed to lead time
     """
-    select_cols = list(df.columns)
+    select_cols = list(df_ts.columns)
 
     # Merge with crop season data
-    df = df.merge(
+    df_ts = df_ts.merge(
         crop_season_df[[KEY_LOC, KEY_YEAR] + CROP_CALENDAR_DATES],
         on=[KEY_LOC, KEY_YEAR],
     )
 
     # The next crop season starts right after current year's harvest.
-    df[KEY_YEAR] = np.where(df["date"] > df["eos_date"], df[KEY_YEAR] + 1, df[KEY_YEAR])
-    df.drop(columns=CROP_CALENDAR_DATES, inplace=True)
+    df_ts[KEY_YEAR] = np.where(df_ts["date"] > df_ts["eos_date"], df_ts[KEY_YEAR] + 1, df_ts[KEY_YEAR])
+    df_ts.drop(columns=CROP_CALENDAR_DATES, inplace=True)
 
     # merge with crop season data again because we changed KEY_YEAR
-    df = df.merge(crop_season_df, on=[KEY_LOC, KEY_YEAR])
+    df_ts = df_ts.merge(crop_season_df, on=[KEY_LOC, KEY_YEAR])
 
     # Validate sos_date: date - sos_date should not be more than 366 days
-    assert df[(df["date"] - df["sos_date"]).dt.days > 366].empty
+    assert df_ts[(df_ts["date"] - df_ts["sos_date"]).dt.days > 366].empty
 
     # Validate eos_date: eos_date - date should not be more than 366 days
-    assert df[(df["eos_date"] - df["date"]).dt.days > 366].empty
+    assert df_ts[(df_ts["eos_date"] - df_ts["date"]).dt.days > 366].empty
 
     # Drop years with not enough data for a season
     # NOTE: We cannot filter with df.groupby(...)["date"].transform("count")
     # because ndvi and fpar don't have daily values.
-    df["min_date"] = df.groupby([KEY_LOC, KEY_YEAR], observed=True)["date"].transform(
+    df_ts["min_date"] = df_ts.groupby([KEY_LOC, KEY_YEAR], observed=True)["date"].transform(
         "min"
     )
-    df["max_date"] = df.groupby([KEY_LOC, KEY_YEAR], observed=True)["date"].transform(
+    df_ts["max_date"] = df_ts.groupby([KEY_LOC, KEY_YEAR], observed=True)["date"].transform(
         "max"
     )
 
     tolerance = pd.Timedelta(days=10)  # Define tolerance as 10 days
 
-    df = df[
+    df_ts = df_ts[
         (
-            (df["min_date"] - tolerance)
-            < (df["cutoff_date"] - df["season_window_length"].astype("timedelta64[D]"))
+            (df_ts["min_date"] - tolerance)
+            < (df_ts["start_of_sequence_date"])
         )
-        & ((df["max_date"] + tolerance) > df["cutoff_date"])
+        & ((df_ts["max_date"] + tolerance) > df_ts["end_of_sequence_date"])
     ]
 
     # Trim to lead time
-    df = df[df["date"] <= df["cutoff_date"]]
+    df_ts = df_ts[(df_ts["date"] <= df_ts["end_of_sequence_date"]) & (df_ts["date"] >= df_ts["start_of_sequence_date"])]
 
-    return df[select_cols]
+    return df_ts[select_cols]
 
 
 def align_inputs_and_labels(df_y: pd.DataFrame, dfs_x: dict) -> tuple:

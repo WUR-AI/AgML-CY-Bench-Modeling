@@ -1,0 +1,21 @@
+name: no_transform
+
+sources:
+  crop_calendar:
+    features:
+      - sos
+      - eos
+
+  location:
+    features:
+      - latitude
+      - longitude
+
+  soil:
+    features:
+      - awc
+      - bulk_density
+      - drainage_class
+    # TODO implement:
+    #transform:
+    #  drainage_class: dummy

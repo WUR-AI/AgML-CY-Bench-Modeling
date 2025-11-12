@@ -1,0 +1,39 @@
+defaults:
+  - exp_config
+  - dataset: default
+  - model: ridge
+  - hp_search: bayesian
+  - validation: rolling
+  - evaluation: default
+  - _self_
+
+# -------------------------------
+# Experiment-level configuration
+# -------------------------------
+# Represents a grouping of related runs.
+# All runs within an experiment share the same device, random seed,
+# and global settings. Use this to define high-level properties.
+experiment:
+  name: hello_cy_bench
+  device: cpu
+  seed: 42
+  n_jobs: 1 # gets passed to optuna to parallelize hp-search | n_jobs=-1 recommended for cpu modeling
+  results_dir: ../output/${experiment.name}
+
+run:
+  name: ${dataset.name}_${model.name}_${validation.name}_${now:%Y%m%d_%H%M}
+
+# -------------------------------
+# Hydra-specific configuration
+# -------------------------------
+# Defines how Hydra manages logs, configs, and working directories.
+hydra:
+  run:
+    dir: ../output/${experiment.name}/${run.name}
+
+  sweep:
+    dir: ../output/${experiment.name}
+    subdir: ${run.name}
+  #output_subdir: null
+  job:
+    chdir: true

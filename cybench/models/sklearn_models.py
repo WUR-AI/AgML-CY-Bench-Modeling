@@ -12,7 +12,7 @@ from sklearn.pipeline import Pipeline
 from cybench.models.model import BaseModel
 from cybench.datasets.dataset import Dataset
 from cybench.util.data import data_to_pandas
-from cybench.util.features import (
+from cybench.datasets.features import (
     unpack_time_series,
     design_features,
 )

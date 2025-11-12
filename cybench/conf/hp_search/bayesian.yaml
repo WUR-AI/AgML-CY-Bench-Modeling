@@ -1,0 +1,24 @@
+# Extensive Bayesian optimization with TPE
+
+study_name: bayesian_tpe_search
+n_trials: 200
+timeout: 14400  # 4 hours
+n_jobs: ${experiment.n_jobs}
+
+sampler:
+  _target_: optuna.samplers.TPESampler
+  seed: ${experiment.seed}
+  n_startup_trials: 20
+  n_ei_candidates: 24
+  multivariate: true
+  warn_independent_sampling: true
+  constant_liar: true
+
+storage:
+  url: sqlite:///optuna_studies.db
+  load_if_exists: true
+
+logging:
+  log_interval: 5
+  show_progress_bar: true
+  verbose: true

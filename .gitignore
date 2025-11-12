@@ -20,3 +20,6 @@ api_keys
 *.zip
 *.pkl
 Scratch.R
+
+change_log
+.idea

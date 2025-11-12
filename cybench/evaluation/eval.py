@@ -1,11 +1,11 @@
 import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error, r2_score
 from scipy.stats import pearsonr
+from typing import Optional
 
 from cybench.models.model import BaseModel
 from cybench.datasets.dataset import Dataset
-from cybench.config import KEY_TARGET, KEY_LOC
-
+from cybench.config import KEY_TARGET, KEY_LOC, EvaluationConfig
 
 implemented_metrics = {}
 
@@ -16,37 +16,33 @@ def metric(func):
     return func
 
 
-def get_default_metrics(residual: bool = False):
-    if residual:
-        # Only metrics that make sense on residuals
-        return ("r", "r2")
-    else:
-        # Full set
-        return ("mape", "normalized_rmse", "r", "r2")
-
-
-def evaluate_model(model: BaseModel, dataset: Dataset, metrics=get_default_metrics()):
+def evaluate_model(
+    cfg: EvaluationConfig,
+    model: BaseModel,
+    dataset: Dataset,
+):
     """
     Evaluate the performance of a model using specified metrics.
 
     Args:
+      cfg: EvaluationConfig controlling which metrics are computed.
       model: The trained model to be evaluated.
       dataset: Dataset.
-      metrics: List of metrics to calculate.
 
     Returns:
       A dictionary containing the calculated metrics.
     """
-
     y_true = dataset.targets()
     y_pred, _ = model.predict(dataset)
-    results = evaluate_predictions(y_true, y_pred, metrics)
+    results = evaluate_predictions(y_true, y_pred, cfg)
 
     return results
 
 
 def evaluate_predictions(
-    y_true: np.ndarray, y_pred: np.ndarray, metrics=get_default_metrics()
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    cfg: EvaluationConfig,
 ):
     """
     Evaluate predictions using specified metrics.
@@ -54,14 +50,13 @@ def evaluate_predictions(
     Args:
       y_true (numpy.ndarray): True labels for evaluation.
       y_pred (numpy.ndarray): Predicted values.
-      metrics: List of metrics to calculate.
+      cfg: EvaluationConfig controlling which metrics are computed.
 
     Returns:
       A dictionary containing the calculated metrics.
     """
-
     results = {}
-    for metric_name in metrics:
+    for metric_name in cfg.metrics:
         metric_function = implemented_metrics.get(metric_name)
         if metric_function:
             result = metric_function(y_true, y_pred)

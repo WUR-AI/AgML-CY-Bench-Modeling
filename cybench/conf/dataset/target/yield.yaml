@@ -1,0 +1,5 @@
+name: yield
+
+transform: null # optionally: log
+
+residualize: null

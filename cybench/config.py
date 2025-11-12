@@ -1,8 +1,9 @@
 import os
-import logging
-import logging.config
-from datetime import datetime
 
+from dataclasses import dataclass
+from typing import Dict, Tuple, List, Any, Optional
+
+from omegaconf import DictConfig
 
 # Project root dir
 CONFIG_DIR = os.path.abspath(os.path.join(__file__, os.pardir))
@@ -26,79 +27,16 @@ PATH_POLYGONS_DIR = os.path.join(REPO_DIR, "cybench", "data", "polygons")
 
 DATASETS = {
     "maize": [
-        "AO",
-        "AR",
-        "AT",
-        "BE",
-        "BF",
-        "BG",
-        "BR",
-        "CN",
-        "CZ",
-        "DE",
-        "DK",
-        "EE",
-        "EL",
-        "ES",
-        "ET",
-        "FI",
-        "FR",
-        "HR",
-        "HU",
-        "IE",
-        "IN",
-        "IT",
-        "LS",
-        "LT",
-        "LV",
-        "MG",
-        "ML",
-        "MW",
-        "MX",
-        "MZ",
-        "NE",
-        "NL",
-        "PL",
-        "PT",
-        "RO",
-        "SE",
-        "SK",
-        "SN",
-        "TD",
-        "US",
-        "ZA",
-        "ZM",
+        "AO", "AR", "AT", "BE", "BF", "BG", "BR", "CN", "CZ", "DE",
+        "DK", "EE", "EL", "ES", "ET", "FI", "FR", "HR", "HU", "IE",
+        "IN", "IT", "LS", "LT", "LV", "MG", "ML", "MW", "MX", "MZ",
+        "NE", "NL", "PL", "PT", "RO", "SE", "SK", "SN", "TD", "US",
+        "ZA", "ZM",
     ],
     "wheat": [
-        "AR",
-        "AT",
-        "AU",
-        "BE",
-        "BG",
-        "BR",
-        "CN",
-        "CZ",
-        "DE",
-        "DK",
-        "EE",
-        "EL",
-        "ES",
-        "FI",
-        "FR",
-        "HR",
-        "HU",
-        "IE",
-        "IN",
-        "IT",
-        "LT",
-        "LV",
-        "NL",
-        "PL",
-        "PT",
-        "RO",
-        "SE",
-        "SK",
-        "US",
+        "AR", "AT", "AU", "BE", "BG", "BR", "CN", "CZ", "DE", "DK",
+        "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IN", "IT",
+        "LT", "LV", "NL", "PL", "PT", "RO", "SE", "SK", "US",
     ],
 }
 
@@ -179,7 +117,7 @@ ALL_PREDICTORS = STATIC_PREDICTORS + TIME_SERIES_PREDICTORS
 # Crop calendar entries: start of season, end of season.
 # doy = day of year (1 to 366).
 CROP_CALENDAR_DOYS = ["sos", "eos"]
-CROP_CALENDAR_DATES = ["sos_date", "eos_date", "cutoff_date"]
+CROP_CALENDAR_DATES = ["sos_date", "eos_date", "start_of_sequence_date", "end_of_sequence_date"]
 
 # Feature design
 # Base temperature for corn and wheat for growing degree days wheat:0 maize:10.
@@ -195,43 +133,39 @@ GDD_UPPER_LIMIT = {
 }
 
 
-# Lead time for forecasting
-# Choices: "middle-of-season", "quarter-of-season",
-# "n-day(s)" where n is an integer
-FORECAST_LEAD_TIME = "middle-of-season"
+@dataclass
+class DatasetConfig:
+    """
+    Dataset configuration class for type checking the yaml configuration under conf/dataset/...
+    """
+    crop: str
+    country: str
+    name: str
+    min_year: int
+    max_year: int
+    target: Dict[str, Any]
+    non_temporal: Dict[str, Any]
+    temporal: Dict[str, Any]
+    framework: str
 
-# Buffer period before the start of season
-SPINUP_DAYS = 90
+@dataclass
+class EvaluationConfig:
+    """
+    Evaluation configuration class for type checking the yaml configuration under conf/evaluation/...
+    """
+    name: str
+    metrics: List[str]
+    residual: bool = False
 
-# Logging
-PATH_LOGS_DIR = os.path.join(PATH_OUTPUT_DIR, "logs")
-os.makedirs(PATH_LOGS_DIR, exist_ok=True)
-
-LOG_FILE = datetime.now().strftime("agml_cybench_%H_%M_%d_%m_%Y.log")
-LOG_LEVEL = logging.DEBUG
-
-# Based on examples from
-# https://fangpenlin.com/posts/2012/08/26/good-logging-practice-in-python/
-LOGGING_CONFIG = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "standard": {"format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"},
-    },
-    "handlers": {
-        "file_handler": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "level": LOG_LEVEL,
-            "formatter": "standard",
-            "filename": os.path.join(PATH_LOGS_DIR, LOG_FILE),
-            "maxBytes": 10485760,
-            "backupCount": 20,
-            "encoding": "utf8",
-        }
-    },
-    "loggers": {
-        "": {"handlers": ["file_handler"], "level": LOG_LEVEL, "propagate": True}
-    },
-}
-
-logging.config.dictConfig(LOGGING_CONFIG)
+@dataclass
+class ExperimentConfig:
+    """
+    Experiment configuration class for type checking the final conf/config.py
+    """
+    dataset: DatasetConfig
+    model: Dict[str, Any] # TODO customize as well
+    evaluation: EvaluationConfig
+    validation: Dict[str, Any]
+    hp_search: Dict[str, Any] # TODO customize as well
+    experiment: Dict[str, Any] # TODO customize as well
+    run: Dict[str, Any]

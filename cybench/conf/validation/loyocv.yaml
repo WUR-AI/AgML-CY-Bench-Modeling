@@ -1,0 +1,16 @@
+### This validation procedure takes a set of test years and trains models for each of them given the past years
+### Perfectly captures general model performance and utilizes the whole range of available data.
+
+name: loyocv
+
+# test_years don't have to be specified, since the validation uses each year ones as test set
+# optionally specify a set of individual test years to not run on all available years
+# test_years: [2015, 2020, 2021]
+
+# set a methode for train/val split for hyperparameter search | will be ignored if hp_search==none
+# Options:
+#   xx%-split - randomly selects xx% of the years for the validation set
+#   k-last    - takes the k last years into val set
+#   k-fold-cv - randomly puts each year into one of k bins to perform CV
+#   loyocv    - full leave-one-year-out-CV
+val_years: 30%-split

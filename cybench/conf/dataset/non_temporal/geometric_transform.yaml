@@ -1,0 +1,26 @@
+name: geo_transform
+
+sources:
+  crop_calendar:
+    features:
+      - sos
+      - eos
+    transform:
+      cyclical:
+        sos: 365  # day of year period
+        eos: 365  # day of year period
+
+  location:
+    features:
+      - latitude
+      - longitude
+    transform:
+      spherical:
+        latitude: [-90, 90]    # latitude range
+        longitude: [-180, 180]  # longitude range
+
+  soil:
+    features:
+      - awc
+      - bulk_density
+      - drainage_class

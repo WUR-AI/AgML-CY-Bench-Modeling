@@ -225,6 +225,29 @@ def growing_degree_days(df: pd.DataFrame, tbase: float):
     return gdd.sum()
 
 
+def apply_cyclical_transformations(df: pd.DataFrame, cyclical_features: dict) -> pd.DataFrame:
+    """Apply cyclical transformations (sin/cos) to specified features.
+    
+    Args:
+        df (pd.DataFrame): Input dataframe
+        cyclical_features (dict): Dictionary mapping feature names to their period lengths
+                                e.g., {"sos": 365, "eos": 365}
+    
+    Returns:
+        pd.DataFrame: Dataframe with original features plus sin/cos transformed features
+    """
+    df_transformed = df.copy()
+    
+    for feature, period in cyclical_features.items():
+        if feature in df.columns:
+            # Convert to radians and apply sin/cos transformations
+            radians = 2 * np.pi * df[feature] / period
+            df_transformed[f"{feature}_sin"] = np.sin(radians)
+            df_transformed[f"{feature}_cos"] = np.cos(radians)
+    
+    return df_transformed
+
+
 def design_features(
     crop: str,
     input_dfs: dict,
@@ -248,6 +271,23 @@ def design_features(
             columns=["drainage_class"]
         )
     soil_features = soil_df
+    
+    # Apply cyclical transformations to crop calendar features if available
+    if "crop_calendar" in input_dfs:
+        crop_calendar_df = input_dfs["crop_calendar"]
+        # Define cyclical features (day of year features with 365-day period)
+        cyclical_features = {"sos": 365, "eos": 365}
+        crop_calendar_df = apply_cyclical_transformations(crop_calendar_df, cyclical_features)
+        # Merge crop calendar features with soil features
+        soil_features = soil_features.merge(crop_calendar_df, on=[KEY_LOC], how="left")
+    
+    # Add location features if available
+    if "location" in input_dfs:
+        location_df = input_dfs["location"]
+        # Apply spherical transformations to geographic coordinates
+        spherical_features = {"lat_lon": {"lat": [-90, 90], "lon": [-180, 180]}}
+        location_df = apply_spherical_transformations(location_df, spherical_features)
+        soil_features = soil_features.merge(location_df, on=[KEY_LOC], how="left")
 
     # Feature design for time series
     index_cols = [KEY_LOC, KEY_YEAR]

@@ -1,0 +1,18 @@
+_target_: sklearn.linear_model.Ridge
+name: ridge
+
+# default parameter
+alpha: 1.0
+fit_intercept: true
+solver: auto
+max_iter: null
+tol: 0.0001
+random_state: ${experiment.seed}
+
+# parameter range for hyperparameter optimization
+_search_space:
+  alpha:
+    type: float
+    low: 1e-9
+    high: 100.0
+    log: true

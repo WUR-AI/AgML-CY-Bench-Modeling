@@ -1,0 +1,10 @@
+# This validation procedure takes a single set of train and test samples
+# Perfect for testing expensive model architectures, since it requires only a single run
+
+name: single
+
+# Define fixed sets of years for train, val and test
+# For no hyperparameter optimization set val_years: []
+train_years: [2012, 2013, 2014]
+val_years:   [2015]
+test_years:  [2016]

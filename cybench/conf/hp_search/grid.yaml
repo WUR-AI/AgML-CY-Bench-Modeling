@@ -1,0 +1,18 @@
+# Exhaustive grid search
+
+study_name: grid_search
+n_trials: null  # Will be determined by grid size
+timeout: null
+n_jobs: ${experiment.n_jobs}
+
+sampler:
+  _target_: optuna.samplers.GridSampler
+  seed: ${experiment.seed}
+
+storage:
+  url: sqlite:///optuna_studies.db
+  load_if_exists: true
+
+logging:
+  log_interval: 1
+  show_progress_bar: true
