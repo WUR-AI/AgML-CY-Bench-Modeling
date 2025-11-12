@@ -1,0 +1,132 @@
+
+GOALS ################################################################################
+
+* clean up repository
+    - repository has grown over years -> lots of unused or redundant code
+    - experiments (such as the residual models) should only flow into the main branch if crucial/successful
+
+* Establish Hydra - SOTA config organization for large-scale data science projects
+    Hydra solves several problems:
+    - brings order into growingly complex benchmark pipeline by uniting configs file into one place: /conf
+    - config file are all living in the same directory (conf) but are sub-divided into smaller config files that hierarchically sourced from each other
+    - running experiments doesnt require changes in any python script, instead a final 'experiment' config file only lists the diverging settings from the default files
+    - little adjustments are also possible in the terminal
+    - multiruns (different datasets, seeds, models, or evaluations (loyocy, rolling)) are nicely handled by setting in the terminal or directly in the config files
+    - hydra creates a run-directory that incorporates everything in one place for
+     * reproducibility (config files)
+     * debugging (log files)
+     Extendable to:
+     * results (prediction csv)
+     * models (.pkl or .pt)
+     * hyperparameter exploration (optuna study)
+     * for the future: MLflow for training supervision
+
+* rethink dataset & model class for user friendliness & efficiency
+    DATASET:
+        Introduction and Problem Statement:
+      The dataset class represents the structured representation of a dataset including target and feature data,
+      However, it is not build for efficient utilization in the ML context.
+      A compute-efficient implementation has one key challenge - the diversity of its underlying data:
+      a data unites different sources with varying temporal resolution. Secondly the varying crop seasons create
+      variations in time-series length as well.
+      Those two aspects are the reason why the dataset class is not compatible with with one of the common data structures
+      such as pd.Dataframe, torch.Tensor or HDF5
+
+        Solution Ideas:
+      Respecting the required data input format two separate solutions are desirable
+      1. TorchDataset: a fixed time-series sequence-length (e.g. 200 days) would enable a tensor representation of each data source (xarray or torch.tensor)
+            This Dataclass already exists and would need to be altered.
+      2. PandasDataset (or TabDataset): a feature preprocessing step, before modeling happens, creates a tabular dataformat (dataframe)
+            This class would be new and similarly to TorchDataset inherits from Dataset
+            It should have an easy methode to produce X and y, such as .make_X_y()
+            Ready to feed into ML models such as Sklearn, XGBoost, LightGBM, TabPFN, ....
+
+        Implementation Idea:
+      The dataset creation in the current code works by executing Dataset.load() which mainly utilizes functions from configured.py
+      At its core this is a data-factory that itself deserves a class. The DataFactory (data_factory.py) accepts a config object to
+      build a dataset. Hydra enables input type checking by writing structured dataclasses (see DatasetConfig in cybench/config.py)
+      In the new implementation a dataset is now built by executing: dataset = DataFactory(cfg.dataset).build()
+
+      The next step it to define the data handling dependent on the desired architecture.
+      I see two possibilities:
+      1. Have a separate 'process' config block for transforming the dataset into TorchDataset or PandasDataset
+      2. Incorporate the processing in the dataset config block and let the DataFactory build features or tensors while loading the data
+
+      Lets discuss pros/cons of both ideas:
+      1:
+      + Respects the original cy-bench code -> less implementation work
+      + semantic separation of data sourcing and processing
+      - inherits some inefficiencies of the original dataset implementation
+      - such as memory overloading when sourcing large datasets no matter the feature design
+      2:
+      + data processing could directly following after data loading, which potentially saves a lot of working memory (crucial for people experimenting with tabular feature data)
+      + feature selection and feature design could live in the same config file (e.g. see cybench\conf\dataset\temporal\simple_aggregate.yaml)
+      + main script loads and processes data in a single line
+      - implementation diverges from original cy-bench code -> takes much more time than idea 1
+
+      Overall I tend to prefer option 2 because of efficiency and a light-weight experience for users with hardware limitations.
+      Due to the high implementation cost (time), an in-depth discussion and planing would be best to proceed.
+
+
+IMPLEMENTATION SO FAR ############################################################
+
+1. Remove Code that is unused or redundant
+    Note: I am not sure about those. Please check whether those scripts are useful.
+    cybench/evaluation/example_log_experiment.py
+    cybench/evaluation/log_experiments.py
+    cybench/runs/agml_workshop.py
+    cybench/datasets/dataset_overview.py
+
+2. Delete Files Related to changes
+    cybench/util/data.py - Handles dataset to pandas to trimming of trimming of TS. Should be methode of data class # TODO
+    cybench/util/torch.py - Should be methode of torchdata class # TODO
+    cybench/datasets/modified_dataset.py & residual_model.py - target modification should be methode of data class
+    cybench/datasets/configured.py - Supports Dataset.load to act like a data-factory -> moved to data_factory.py
+    tests/datasets/test_configured.py - See above # TODO tests on Data Factory is recommended
+
+3. Implement Hydra
+    Following the hydra logic - all configurations live under the cybench/conf/ folder.
+    Subfolders such as dataset, model or validation represent config groups that are sourced and
+    hierarchically orchestrated by the central conf/config.yaml file.
+    This yaml file is accessed by an executable script (such as hydra_example.yaml) to perform an experiment.
+    This script with hydra backbone will automatically construct the following folder structure under the /output folder :
+    /output
+        /my-experiment-name # research-level-folder: defined in config.py
+            /wheat_FR_ridge_loyocv_20251111_1606 # run-level-folder: also defined in config.py
+                /.hydra # created by hydra to log run configurations. See https://hydra.cc/docs/tutorials/basic/running_your_app/working_directory/
+                    config.yaml: A dump of the user specified configuration
+                    hydra.yaml: A dump of the Hydra configuration
+                    overrides.yaml: The command line overrides used
+                # TODO: not yet implemented:
+                # Idea: each separate test set (e.g. from a loyocv) should get its own subfolder
+                # to store results, models and optuna studies
+                /loyocv_2002
+                    results.csv
+                    model.pkl
+                    optuna_study.pkl
+                    model_cfg.yaml
+                /loyocv_2003
+                ...
+            /maize_US_ridge_loyocv_20251107_1257
+            ...
+
+    Using hydra:
+    1. Simple run: poetry run python hydra_example.py
+        # Executes a single run with the default configs in conf/config.yaml
+    2. Manipulate run: poetry run python hydra_example.py model=lightgbm
+        # overwrite the runs configuration with your own values or other predefined yaml files
+    3. Multi-run: poetry run python hydra_example.py -m dataset.country=DE,NL model=ridge,lightgbm
+        # automatically creates and executes multiple runs. The command above create four runs sequentially, covering all combinations
+    4. Reproducing run: poetry run python hydra_example.py --config-path ..\output\experiment_name\run_name\.hydra
+        # Simply switching the config-path will load the configurations of a previous run
+
+NEXT STEPS ###############################################################
+
+* Discuss efficient data representation
+* Implement standardized hyperparameter tuning framework using optuna
+
+ISSUES:
+* Resolve path issue: Specify hydra working directory independent of execution path. Right now the execution has to be made in ...\AgML-CY-Bench\cybench\runs\
+
+OUTLOOK:
+* similar reorganizing of data_preparation would be clean
