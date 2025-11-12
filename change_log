@@ -21,8 +21,7 @@ GOALS ##########################################################################
      * hyperparameter exploration (optuna study)
      * for the future: MLflow for training supervision
 
-* rethink dataset & model class for user friendliness & efficiency
-    DATASET:
+* rethink dataset class for user friendliness & efficiency
         Introduction and Problem Statement:
       The dataset class represents the structured representation of a dataset including target and feature data,
       However, it is not build for efficient utilization in the ML context.
