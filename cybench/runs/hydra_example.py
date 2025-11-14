@@ -6,6 +6,7 @@ import logging
 
 from cybench.config import ExperimentConfig
 from cybench.datasets.data_factory import DataFactory
+from cybench.datasets.torch_dataset import TorchDataset
 from cybench.util.validation import get_train_test_splits
 
 # init logger
@@ -22,6 +23,7 @@ def main(cfg: ExperimentConfig):
     print(OmegaConf.to_yaml(cfg))
     log.info("=== Create Datasets ===")
     dataset = DataFactory(cfg.dataset).build()
+
     # split data in train- and test-set based on the validation strategy
     for years_split in get_train_test_splits(cfg=cfg.validation, years=dataset.years):
         train_dataset, test_dataset = dataset.split_on_years(years_split=years_split)

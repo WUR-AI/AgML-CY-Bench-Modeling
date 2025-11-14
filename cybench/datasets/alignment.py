@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import torch
 
 from cybench.datasets.features import dekad_from_date, unpack_time_series
 from cybench.util.data import data_to_pandas
@@ -7,6 +8,7 @@ from cybench.config import (
     KEY_LOC,
     KEY_YEAR,
     KEY_DATES,
+    KEY_TARGET,
     CROP_CALENDAR_DOYS,
     CROP_CALENDAR_DATES,
     TIME_SERIES_INPUTS,
@@ -427,44 +429,27 @@ def align_inputs_and_labels(df_y: pd.DataFrame, dfs_x: dict) -> tuple:
 
 
 def interpolate_time_series_data(
-    dfs: list, df_crop_season: pd.DataFrame, max_season_window_length: int
+    dfs: list
 ):
     """Add dates covering season window length and interpolate to fill in NAs.
 
     Args:
         dfs (list): time series DataFrames
-        df_crop_season (pd.DataFrame): crop season
-        max_season_window_length (int): maximum season window length
 
     Returns:
         pd.DataFrame with interpolated data
     """
+    # filter time-series data
+    dfs_ts = []
+    for source_name, df_x in dfs.items():
+        if "date" in df_x.index.names:
+            dfs_ts.append(df_x)
     # combine time series data
-    df_ts = pd.concat(dfs, join="outer", axis=1)
-
-    # create a dataframe with all dates for every location and year
-    df_all_dates = df_crop_season[["cutoff_date"]].copy()
-    df_all_dates["date"] = df_all_dates.apply(
-        lambda r: pd.date_range(
-            end=r["cutoff_date"], periods=max_season_window_length, freq="D"
-        ),
-        axis=1,
+    df_ts = pd.concat(dfs_ts, join="outer", axis=1).sort_index()
+    # interpolate while respecting gaps in the date column
+    df_ts = df_ts.groupby([KEY_LOC, KEY_YEAR], group_keys=False).apply(
+        lambda group: group.interpolate(method="linear", limit_direction="both")
     )
-    df_all_dates = df_all_dates.explode("date").drop(columns=["cutoff_date"])
-    df_all_dates.reset_index(inplace=True)
-    df_all_dates.set_index([KEY_LOC, KEY_YEAR, "date"], inplace=True)
-
-    # merge to get all dates in time series data
-    df_ts = df_ts.merge(df_all_dates, how="outer", on=[KEY_LOC, KEY_YEAR, "date"])
-    del df_all_dates
-
-    # NOTE: interpolate fills data in forward direction.
-    # TODO: example: cutoff-date: 2018-07-19 last ndvi: 2018-07-12;
-    # it will then interpolate between 2018-07-12 and e.g. 2018-01-01 from a different location
-    df_ts = df_ts.sort_index().interpolate(method="linear")
-    # fill NAs in the front with 0.0
-    df_ts.fillna(0.0, inplace=True)
-
     return df_ts
 
 
@@ -531,3 +516,31 @@ def aggregate_time_series_data(df_ts: pd.DataFrame, aggregate_time_series_to: st
     df_ts.drop(columns=[aggregate_time_series_to], inplace=True)
 
     return df_ts
+
+
+def make_aligned_tensors(
+        df_y: pd.DataFrame,
+        df_non_temporal: pd.DataFrame,
+        df_ts: pd.DataFrame
+):
+    y = torch.tensor(df_y.values, dtype=torch.float32) # (sample_size)
+
+    # align the non-temporal dataset to match the indices
+    expanded_df_non_temporal = df_y.reset_index(KEY_YEAR).merge(df_non_temporal, on=KEY_LOC, how="left").drop(df_y.columns, axis=1)
+    x_context = torch.tensor(expanded_df_non_temporal.values, dtype=torch.float32) # (sample_size x non_temp_features)
+    assert not x_context.isnan().any()
+
+    # align the temporal dataset to match the indices:
+    x_ts_samples = [df_ts.loc[ix].values for ix in df_y.index]
+    # check for consistency in ts length
+    ts_lengths = [len(x) for x in x_ts_samples]
+    if not np.all(np.array(ts_lengths) == ts_lengths[0]):
+        # cut of early days in the season
+        min_ts_length = min(ts_lengths)
+        x_ts_samples = [x[-min_ts_length:] for x in x_ts_samples]
+    x_ts = torch.tensor(np.array(x_ts_samples), dtype=torch.float32) # (sample_size x T x temp_features)
+    assert not x_ts.isnan().any()
+
+    return (y, x_context, x_ts), (df_y.columns, expanded_df_non_temporal.columns, df_ts.columns)
+
+

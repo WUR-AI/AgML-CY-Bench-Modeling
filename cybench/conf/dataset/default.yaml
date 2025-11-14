@@ -2,10 +2,10 @@ defaults:
   - _self_
   - target: yield
   - non_temporal: no_transform
-  - temporal: simple_aggregate
+  - temporal: no_aggregate
 
 # set crop and country | optionally: set multiple countries such as in europe.yaml
-crop: wheat
+crop: maize
 country: FR
 
 # name will show in experiment name
@@ -18,4 +18,4 @@ max_year: 2023
 # set the framework of the data stored | optionally:
 # pandas - creates Dataset instance ready for tabular frameworks such as Sklearn or XGBoost. Call: X, y = dataset.make_X_y()
 # torch  - creates TorchDataset - a wrapper for compatibility with torch DataLoader objects
-framework: pandas
+framework: torch

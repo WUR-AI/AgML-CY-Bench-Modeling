@@ -1,3 +1,6 @@
+from abc import abstractmethod, ABC
+from typing import Tuple
+
 import pandas as pd
 import numpy as np
 
@@ -13,7 +16,40 @@ from cybench.config import (
 )
 
 
-class Dataset:
+class BaseDataset(ABC):
+    """
+    Abstract base class defining the interface for custom datasets.
+    All datasets must implement the split_on_years method.
+    """
+
+    @abstractmethod
+    def split_on_years(self, years_split: Tuple[list, list]) -> Tuple['BaseDataset', 'BaseDataset']:
+        """
+        Split the dataset into two subsets based on year ranges.
+
+        :param years_split: Tuple of two lists, e.g., ([2012, 2014], [2015, 2017])
+                           First list defines years for first subset,
+                           second list defines years for second subset
+        :return: Tuple of two dataset instances (subset1, subset2)
+        """
+        pass
+
+    @property
+    def years(self) -> set:
+        """
+        Obtain a set containing all years occurring in the dataset
+        """
+        pass
+
+    @property
+    def location_ids(self) -> set:
+        """
+        Obtain a set containing all location ids occurring in the dataset
+        """
+        pass
+
+
+class Dataset(BaseDataset):
     def __init__(
         self,
         cfg: DatasetConfig,

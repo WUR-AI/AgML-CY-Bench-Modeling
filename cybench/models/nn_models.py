@@ -38,6 +38,14 @@ def separate_ts_static_inputs(batch: dict) -> tuple:
 
 
 class BaseNNModel(BaseModel, nn.Module):
+    """
+    The BaseNNModel`s purpose is to bring pytorch-based neural networks into the CY-Bench environment.
+    Just like the BaseModel it should be callable like this: model.fit_predict()
+    To achieve this BaseNNModel orchestrates all components needed to train and test a pytorch neural network:
+    - data_loader
+    - optimizer
+    - lr_scheduler
+    """
     def __init__(self, **kwargs):
         super(BaseModel, self).__init__()
         super(nn.Module, self).__init__()
@@ -114,102 +122,6 @@ class BaseNNModel(BaseModel, nn.Module):
         )
 
         return self, {"train_losses": train_losses}
-
-    def _optimize_hyperparameters(
-        self,
-        dataset: Dataset,
-        param_space: dict,
-        optim_kwargs: dict,
-        device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        kfolds: int = 1,
-        epochs: int = 10,
-        **fit_params,
-    ) -> dict:
-        """Optimize hyperparameters
-
-        Args:
-          dataset (Dataset): training dataset
-          param_space (dict): hyperparameters to optimize
-          optim_kwargs (dict): arguments to the optimizer
-          device (str): the device to use
-          kfolds (int): k for k-fold cv (default: 1)
-          epochs (int): Number of epochs to train (default: 10)
-          **fit_params: Additional parameters.
-
-        Returns:
-          A dict of optimal hyperparameter setting
-        """
-        assert param_space is not None
-
-        opt_loss = float("inf")
-        opt_param_setting = {}
-        all_years = list(dataset.years)
-        random.shuffle(all_years)
-        settings = list(ParameterGrid(param_space))
-        for i, setting in enumerate(settings):
-            if "lr" in setting:
-                optim_kwargs["lr"] = setting["lr"]
-            if "weight_decay" in setting:
-                optim_kwargs["weight_decay"] = setting["weight_decay"]
-
-            val_loss = None
-            if kfolds == 1:
-                self._logger.debug(f"Running setting {i + 1}/{len(settings)}")
-                val_years = all_years[len(all_years) // 2 :]
-                train_years = [y for y in all_years if y not in val_years]
-                new_model = self.__class__(**self._init_args)
-                train_losses, val_losses = new_model._train_and_validate(
-                    dataset,
-                    train_years,
-                    val_years,
-                    optim_kwargs=optim_kwargs,
-                    epochs=epochs,
-                    device=device,
-                    **setting,
-                    **fit_params,
-                )
-
-                val_loss = val_losses[-1]
-            else:
-                # Split data into k folds
-                # For each fold, create new model and datasets, train and record val loss.
-                # Finally, average val loss.
-                cv_years = [all_years[i::kfolds] for i in range(kfolds)]
-                cv_losses = []
-                for j, val_years in enumerate(cv_years):
-                    self._logger.debug(
-                        f"Running inner fold {j + 1}/{kfolds} for hyperparameter setting {i + 1}/{len(settings)}"
-                    )
-                    train_years = [y for y in all_years if y not in val_years]
-                    new_model = self.__class__(**self._init_args)
-                    train_losses, val_losses = new_model._train_and_validate(
-                        dataset,
-                        train_years,
-                        val_years,
-                        optim_kwargs=optim_kwargs,
-                        device=device,
-                        epochs=epochs,
-                        **setting,
-                        **fit_params,
-                    )
-
-                    cv_losses.append(val_losses[-1])
-
-                val_loss = np.mean(cv_losses)
-            assert val_loss is not None
-            assert not np.isnan(val_loss)
-
-            self._logger.debug(
-                f"For setting {i + 1}/{len(settings)}, average validation loss: {val_loss}"
-            )
-            self._logger.debug(f"Settings: {setting}")
-
-            # Store best model setting
-            if val_loss < opt_loss:
-                opt_loss = val_loss
-                opt_param_setting = setting
-
-        return opt_param_setting
 
     def _train_and_validate(
         self,

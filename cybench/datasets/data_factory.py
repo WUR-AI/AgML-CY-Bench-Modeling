@@ -6,8 +6,10 @@ import pandas as pd
 
 from cybench.config import DatasetConfig, DATASETS, PATH_DATA_DIR, KEY_LOC, KEY_YEAR, KEY_TARGET
 from cybench.datasets.alignment import compute_crop_season_window, ensure_same_categories_union, \
-    align_to_crop_season_window_numpy, restore_category_to_string, align_to_crop_season_window, align_inputs_and_labels
+    align_to_crop_season_window_numpy, restore_category_to_string, align_to_crop_season_window, align_inputs_and_labels, \
+    interpolate_time_series_data, make_aligned_tensors
 from cybench.datasets.dataset import Dataset
+from cybench.datasets.torch_dataset import TorchDataset
 
 
 class DataFactory:
@@ -35,11 +37,29 @@ class DataFactory:
         else:
             df_y, dfs_x = self.load_dfs(crop=self.cfg.crop, country_code=self.cfg.country)
 
-        return Dataset(
-            cfg=self.cfg,
-            df_y=df_y,
-            dfs_x=dfs_x,
-        )
+        if self.cfg.framework == "torch":
+            # unifies and interpolate time-series dataframes into a single dataframe
+            df_ts = interpolate_time_series_data(dfs_x)
+            # align datasets and cast to torch tensors
+            aligned_tensors, column_names = make_aligned_tensors(
+                df_y=df_y,
+                df_non_temporal=dfs_x["non_temporal"],
+                df_ts=df_ts
+            )
+
+            dataset = TorchDataset(
+                aligned_tensors=aligned_tensors,
+                column_names=column_names,
+                indices=df_y.index.to_frame(index=False),
+            )
+        else:
+            dataset = Dataset(
+                cfg=self.cfg,
+                df_y=df_y,
+                dfs_x=dfs_x,
+            )
+
+        return dataset
 
     def load_dfs(self,
                  crop: str,
@@ -175,6 +195,9 @@ class DataFactory:
         if verbose:
             print(f'load {file_path}')
         df_ts = pd.read_csv(file_path, header=0)
+
+        # TODO: apply aggregation function if defined
+
         df_ts["date"] = pd.to_datetime(df_ts["date"], format="%Y%m%d")
         df_ts[KEY_YEAR] = df_ts["date"].dt.year
         df_ts = df_ts[index_cols + source_cfg.features]
@@ -207,7 +230,3 @@ class DataFactory:
             df_ts = align_to_crop_season_window(df_ts, crop_season_df)
             df_ts.set_index(index_cols, inplace=True)
         return df_ts
-
-
-
-

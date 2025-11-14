@@ -1,211 +1,107 @@
+from typing import Tuple
+
 import pandas as pd
-import numpy as np
-import torch
 import torch.utils.data
 
-from cybench.config import (
-    KEY_LOC,
-    KEY_YEAR,
-    KEY_TARGET,
-    KEY_DATES,
-    KEY_CROP_SEASON,
-    CROP_CALENDAR_DATES,
-    TIME_SERIES_PREDICTORS,
-    ALL_PREDICTORS,
-)
-
-from cybench.datasets.dataset import Dataset
-from cybench.util.torch import batch_tensors
-from cybench.util.data import trim_time_series_data
-from cybench.datasets.alignment import (
-    interpolate_time_series_data,
-    interpolate_time_series_data_items,
-    aggregate_time_series_data,
-)
+from cybench.datasets.dataset import BaseDataset
 
 
-class TorchDataset(Dataset, torch.utils.data.Dataset):
+class TorchDataset(BaseDataset, torch.utils.data.Dataset):
     def __init__(
-        self,
-        dataset: Dataset,
-        interpolate_time_series: bool = False,
-        aggregate_time_series_to: str = None,
-        max_season_window_length: int = None,
+            self,
+            aligned_tensors: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+            column_names: Tuple[list, list, list],
+            indices: pd.DataFrame,
     ):
         """
-        PyTorch Dataset wrapper for compatibility with torch DataLoader objects
-        :param dataset: Dataset
-        :param interpolate_time_series: whether to interpolate time series data
-        :param aggregate_time_series_to: aggregation resolution for time series data
-                                         ("week" and "dekad" are supported)
-        :param max_season_window_length: maximum length of time series
+        PyTorch Dataset wrapper for compatibility with torch DataLoader objects.
+        Implements splitting by year.
+
+        :param aligned_tensors: Triplet of (target, context, time_series) tensors
+        :param column_names: Triplet of column names for the three aligned tensors
+        :param indices: DataFrame with at least 'adm_id' and 'year' columns
         """
-        self._crop = dataset.crop
-        self._df_y = dataset._df_y
+        self.y, self.x_context, self.x_ts = aligned_tensors
+        self.y_columns, self.x_context_columns, self.x_ts_columns = column_names
+        self.indices = indices
 
-        if max_season_window_length is None:
-            self._max_season_window_length = dataset.max_season_window_length
-        else:
-            self._max_season_window_length = max_season_window_length
+        # Validate that indices has required columns
+        if 'year' not in self.indices.columns:
+            raise ValueError("indices DataFrame must contain 'year' column")
 
-        self._aggregate_time_series_to = aggregate_time_series_to
-        if interpolate_time_series:
-            assert self._max_season_window_length is not None
-            self._dfs_x = {}
-            ts_inputs = []
-            for x in dataset._dfs_x:
-                if "date" not in dataset._dfs_x[x].index.names:
-                    self._dfs_x[x] = dataset._dfs_x[x]
-                else:
-                    ts_inputs.append(dataset._dfs_x[x])
+    def __len__(self) -> int:
+        """Return the total number of samples in the dataset."""
+        return len(self.y)
 
-            df_ts = interpolate_time_series_data(
-                ts_inputs, self._dfs_x[KEY_CROP_SEASON], self._max_season_window_length
-            )
-
-            if aggregate_time_series_to is not None:
-                if aggregate_time_series_to not in ["week", "dekad"]:
-                    raise Exception(
-                        f"Unsupported time series aggregation resolution {aggregate_time_series_to}"
-                    )
-                # aggregate
-                df_ts.reset_index(inplace=True)
-                df_ts = aggregate_time_series_data(
-                    df_ts, self._aggregate_time_series_to
-                )
-
-            # Add time series to self._dfs_x
-            self._dfs_x["combined_ts"] = df_ts.set_index(
-                [KEY_LOC, KEY_YEAR, "date"]
-            ).sort_index()
-        else:
-            self._dfs_x = dataset._dfs_x
-
-        # Bool value that specifies whether missing data values are allowed
-        # For now always set to False
-        self._allow_incomplete = False
-
-    def __getitem__(self, index) -> dict:
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Get a sample from the dataset
-        Data is cast to PyTorch tensors where required
-        :param index: index that is passed to the dataset
-        :return: a dict containing the data sample
+        Get a sample from the dataset.
+
+        :param index: Index of the sample to retrieve
+        :return: Tuple of (target, context, time_series) tensors for the given index
         """
-        sample = super(TorchDataset, self).__getitem__(index)
-        if self._aggregate_time_series_to is not None:
-            if self._aggregate_time_series_to == "week":
-                num_time_steps = int(np.ceil(self._max_season_window_length / 7))
-            else:
-                num_time_steps = int(np.ceil(self._max_season_window_length / 10))
+        return self.y[index], self.x_context[index], self.x_ts[index]
 
-            sample = trim_time_series_data(
-                sample, num_time_steps, TIME_SERIES_PREDICTORS
-            )
-
-        return self.cast_to_tensor(sample)
-
-    @classmethod
-    def cast_to_tensor(cls, sample: dict) -> dict:
+    def split_on_years(
+            self, years_split: Tuple[list, list]
+    ) -> Tuple['TorchDataset', 'TorchDataset']:
         """
-        Create a sample with all data cast to torch tensors
-        :param sample: the sample to convert
-        :return: the converted data sample
+        Create two new datasets based on the provided split in years.
+
+        :param years_split: Tuple of two lists, e.g., ([2012, 2014], [2015, 2017])
+        :return: Tuple of two TorchDataset instances
         """
-        nontensors1 = {
-            KEY_LOC: sample[KEY_LOC],
-            KEY_YEAR: sample[KEY_YEAR],
-            KEY_DATES: sample[KEY_DATES],
-        }
+        years_set1, years_set2 = years_split
 
-        # crop calendar dates are datetime objects
-        nontensors2 = {k: sample[k] for k in CROP_CALENDAR_DATES if k in sample}
+        # Create boolean masks for each split
+        mask1 = self.indices['year'].isin(years_set1)
+        mask2 = self.indices['year'].isin(years_set2)
 
-        tensors1 = {
-            KEY_TARGET: torch.tensor(sample[KEY_TARGET], dtype=torch.float32),
-        }
+        # Get integer indices for each subset
+        indices1 = mask1[mask1].index.tolist()
+        indices2 = mask2[mask2].index.tolist()
 
-        tensors2 = {
-            key: torch.tensor(sample[key], dtype=torch.float32)
-            for key in ALL_PREDICTORS
-        }  # TODO -- support nonnumeric data?
+        # Create new datasets with sliced tensors
+        dataset1 = TorchDataset(
+            aligned_tensors=(
+                self.y[indices1],
+                self.x_context[indices1],
+                self.x_ts[indices1]
+            ),
+            column_names=(
+                self.y_columns,
+                self.x_context_columns,
+                self.x_ts_columns
+            ),
+            indices=self.indices.iloc[indices1].reset_index(drop=True)
+        )
 
-        return {**nontensors1, **nontensors2, **tensors1, **tensors2}
+        dataset2 = TorchDataset(
+            aligned_tensors=(
+                self.y[indices2],
+                self.x_context[indices2],
+                self.x_ts[indices2]
+            ),
+            column_names=(
+                self.y_columns,
+                self.x_context_columns,
+                self.x_ts_columns
+            ),
+            indices=self.indices.iloc[indices2].reset_index(drop=True)
+        )
 
-    @classmethod
-    def interpolate_and_aggregate(
-        cls,
-        samples: list,
-        max_season_window_length: int,
-        aggregate_time_series_to: str = None,
-    ):
+        return dataset1, dataset2
+
+    @property
+    def years(self) -> set:
         """
-        Function that takes a list of data samples (as dicts, containing numpy arrays)
-        and interpolates and (optionally) aggregates time series data
-        :param samples: a list of data samples
-        :param max_season_window_length: maximum length of time series
-        :param aggregate_time_series_to: resolution to aggregate time series to
-        :return: the same data samples after interpolation and aggregation
+        Obtain a set containing all years occurring in the dataset
         """
-        assert max_season_window_length is not None
-        df_ts = interpolate_time_series_data_items(samples, max_season_window_length)
-        if aggregate_time_series_to is not None:
-            df_ts = aggregate_time_series_data(df_ts, aggregate_time_series_to)
+        return set(self.indices.year.unique())
 
-        df_ts = df_ts.set_index([KEY_LOC, KEY_YEAR, "date"]).sort_index()
-        for i, sample in enumerate(samples):
-            sample = samples[i]
-            mod_sample = {
-                k: sample[k] for k in sample if k not in TIME_SERIES_PREDICTORS
-            }
-
-            df_loc = df_ts.xs((sample[KEY_LOC], sample[KEY_YEAR]), drop_level=True)
-            # Obtain the values contained in the filtered dataframe
-            data_loc = {key: df_loc[key].values for key in TIME_SERIES_PREDICTORS}
-            dates = {key: df_loc.index.values for key in df_loc.columns}
-            mod_sample[KEY_DATES] = dates
-            if aggregate_time_series_to == "week":
-                num_time_steps = int(np.ceil(max_season_window_length / 7))
-            else:
-                num_time_steps = int(np.ceil(max_season_window_length / 10))
-
-            data_loc = trim_time_series_data(
-                data_loc, num_time_steps, TIME_SERIES_PREDICTORS
-            )
-            mod_sample = {**mod_sample, **data_loc}
-            samples[i] = mod_sample
-
-        return samples
-
-    @classmethod
-    def collate_fn(cls, samples: list) -> dict:
+    @property
+    def location_ids(self) -> set:
         """
-        Function that takes a list of data samples (as dicts, containing torch tensors)
-        and converts it to a dict of batched torch tensors
-        :param samples: a list of data samples
-        :return: a dict with batched data
+        Obtain a set containing all location ids occurring in the dataset
         """
-        assert len(samples) > 0
-
-        nontensors1 = {
-            KEY_LOC: [sample[KEY_LOC] for sample in samples],
-            KEY_YEAR: [sample[KEY_YEAR] for sample in samples],
-            KEY_DATES: samples[0][KEY_DATES],
-        }
-
-        # crop calendar dates are datetime objects
-        nontensors2 = {
-            k: [sample[k] for sample in samples if k in sample]
-            for k in CROP_CALENDAR_DATES
-        }
-
-        tensors1 = {
-            KEY_TARGET: batch_tensors(*[sample[KEY_TARGET] for sample in samples])
-        }
-
-        tensors2 = {
-            key: batch_tensors(*[sample[key] for sample in samples])
-            for key in ALL_PREDICTORS
-        }
-
-        return {**nontensors1, **nontensors2, **tensors1, **tensors2}
+        return set(self.indices.adm_id.unique())
