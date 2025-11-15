@@ -146,6 +146,7 @@ class DatasetConfig:
     target: Dict[str, Any]
     non_temporal: Dict[str, Any]
     temporal: Dict[str, Any]
+    normalizer: Optional[Dict[str, Any]]
     framework: str
 
 @dataclass

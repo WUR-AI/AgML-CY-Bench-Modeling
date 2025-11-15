@@ -9,6 +9,7 @@ from cybench.datasets.alignment import compute_crop_season_window, ensure_same_c
     align_to_crop_season_window_numpy, restore_category_to_string, align_to_crop_season_window, align_inputs_and_labels, \
     interpolate_time_series_data, make_aligned_tensors
 from cybench.datasets.dataset import Dataset
+from cybench.datasets.normalizer import Normalizer
 from cybench.datasets.torch_dataset import TorchDataset
 
 
@@ -37,6 +38,15 @@ class DataFactory:
         else:
             df_y, dfs_x = self.load_dfs(crop=self.cfg.crop, country_code=self.cfg.country)
 
+        if self.cfg.normalizer:
+            normalizer = Normalizer(self.cfg.normalizer)
+            if normalizer.name == "fit":
+                dfs_x = normalizer.fit_normalize(dfs_x)
+                normalizer.to_omegaconf() # TODO save normalizer params in run file
+            else:
+                dfs_x = normalizer.normalize(dfs_x)
+
+
         if self.cfg.framework == "torch":
             # unifies and interpolate time-series dataframes into a single dataframe
             df_ts = interpolate_time_series_data(dfs_x)
@@ -44,7 +54,8 @@ class DataFactory:
             aligned_tensors, column_names = make_aligned_tensors(
                 df_y=df_y,
                 df_non_temporal=dfs_x["non_temporal"],
-                df_ts=df_ts
+                df_ts=df_ts,
+                normalizer=normalizer
             )
 
             dataset = TorchDataset(

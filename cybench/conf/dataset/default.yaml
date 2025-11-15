@@ -3,6 +3,8 @@ defaults:
   - target: yield
   - non_temporal: no_transform
   - temporal: no_aggregate
+  - normalizer: fit
+
 
 # set crop and country | optionally: set multiple countries such as in europe.yaml
 crop: maize
@@ -13,7 +15,7 @@ name: ${dataset.crop}_${dataset.country}
 
 # years to be considered
 min_year: 2000
-max_year: 2023
+max_year: 2024
 
 # set the framework of the data stored | optionally:
 # pandas - creates Dataset instance ready for tabular frameworks such as Sklearn or XGBoost. Call: X, y = dataset.make_X_y()

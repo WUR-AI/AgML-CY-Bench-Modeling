@@ -1,0 +1,67 @@
+# Normalization types only - parameters will be fitted from data
+name: fit
+
+features:
+  year:
+    type: minmax
+    params:
+      min: 2000
+      max: 2025
+  sos:
+    type: minmax
+    params: null
+  eos:
+    type: minmax
+    params: null
+
+  latitude:
+    type: standard
+    params: null
+  longitude:
+    type: standard
+    params: null
+
+  awc:
+    type: standard
+    params: null
+  bulk_density:
+    type: standard
+    params: null
+  drainage_class:
+    type: standard
+    params: null   # categorical-but-numeric; encode earlier
+
+  tmin:
+    type: standard
+    params: null
+  tmax:
+    type: standard
+    params: null
+  tavg:
+    type: standard
+    params: null
+
+  prec:
+    type: logsinh
+  rad:
+    type: logsinh
+  et0:
+    type: logsinh
+  vpd:
+    type: logsinh
+  cwb:
+    type: logsinh
+
+  ndvi:
+    type: standard
+    params: null
+  fpar:
+    type: standard
+    params: null
+
+  ssm:
+    type: standard
+    params: null
+  rsm:
+    type: standard
+    params: null

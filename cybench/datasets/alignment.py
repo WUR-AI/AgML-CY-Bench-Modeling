@@ -3,6 +3,7 @@ import numpy as np
 import torch
 
 from cybench.datasets.features import dekad_from_date, unpack_time_series
+from cybench.datasets.normalizer import Normalizer
 from cybench.util.data import data_to_pandas
 from cybench.config import (
     KEY_LOC,
@@ -521,12 +522,15 @@ def aggregate_time_series_data(df_ts: pd.DataFrame, aggregate_time_series_to: st
 def make_aligned_tensors(
         df_y: pd.DataFrame,
         df_non_temporal: pd.DataFrame,
-        df_ts: pd.DataFrame
+        df_ts: pd.DataFrame,
+        normalizer: Normalizer,
 ):
     y = torch.tensor(df_y.values, dtype=torch.float32) # (sample_size)
 
     # align the non-temporal dataset to match the indices
     expanded_df_non_temporal = df_y.reset_index(KEY_YEAR).merge(df_non_temporal, on=KEY_LOC, how="left").drop(df_y.columns, axis=1)
+    # normalize the year column
+    expanded_df_non_temporal[KEY_YEAR] = normalizer.normalize_sequence(expanded_df_non_temporal[KEY_YEAR])
     x_context = torch.tensor(expanded_df_non_temporal.values, dtype=torch.float32) # (sample_size x non_temp_features)
     assert not x_context.isnan().any()
 
