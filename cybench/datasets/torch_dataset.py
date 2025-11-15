@@ -29,6 +29,9 @@ class TorchDataset(BaseDataset, torch.utils.data.Dataset):
         if 'year' not in self.indices.columns:
             raise ValueError("indices DataFrame must contain 'year' column")
 
+        # augment data when loaded (specified in model.torch.utils.augmentation
+        self.augmentation = None
+
     def __len__(self) -> int:
         """Return the total number of samples in the dataset."""
         return len(self.y)
@@ -40,7 +43,11 @@ class TorchDataset(BaseDataset, torch.utils.data.Dataset):
         :param index: Index of the sample to retrieve
         :return: Tuple of (target, context, time_series) tensors for the given index
         """
-        return self.y[index], self.x_context[index], self.x_ts[index]
+        sample = self.y[index], self.x_context[index], self.x_ts[index]
+        # augment the loaded sample
+        if self.augmentation is not None:
+            sample = self.augmentation(sample)
+        return sample
 
     def split_on_years(
             self, years_split: Tuple[list, list]

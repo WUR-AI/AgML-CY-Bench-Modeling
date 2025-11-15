@@ -1,0 +1,8 @@
+# SGD: Stochastic gradient descent with momentum, simple and effective baseline
+_target_: torch.optim.SGD
+lr: 0.01
+momentum: 0.9
+weight_decay: 0.0001
+dampening: 0
+nesterov: false
+

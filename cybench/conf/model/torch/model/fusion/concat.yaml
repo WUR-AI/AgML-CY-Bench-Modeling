@@ -1,0 +1,8 @@
+_target_: cybench.models.torch.model_components.fusion.ConcatFusion
+
+# Dimension args are passed at instantiation time from code:
+#   hydra.utils.instantiate(cfg.fusion, temporal_dim=H_t, static_dim=H_s)
+
+out_dim: null          # keep H_t + H_s; set to int to add projection
+dropout: 0.0
+use_layernorm: false

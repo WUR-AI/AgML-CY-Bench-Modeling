@@ -1,0 +1,5 @@
+# ExponentialLR: Exponential decay, multiplies LR by gamma every epoch
+_target_: torch.optim.lr_scheduler.ExponentialLR
+gamma: 0.95
+last_epoch: -1
+

@@ -8,7 +8,7 @@ from cybench.models.naive_models import AverageYieldModel
 from cybench.models.trend_models import TrendModel
 from cybench.models.sklearn_models import SklearnRidge
 from cybench.models.residual_models import RidgeRes
-from cybench.models.nn_models import BaselineLSTM
+from cybench.models.torch.nn_models import BaselineLSTM
 from cybench.evaluation.eval import evaluate_predictions
 
 from cybench.config import PATH_DATA_DIR
