@@ -1,5 +1,5 @@
 defaults:
-  - processor: cnn  # cnn / lstm / transformer
+  - processor: lstm  # cnn / lstm / transformer
 
 _target_: cybench.models.torch.model_components.temporal_encoder.TemporalEncoder
 
@@ -9,7 +9,6 @@ tokenizer:
   embed_dim: ${model.torch_model.embed_dim}
 
 pooling:
-  _target_: cybench.models.torch.model_components.temporal_encoder.AttentionPooling # LastStepPooling
-  embed_dim: ${model.torch_model.embed_dim}
+  _target_: cybench.models.torch.model_components.temporal_encoder.LastStepPooling
 
 embed_dim: ${model.torch_model.embed_dim}

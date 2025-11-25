@@ -24,6 +24,8 @@ def get_train_test_splits(
             train = [y for y in (cfg.train_years + cfg.val_years) if y in years]
         else:
             train = [y for y in years if y not in  cfg.test_years]
+        assert train, "No train years found. Please specify at least one year."
+        assert test, "No test years found. Please specify at least one year."
         yield train, test
 
     elif cfg.name == 'rolling':

@@ -88,6 +88,7 @@ def compute_crop_season_window(df, min_year, max_year, start_of_sequence, end_of
     assert df[df["season_length"] > 366].empty
 
     if end_of_sequence == "eos":
+        df["cutoff_days"] = 0
         df["end_of_sequence_date"] = df["eos_date"]
     else:
         df = add_cutoff_days(df, end_of_sequence)

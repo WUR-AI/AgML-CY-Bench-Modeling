@@ -1,0 +1,29 @@
+defaults:
+  - torch_model: late_fusion_network
+  - optimizer: adamw
+  - scheduler: cosine
+  - override torch_model/temporal_encoder/processor: cnn # overriding the default processor to cnn
+  - _self_
+
+# Root-level trainer configuration
+_target_: cybench.models.torch.trainer.TorchTrainer
+name: cnn  # Updated name for logging/tracking
+epochs: 100
+device: ${experiment.device}
+verbose: true
+
+# data loader configuration
+dataloader_config:
+  _target_: torch.utils.data.DataLoader
+  _partial_: true
+  batch_size: 64
+  shuffle: True
+
+# Further overwriting the default torch model
+torch_model:
+  temporal_encoder:
+    # attention pooling works great for cnn to determine important features along the time series
+    pooling:
+      _target_: cybench.models.torch.model_components.temporal_encoder.AttentionPooling
+      # We must define arguments that weren't in LastStepPooling
+      embed_dim: ${model.torch_model.embed_dim}

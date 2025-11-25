@@ -48,6 +48,13 @@ class BaseDataset(ABC):
         """
         pass
 
+    @property
+    def targets(self) -> np.ndarray[tuple[int], np.dtype[np.number]]:
+        """
+        Obtain a numpy array of targets or labels
+        """
+        pass
+
 
 class Dataset(BaseDataset):
     def __init__(

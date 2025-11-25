@@ -1,5 +1,6 @@
 from typing import Tuple, List
 
+import numpy as np
 import pandas as pd
 import torch.utils.data
 
@@ -50,15 +51,15 @@ class TorchDataset(BaseDataset, torch.utils.data.Dataset):
         return sample
 
     def split_on_years(
-            self, years_split: Tuple[List[int], List[int]]
-    ) -> Tuple[torch.utils.data.Subset, torch.utils.data.Subset]:
+            self, years_split: Tuple[list, list]
+    ) -> Tuple['TorchDataset', 'TorchDataset']:
         """
         Create two new datasets based on the provided split in years.
-
-        Uses torch.utils.data.Subset to avoid copying tensors (Zero-copy).
+        !!NOTE!!: This is a memory intensive operation, because its making two subsets by copying the original data.
+        Future implementations might want to rely on more memory-efficiency, in case that becomes a bottleneck.
 
         :param years_split: Tuple of two lists, e.g., ([2012, 2014], [2015, 2017])
-        :return: Tuple of two torch.utils.data.Subset instances
+        :return: Tuple of two TorchDataset instances
         """
         years_set1, years_set2 = years_split
 
@@ -70,12 +71,34 @@ class TorchDataset(BaseDataset, torch.utils.data.Dataset):
         indices1 = mask1[mask1].index.tolist()
         indices2 = mask2[mask2].index.tolist()
 
-        # Create Subsets using the indices.
-        # This keeps the original large tensors in 'self' and creates lightweight views.
-        subset1 = torch.utils.data.Subset(self, indices1)
-        subset2 = torch.utils.data.Subset(self, indices2)
-
-        return subset1, subset2
+        # Create new datasets with sliced tensors
+        dataset1 = TorchDataset(
+            aligned_tensors=(
+                self.y[indices1],
+                self.x_context[indices1],
+                self.x_ts[indices1]
+            ),
+            column_names=(
+                self.y_columns,
+                self.x_context_columns,
+                self.x_ts_columns
+            ),
+            indices=self.indices.iloc[indices1].reset_index(drop=True)
+        )
+        dataset2 = TorchDataset(
+            aligned_tensors=(
+                self.y[indices2],
+                self.x_context[indices2],
+                self.x_ts[indices2]
+            ),
+            column_names=(
+                self.y_columns,
+                self.x_context_columns,
+                self.x_ts_columns
+            ),
+            indices=self.indices.iloc[indices2].reset_index(drop=True)
+        )
+        return dataset1, dataset2
 
     @property
     def years(self) -> set:
@@ -90,3 +113,10 @@ class TorchDataset(BaseDataset, torch.utils.data.Dataset):
         Obtain a set containing all location ids occurring in the dataset
         """
         return set(self.indices.adm_id.unique())
+
+    @property
+    def targets(self) -> np.ndarray[tuple[int], np.dtype[np.number]]:
+        """
+        Obtain a numpy array of targets or labels
+        """
+        return self.y.numpy().reshape(-1)

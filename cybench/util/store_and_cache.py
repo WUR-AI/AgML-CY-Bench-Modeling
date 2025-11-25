@@ -1,0 +1,68 @@
+import numpy as np
+import pandas as pd
+from networkx.algorithms.threshold import swap_d
+from omegaconf import OmegaConf
+import hashlib
+import json
+import os
+
+from cybench.datasets.dataset import Dataset
+from cybench.datasets.torch_dataset import TorchDataset
+
+
+def cfg_to_hash(cfg: OmegaConf, add_str: str = None):
+    """
+    Create a deterministic hash from a DatasetConfig, to use it as a keys e.g. in caching
+
+    Args:
+        cfg: The dataset configuration
+
+    Returns:
+        A hex string hash that uniquely identifies this configuration
+    """
+    # Convert OmegaConf to a regular dict/primitive structure
+    if hasattr(cfg, '__dict__'):
+        config_dict = cfg.__dict__
+    else:
+        config_dict = OmegaConf.to_container(cfg, resolve=True)
+
+    # Convert to JSON string with sorted keys for deterministic ordering
+    config_str = json.dumps(config_dict, sort_keys=True, default=str)
+
+    # Create hash
+    hash_obj = hashlib.sha256(config_str.encode('utf-8'))
+    hash = hash_obj.hexdigest()
+    if add_str is not None:
+        hash = config_dict["name"] + hash
+    return hash
+
+
+def make_split_folder(run_dir: str, split_name) -> str:
+    if type(split_name) == list:
+        split_name = "_".join(str(x) for x in split_name)
+    else:
+        split_name = str(split_name)
+    split_path = os.path.join(run_dir, split_name)
+    os.makedirs(split_path, exist_ok=True)
+    return split_path
+
+
+def save_preds(
+        path: str,
+        dataset: Dataset,
+        preds: np.ndarray[tuple[int],
+        np.dtype[np.number]], pred_info: dict):
+    """
+    Save predictions to a csv file.
+    Args:
+        path:
+        dataset: Dataset to get targets and indices from.
+        preds: Predicted targets.
+        pred_info: Any dict containing info about the predictions.
+    Returns: Nada
+    """
+    dataset.indices.merge(
+        pd.DataFrame({"targets": dataset.targets, "preds": preds}),
+        left_index=True, right_index=True
+    ).to_csv(os.path.join(path, 'preds.csv'), index=False)
+    return None

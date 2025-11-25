@@ -1,7 +1,7 @@
 defaults:
   - exp_config
   - dataset: default
-  - model: lstm
+  - model: lstm_lf
   - hp_search: bayesian
   - validation: single
   - evaluation: default
