@@ -1,5 +1,6 @@
 # CosineAnnealingLR: Cosine decay schedule, smoothly decreases LR following cosine curve
 _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+_partial_: true
 T_max: 50
 eta_min: 1e-6
 last_epoch: -1

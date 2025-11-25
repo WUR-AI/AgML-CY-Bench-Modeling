@@ -1,0 +1,26 @@
+defaults:
+  - fusion: gated
+  - temporal_encoder: temporal_encoder
+  - _self_
+
+_target_: cybench.models.torch.architectures.late_fusion_network.LateFusionNetwork
+
+# central model design parameters
+context_in_dim: ??? # will be set depending on the data in adjust_model_cfg_to_dataset()
+temporal_in_dim: ??? # will be set depending on the data in adjust_model_cfg_to_dataset()
+embed_dim: 128 # main dimensionality for feature representation
+
+context_encoder:
+  _target_: cybench.models.torch.model_components.context_encoder.ContextEncoder
+  in_dim: ${model.torch_model.context_in_dim}
+  hidden_dims:
+    - ${model.torch_model.embed_dim}
+  embed_dim: ${model.torch_model.embed_dim}
+  dropout: 0.2
+
+regression_head:
+  _target_: cybench.models.torch.model_components.head.RegressionHead
+  hidden_dims:
+    - ${model.torch_model.embed_dim}
+    - 128
+  dropout: 0.2

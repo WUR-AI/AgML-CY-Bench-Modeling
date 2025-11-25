@@ -124,15 +124,11 @@ class GatedFusion(nn.Module):
         self.norm = nn.LayerNorm(out_dim) if use_layernorm else nn.Identity()
 
     def forward(self, temporal_emb: torch.Tensor, static_emb: torch.Tensor) -> torch.Tensor:
-        # Project to fusion space
-        t = self.temporal_proj(temporal_emb)   # (B, D)
-        s = self.static_proj(static_emb)       # (B, D)
-
         # Gate from original concatenated embeddings
         gate_input = torch.cat([temporal_emb, static_emb], dim=-1)  # (B, H_t + H_s)
         gate = self.gate_net(gate_input)                            # (B, D)
 
-        combined = gate * t + (1.0 - gate) * s
+        combined = gate * temporal_emb + (1.0 - gate) * static_emb
         combined = self.dropout(combined)
         combined = self.norm(combined)
         return combined

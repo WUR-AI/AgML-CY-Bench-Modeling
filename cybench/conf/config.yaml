@@ -1,9 +1,9 @@
 defaults:
   - exp_config
   - dataset: default
-  - model: torch/lstm
+  - model: lstm
   - hp_search: bayesian
-  - validation: rolling
+  - validation: single
   - evaluation: default
   - _self_
 

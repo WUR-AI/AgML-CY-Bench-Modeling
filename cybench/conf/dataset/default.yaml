@@ -8,7 +8,7 @@ defaults:
 
 # set crop and country | optionally: set multiple countries such as in europe.yaml
 crop: maize
-country: FR
+country: US
 
 # name will show in experiment name
 name: ${dataset.crop}_${dataset.country}

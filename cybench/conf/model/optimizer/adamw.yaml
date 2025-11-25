@@ -1,5 +1,6 @@
 # AdamW: Adam with decoupled weight decay, better generalization than Adam
 _target_: torch.optim.AdamW
+_partial_: true
 lr: 1e-3
 betas: [0.9, 0.999]
 eps: 1e-8

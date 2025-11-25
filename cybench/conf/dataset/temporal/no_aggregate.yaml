@@ -3,7 +3,7 @@ name: no_aggregate
 # define cut-off-dates to achieve nowcast (eos) or forecast (<eos)
 season:
   # define timepoints for cutting out seasonal data per datapoint
-  end_of_sequence: eos-60 # end-of-season minus x days | optionally: eos, mid-season, quarter-season
+  end_of_sequence: eos # end-of-season minus x days | optionally: eos, mid-season, quarter-season
   start_of_sequence: sos-60 # optionally: sos, sos-60, eos-200
   # Note: choosing an interval such as [sos-60, eos-60] will result into differently sized season lengths per region
   #       due to seasonal differences. To harmonize regions the processor will automatically cut of the earliest days

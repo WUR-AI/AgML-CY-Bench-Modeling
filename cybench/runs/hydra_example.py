@@ -1,4 +1,6 @@
 import hydra
+import matplotlib.pyplot as plt
+import pandas as pd
 from hydra.core.config_store import ConfigStore
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
@@ -7,6 +9,7 @@ import logging
 from cybench.config import ExperimentConfig
 from cybench.datasets.data_factory import DataFactory
 from cybench.datasets.torch_dataset import TorchDataset
+from cybench.util.config_utils import adjust_model_cfg_to_dataset
 from cybench.util.validation import get_train_test_splits
 
 # init logger
@@ -23,18 +26,21 @@ def main(cfg: ExperimentConfig):
     print(OmegaConf.to_yaml(cfg))
     log.info("=== Create Datasets ===")
     dataset = DataFactory(cfg.dataset).build()
+    cfg.model = adjust_model_cfg_to_dataset(cfg.model, dataset)
 
     # split data in train- and test-set based on the validation strategy
     for years_split in get_train_test_splits(cfg=cfg.validation, years=dataset.years):
         train_dataset, test_dataset = dataset.split_on_years(years_split=years_split)
         # check whether hyperparameter tuning is equipped:
         if cfg.hp_search:
-            model_cfg = "TODO: implement Optuna hyperparameter search"
+            model_cfg = cfg.model # "TODO: implement Optuna hyperparameter search"
         else:
             model_cfg = cfg.model
         # create final model
         model = instantiate(model_cfg)
-        model.fit_predict(train_dataset, test_dataset)
+        _, history = model.fit(train_dataset, val_dataset=test_dataset)
+        test_preds = model.predict(test_dataset)
+
 
 if __name__ == "__main__":
     main()

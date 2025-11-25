@@ -19,8 +19,11 @@ def get_train_test_splits(
     years = sorted(years)
 
     if cfg.name == 'single':
-        train = [y for y in (cfg.train_years + cfg.val_years) if y in years]
         test = [y for y in cfg.test_years if y in years]
+        if cfg.train_years:
+            train = [y for y in (cfg.train_years + cfg.val_years) if y in years]
+        else:
+            train = [y for y in years if y not in  cfg.test_years]
         yield train, test
 
     elif cfg.name == 'rolling':

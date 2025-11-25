@@ -1,4 +1,3 @@
-name: add
 _target_: cybench.models.torch.model_components.fusion.AddFusion
 
 # temporal_dim and static_dim supplied at runtime from code.

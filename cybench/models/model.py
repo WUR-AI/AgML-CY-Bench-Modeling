@@ -47,20 +47,20 @@ class BaseModel(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def save(self, model_name):
+    def save(self, model_path):
         """Save model, e.g. using pickle.
 
         Args:
-          model_name: Filename that will be used to save the model.
+          model_path: File path that will be used to save the model.
         """
         raise NotImplementedError
 
-    @abstractmethod
-    def load(cls, model_name):
+    @classmethod
+    def load(cls, model_path):
         """Deserialize a saved model.
 
         Args:
-          model_name: Filename that was used to save the model.
+          model_path: File path that was used to save the model.
 
         Returns:
           The deserialized model.

@@ -1,5 +1,6 @@
 # Adam: Adaptive moment estimation optimizer, adapts learning rates per parameter
 _target_: torch.optim.Adam
+_partial_: true
 lr: 1e-3
 betas: [0.9, 0.999]
 eps: 1e-8

@@ -1,5 +1,6 @@
 # RMSprop: Root Mean Square Propagation, adaptive optimizer good for non-stationary objectives
 _target_: torch.optim.RMSprop
+_partial_: true
 lr: 1e-3
 alpha: 0.99
 eps: 1e-8

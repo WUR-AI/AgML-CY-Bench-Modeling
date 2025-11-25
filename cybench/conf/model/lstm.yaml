@@ -1,0 +1,29 @@
+defaults:
+  - torch_model: late_fusion_network
+  - optimizer: adamw
+  - scheduler: cosine
+  - _self_
+
+# Root-level trainer configuration
+_target_: cybench.models.torch.trainer.TorchTrainer
+name: lstm
+epochs: 50
+device: ${experiment.device}
+verbose: true
+
+# data loader configuration
+dataloader_config:
+  _target_: torch.utils.data.DataLoader
+  _partial_: true
+  batch_size: 64
+  shuffle: True
+
+# training data augmentation TODO: move into config group as well?
+#augmentation_config:
+#  _target_: cybench.models.torch.utils.augmentation.AugmentationComposer
+  #augmentations:
+  #  - _target_: cybench.models.torch.utils.augmentation.GaussianNoise
+  #    std: 0.1
+  #    features: year
+  #  - _target_: cybench.models.torch.utils.augmentation.ClipTimeSeries
+  #    todo: todo

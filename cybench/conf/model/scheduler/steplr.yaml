@@ -1,5 +1,6 @@
 # StepLR: Multiplicative step-wise decay, reduces LR by gamma every step_size epochs
 _target_: torch.optim.lr_scheduler.StepLR
+_partial_: true
 step_size: 30
 gamma: 0.1
 last_epoch: -1
