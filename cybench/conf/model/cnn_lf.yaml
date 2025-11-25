@@ -7,7 +7,7 @@ defaults:
 
 # Root-level trainer configuration
 _target_: cybench.models.torch.trainer.TorchTrainer
-name: cnn  # Updated name for logging/tracking
+name: cnn_lf  # Updated name for logging/tracking
 epochs: 100
 device: ${experiment.device}
 verbose: true

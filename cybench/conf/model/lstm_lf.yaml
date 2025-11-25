@@ -6,7 +6,7 @@ defaults:
 
 # Root-level trainer configuration
 _target_: cybench.models.torch.trainer.TorchTrainer
-name: lstm
+name: lstm_lf
 epochs: 100
 device: ${experiment.device}
 verbose: true

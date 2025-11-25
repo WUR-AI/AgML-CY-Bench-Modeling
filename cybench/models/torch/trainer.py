@@ -9,6 +9,7 @@ but is adapted to the CY-Bench codebase and a PyTorch regression setup.
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
@@ -291,12 +292,12 @@ class TorchTrainer(BaseModel):
     # Persistence
     # ------------------------------------------------------------------
 
-    def save(self, model_path: str):
+    def save(self, path: str):
         """
         Save model, optimizer, and training state to disk.
 
         Args:
-            model_name: Filename that will be used to save the model.
+            path: File path that will be used to save the model.
         """
         checkpoint = {
             "model_state_dict": self.model.state_dict(),
@@ -306,7 +307,7 @@ class TorchTrainer(BaseModel):
             "epochs": self.epochs,
             "max_grad_norm": self.max_grad_norm,
         }
-        torch.save(checkpoint, model_path)
+        torch.save(checkpoint, os.path.join(path, self.name + ".pt"))
 
     @classmethod
     def load(cls, model_path: str, model: nn.Module, optimizer: torch.optim.Optimizer, **kwargs):

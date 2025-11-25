@@ -1,3 +1,5 @@
+import pickle
+
 import numpy as np
 import pandas as pd
 from networkx.algorithms.threshold import swap_d
@@ -65,4 +67,18 @@ def save_preds(
         pd.DataFrame({"targets": dataset.targets, "preds": preds}),
         left_index=True, right_index=True
     ).to_csv(os.path.join(path, 'preds.csv'), index=False)
+    return None
+
+
+def save_meta_dict(path, dict):
+    """
+    Save a dict of any metadata after training.
+    Args:
+        path:
+        dict:
+
+    Returns: Nichts
+    """
+    with open('meta.pkl', 'wb') as handle:
+        pickle.dump(dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return None
