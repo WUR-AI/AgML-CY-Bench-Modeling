@@ -8,7 +8,7 @@ defaults:
 
 # set crop and country | optionally: set multiple countries such as in europe.yaml
 crop: maize
-country: US
+country: DE
 
 # name will show in experiment name
 name: ${dataset.crop}_${dataset.country}
@@ -18,6 +18,10 @@ min_year: 2000
 max_year: 2024
 
 # set the framework of the data stored | optionally:
-# pandas - creates Dataset instance ready for tabular frameworks such as Sklearn or XGBoost. Call: X, y = dataset.make_X_y()
+# pandas - creates Dataset instance ready for tabular frameworks such as Sklearn or XGBoost. Call: X, y = dataset.make_X_y() # TODO
 # torch  - creates TorchDataset - a wrapper for compatibility with torch DataLoader objects
 framework: torch
+
+# Optional: (true or false) whether to cache the final dataset or load the cached dataset if it got created before
+# This creates extra files in cybench/data/cache/ but can save a lot of time when running multiple experiments on the same data
+use_cache: true

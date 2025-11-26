@@ -3,6 +3,7 @@ from functools import reduce
 
 import numpy as np
 import pandas as pd
+import torch
 
 from cybench.config import DatasetConfig, DATASETS, PATH_DATA_DIR, KEY_LOC, KEY_YEAR, KEY_TARGET
 from cybench.datasets.alignment import compute_crop_season_window, ensure_same_categories_union, \
@@ -11,6 +12,7 @@ from cybench.datasets.alignment import compute_crop_season_window, ensure_same_c
 from cybench.datasets.dataset import Dataset
 from cybench.datasets.normalizer import Normalizer
 from cybench.datasets.torch_dataset import TorchDataset
+from cybench.util.store_and_cache import cfg_to_hash
 
 
 class DataFactory:
@@ -22,6 +24,21 @@ class DataFactory:
         assert self.cfg.country in DATASETS[self.cfg.crop], f"Country '{self.cfg.country}' is not supported for crop type '{self.cfg.crop}'. See DATASETS in config.py"
 
     def build(self) -> Dataset:
+        # Caching Strategy: Check existing
+        use_cache = getattr(self.cfg, 'use_cache', False)
+        cache_path = None
+        if use_cache:
+            dataset_hash = cfg_to_hash(self.cfg, add_str=self.cfg.name)
+            # Define cache dir: cybench/data/cache/
+            cache_dir = os.path.join(PATH_DATA_DIR, "cache")
+            os.makedirs(cache_dir, exist_ok=True)
+            cache_path = os.path.join(cache_dir, f"{dataset_hash}.pt")
+
+            if os.path.exists(cache_path):
+                # Load the entire dataset object (tensors, indices, etc.)
+                dataset = torch.load(cache_path, weights_only=False)
+                return dataset
+
         if isinstance(self.cfg.country, list):
             df_y = pd.DataFrame()
             dfs_x = {}
@@ -70,6 +87,10 @@ class DataFactory:
                 dfs_x=dfs_x,
             )
 
+        # Caching Strategy: Save result
+        if use_cache:
+            torch.save(dataset, cache_path)
+
         return dataset
 
     def load_dfs(self,
@@ -110,7 +131,8 @@ class DataFactory:
             header=0,
         )
         # TODO delete next line after fixing yield data filtering based on sophisticates conditions in /data_preparation. Yield data should be analysis ready
-        df_y = df_y[df_y.harvest_area > 0]
+        if not any(df_y.harvest_area.isna()):
+            df_y = df_y[df_y.harvest_area > 0]
         df_y = df_y.rename(columns={"harvest_year": KEY_YEAR})
         df_y = df_y[[KEY_LOC, KEY_YEAR, KEY_TARGET]]
         df_y = df_y.dropna(axis=0)

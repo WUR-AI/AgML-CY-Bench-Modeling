@@ -85,6 +85,23 @@ def prepare_targets_preds(df_yr, model_name, y_loc_mean=None, residual=False):
 
 
 @metric
+def mse(y_true: np.ndarray, y_pred: np.ndarray):
+    """
+    Calculate the mean squared error (MSE) between true and predicted values.
+
+    Args:
+      y_true (numpy.ndarray): True values.
+      y_pred (numpy.ndarray): Predicted values.
+
+    Returns:
+      float: MSE value as a percentage.
+    """
+
+    mse = mean_squared_error(y_true, y_pred)
+    return mse
+
+
+@metric
 def normalized_rmse(y_true: np.ndarray, y_pred: np.ndarray):
     """
     Calculate the normalized Root Mean Squared Error (RMSE) between true and predicted values.

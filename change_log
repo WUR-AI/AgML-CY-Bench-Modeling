@@ -129,3 +129,12 @@ ISSUES:
 
 OUTLOOK:
 * similar reorganizing of data_preparation would be clean
+
+26.11.2025 #################################################################
+
+Implemented a TorchDataset caching to reduce redundant loading time when running iterative experiments on the same data.
+Impact example using the maize_US sequence: [SOS-60 - EOS]
+Init. Processing time:  218 sec
+Cache loading time:     0.1 sec
+maize_US data size:     2.89 GB
+Cache size:             0.36 GB

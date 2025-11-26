@@ -16,11 +16,11 @@ context_encoder:
   hidden_dims:
     - ${model.torch_model.embed_dim}
   embed_dim: ${model.torch_model.embed_dim}
-  dropout: 0.2
+  dropout: 0.5
 
 regression_head:
   _target_: cybench.models.torch.model_components.head.RegressionHead
   hidden_dims:
     - ${model.torch_model.embed_dim}
-    - 128
+    - ${model.torch_model.embed_dim}
   dropout: 0.2

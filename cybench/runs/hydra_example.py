@@ -1,3 +1,5 @@
+import time
+
 import hydra
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -10,7 +12,7 @@ from cybench.config import ExperimentConfig
 from cybench.datasets.data_factory import DataFactory
 from cybench.datasets.torch_dataset import TorchDataset
 from cybench.evaluation.eval import evaluate_predictions
-from cybench.util.config_utils import adjust_model_cfg_to_dataset
+from cybench.util.config_utils import adjust_model_cfg_to_dataset, set_seed
 from cybench.util.store_and_cache import make_split_folder, save_preds, save_meta_dict
 from cybench.util.validation import get_train_test_splits
 
@@ -26,6 +28,7 @@ conf_store.store(name="exp_config", node=ExperimentConfig)
 def main(cfg: ExperimentConfig):
     #print("=== Final Composed Config ===")
     #print(OmegaConf.to_yaml(cfg))
+    set_seed(cfg.experiment.seed)
     log.info("=== Create Datasets ===")
     dataset = DataFactory(cfg.dataset).build()
     cfg.model = adjust_model_cfg_to_dataset(cfg.model, dataset)

@@ -10,6 +10,7 @@ but is adapted to the CY-Bench codebase and a PyTorch regression setup.
 from __future__ import annotations
 
 import os
+import random
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
@@ -69,9 +70,11 @@ class TorchTrainer(BaseModel):
         augmentation_config: Optional[Dict[str, Any]] = None,
         epochs: int = 100,
         max_grad_norm: Optional[float] = None,
+        seed: int = 42,
         verbose: bool = False,
     ):
         self.name = name
+        self.seed = seed
         self.model = torch_model
         self.loss_fn = loss_fn or nn.MSELoss()
 
@@ -123,7 +126,7 @@ class TorchTrainer(BaseModel):
         """
         dataloader = self.dataloader_config
 
-        return dataloader(dataset=dataset)
+        return dataloader(dataset=dataset,shuffle=shuffle)
 
     # ------------------------------------------------------------------
     # BaseModel API

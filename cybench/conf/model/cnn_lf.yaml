@@ -8,7 +8,8 @@ defaults:
 # Root-level trainer configuration
 _target_: cybench.models.torch.trainer.TorchTrainer
 name: cnn_lf  # Updated name for logging/tracking
-epochs: 100
+epochs: 50
+seed: ${experiment.seed}
 device: ${experiment.device}
 verbose: true
 

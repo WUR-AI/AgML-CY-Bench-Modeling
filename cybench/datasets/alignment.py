@@ -383,6 +383,7 @@ def align_inputs_and_labels(df_y: pd.DataFrame, dfs_x: dict) -> tuple:
     index_y_selection = set(df_y.index.values)
 
     for df_x in dfs_x.values():
+        #print(df_x.head(), len(index_y_selection))
         if len(df_x.index.names) == 1:
             index_y_selection = {
                 (loc_id, year)

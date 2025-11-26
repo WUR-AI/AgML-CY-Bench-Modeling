@@ -148,6 +148,7 @@ class DatasetConfig:
     temporal: Dict[str, Any]
     normalizer: Optional[Dict[str, Any]]
     framework: str
+    use_cache: bool
 
 @dataclass
 class EvaluationConfig:

@@ -7,7 +7,8 @@ defaults:
 # Root-level trainer configuration
 _target_: cybench.models.torch.trainer.TorchTrainer
 name: lstm_lf
-epochs: 100
+epochs: 50
+seed: ${experiment.seed}
 device: ${experiment.device}
 verbose: true
 
@@ -16,7 +17,6 @@ dataloader_config:
   _target_: torch.utils.data.DataLoader
   _partial_: true
   batch_size: 64
-  shuffle: True
 
 # training data augmentation TODO: move into config group as well?
 #augmentation_config:
