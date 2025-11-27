@@ -47,12 +47,12 @@ modality that can flow into a predictive model. For the following network, we ma
 simplifies the model input data, while not losing any information. We distinguish the data sources into static 
 *context* data $x_i^{ctx}$ and *temporal* time-series $x_i^{ts}$ data. The context data is a vector of dimension $C_{ctx}$ 
 that simply unites all features that have no time-dimension within a season, such as soil properties, location, harvest-year.
-The time-series $x_i^{ts}$ on the other hand is represented as a matrix of the shape $T$x$C_{tmp}$ where each time-series 
+The time-series $x_i^{ts}$ on the other hand is represented as a matrix of the shape $T \times C_{tmp}$ where each time-series 
 is harmonized into the same temporal dimension $T$, either through averaging, interpolation or another technique. 
 
 Furthermore, we process every sample $x_i$ in a dataset to match the very same dimensionality $T$ through having a unified
 cutoff point. While this approach ignores potential diversity in the season length, it opens the door to a PyTorch-native
-tensor representation of an entire batch of data of the shape ($B$x$T$x$C_{tmp}$). This tensor representation achieves
+tensor representation of an entire batch of data of the shape ($B \times T \times C_{tmp}$). This tensor representation achieves
 much faster data loading during training and inference.
 
 Going from here, we can design a simple network architecture that builds upon a *Late-Fusion* of the two model inputs.
