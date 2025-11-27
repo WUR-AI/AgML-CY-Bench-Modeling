@@ -1,7 +1,7 @@
 defaults:
   - exp_config
   - dataset: default
-  - model: lstm_lf
+  - model: cnn_lf
   - hp_search: bayesian
   - validation: single
   - evaluation: default
@@ -15,13 +15,13 @@ defaults:
 # and global settings. Use this to define high-level properties.
 experiment:
   name: hello_cy_bench
-  device: cpu
+  device: cuda
   seed: 42
   n_jobs: 1 # gets passed to optuna to parallelize hp-search | n_jobs=-1 recommended for cpu modeling
   results_dir: ../output/${experiment.name}
 
 run:
-  name: ${dataset.name}_${model.name}_${validation.name}_${now:%Y%m%d_%H%M}
+  name: ${dataset.name}_${model.name}_${validation.name}_${now:%Y%m%d_%H%M%S}
 
 # -------------------------------
 # Hydra-specific configuration

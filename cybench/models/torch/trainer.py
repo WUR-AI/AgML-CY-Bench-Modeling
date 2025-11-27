@@ -7,10 +7,9 @@ https://huggingface.co/docs/transformers/main_classes/trainer),
 but is adapted to the CY-Bench codebase and a PyTorch regression setup.
 """
 
-from __future__ import annotations
-
 import os
 import random
+from functools import partial
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
@@ -44,12 +43,8 @@ class TorchTrainer(BaseModel):
         Loss function used for training. Defaults to MSELoss for regression.
     device:
         Device string, e.g. "cuda", "cuda:0", or "cpu".
-    dataloader_config:
-        Dict specifying DataLoader parameters. Expected keys (all optional):
-            - batch_size: int
-            - num_workers: int
-            - pin_memory: bool
-            - drop_last: bool
+    dataloader:
+        A partial of a DataLoader including all parameters, except the dataset itself.
     epochs:
         Default number of training epochs, can be overridden in `fit(...)`.
     max_grad_norm:
@@ -66,7 +61,7 @@ class TorchTrainer(BaseModel):
         scheduler = None,  # Could be Scheduler OR partial function OR None
         loss_fn: Optional[nn.Module] = None,
         device: Optional[str] = None,
-        dataloader_config: Optional[Dict[str, Any]] = None,
+        dataloader: Optional[partial] = None,
         augmentation_config: Optional[Dict[str, Any]] = None,
         epochs: int = 100,
         max_grad_norm: Optional[float] = None,
@@ -103,7 +98,7 @@ class TorchTrainer(BaseModel):
             # Already a scheduler
             self.scheduler = scheduler
 
-        self.dataloader_config = dataloader_config or {}
+        self.dataloader = dataloader or DataLoader
         self.augmentation_config = augmentation_config or {}
         self.epochs = epochs
         self.max_grad_norm = max_grad_norm
@@ -115,7 +110,7 @@ class TorchTrainer(BaseModel):
 
     def _create_dataloader(self, dataset, shuffle: bool) -> DataLoader:
         """
-        Create a DataLoader from a TorchDataset using dataloader_config.
+        Create a DataLoader from a TorchDataset using dataloader.
 
         Args:
             dataset: TorchDataset to wrap.
@@ -124,7 +119,7 @@ class TorchTrainer(BaseModel):
         Returns:
             Configured DataLoader instance.
         """
-        dataloader = self.dataloader_config
+        dataloader = self.dataloader
 
         return dataloader(dataset=dataset,shuffle=shuffle)
 
@@ -132,7 +127,7 @@ class TorchTrainer(BaseModel):
     # BaseModel API
     # ------------------------------------------------------------------
 
-    def fit(self, dataset: TorchDataset, **fit_params) -> Tuple[TorchTrainer, Dict[str, Any]]:
+    def fit(self, dataset: TorchDataset, **fit_params) -> Dict[str, Any]:
         """
         Fit or train the model.
 
@@ -180,6 +175,11 @@ class TorchTrainer(BaseModel):
                 self.optimizer.zero_grad(set_to_none=True)
 
                 pred = self.model(x_ctx, x_ts)
+                # DEBUG Model:
+                #print(self.model.state_dict()["regression_head.net.3.weight"][0, 0])
+                #print(self.model.context_encoder(x_ctx[0]))
+                #print(self.model.temporal_encoder(x_ts[0]))
+
                 if pred.ndim > 1:
                     pred = pred.squeeze(-1)
 
@@ -218,7 +218,7 @@ class TorchTrainer(BaseModel):
 
         if pbar is not None:
             pbar.close()
-        return self, history
+        return history
 
     def _evaluate_loss(self, dataloader: DataLoader) -> float:
         """
@@ -271,7 +271,7 @@ class TorchTrainer(BaseModel):
 
         with torch.no_grad():
             for batch in dataloader:
-                y, x_ctx, x_ts = batch
+                _, x_ctx, x_ts = batch
 
                 x_ctx = x_ctx.to(self.device, non_blocking=True)
                 x_ts = x_ts.to(self.device)
@@ -306,7 +306,7 @@ class TorchTrainer(BaseModel):
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "scheduler_state_dict": self.scheduler.state_dict() if self.scheduler else None,
-            "dataloader_config": self.dataloader_config,
+            "dataloader": self.dataloader,
             "epochs": self.epochs,
             "max_grad_norm": self.max_grad_norm,
         }
@@ -326,7 +326,7 @@ class TorchTrainer(BaseModel):
             model=model,
             optimizer=optimizer,
             device=device,
-            dataloader_config=ckpt.get("dataloader_config", {}),
+            dataloader=ckpt.get("dataloader", {}),
             epochs=ckpt.get("epochs", 10),
             max_grad_norm=ckpt.get("max_grad_norm"),
         )

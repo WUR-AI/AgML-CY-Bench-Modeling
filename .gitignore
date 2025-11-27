@@ -19,6 +19,7 @@ api_keys
 *.xml
 *.zip
 *.pkl
+*.lock
 Scratch.R
 
 .idea

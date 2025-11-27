@@ -41,7 +41,7 @@ class LateFusionNetwork(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            context:  Static/context features of shape (B, C_ctx).
+            context: Static/context features of shape (B, C_ctx).
             temporal: Temporal features of shape (B, T, C_tmp).
 
         Returns:

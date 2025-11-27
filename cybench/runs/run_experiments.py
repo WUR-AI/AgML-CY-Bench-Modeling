@@ -49,7 +49,7 @@ def main(cfg: ExperimentConfig):
         # create, fit final model & predict test
         log.info(f"Train final model")
         model = instantiate(model_cfg)
-        model, fit_info = model.fit(train_dataset, val_dataset=test_dataset)
+        fit_info = model.fit(train_dataset, val_dataset=test_dataset)
         test_preds, pred_info = model.predict(test_dataset)
 
         # save preds, model, ...

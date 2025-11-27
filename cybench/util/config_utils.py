@@ -5,6 +5,9 @@ from cybench.datasets.torch_dataset import TorchDataset
 import random
 import numpy as np
 import torch
+import pathlib
+import yaml
+
 
 def adjust_model_cfg_to_dataset(model_cfg: Dict, dataset: Dataset):
     if type(dataset) == TorchDataset:
@@ -13,6 +16,19 @@ def adjust_model_cfg_to_dataset(model_cfg: Dict, dataset: Dataset):
         model_cfg.torch_model.context_in_dim = len(x_c_sample)
         model_cfg.torch_model.temporal_in_dim = len(x_t_sample.T)
     return model_cfg
+
+
+def get_run_description(overrides_path: pathlib.Path) -> str:
+    """Loads and formats the list of Hydra overrides into a unique string."""
+    try:
+        with open(overrides_path, 'r') as f:
+            overrides = yaml.safe_load(f)
+        if isinstance(overrides, list):
+            # Sort for a canonical (consistent) index description
+            return " | ".join(sorted(overrides))
+        return "Unknown_Overrides"
+    except Exception:
+        return "Error_Loading_Overrides"
 
 
 def set_seed(seed: int = 42):
