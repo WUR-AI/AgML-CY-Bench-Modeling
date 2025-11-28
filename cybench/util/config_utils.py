@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import pathlib
 import yaml
+from omegaconf import DictConfig, OmegaConf, ListConfig
 
 
 def adjust_model_cfg_to_dataset(model_cfg: Dict, dataset: Dataset):
@@ -16,6 +17,21 @@ def adjust_model_cfg_to_dataset(model_cfg: Dict, dataset: Dataset):
         model_cfg.torch_model.context_in_dim = len(x_c_sample)
         model_cfg.torch_model.temporal_in_dim = len(x_t_sample.T)
     return model_cfg
+
+
+def remove_search_keys(model_cfg: DictConfig) -> ListConfig:
+    """Recursively remove _search_ keys from config before instantiation. Only important for hyperparameter search."""
+    cfg_dict = OmegaConf.to_container(model_cfg, resolve=True)
+
+    def _clean(obj):
+        if isinstance(obj, dict):
+            return {k: _clean(v) for k, v in obj.items() if k != "_search_"}
+        elif isinstance(obj, list):
+            return [_clean(item) for item in obj]
+        else:
+            return obj
+
+    return OmegaConf.create(_clean(cfg_dict))
 
 
 def get_run_description(overrides_path: pathlib.Path) -> str:

@@ -19,6 +19,8 @@ dataloader:
   _partial_: true
   batch_size: 64
   shuffle: True
+  _search_:
+    batch_size: [16, 32, 64]
 
 # Further overwriting the default torch model
 torch_model:
