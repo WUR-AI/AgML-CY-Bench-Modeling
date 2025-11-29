@@ -1,16 +1,15 @@
-# This validation procedure takes a set of test years and trains models for each of them given the past years
+# This validation procedure takes a set of test years and trains models for each of them given only past years
 # Perfect for testing general forecasting ability, since it simulates out-of-distribution modeling for the temporal dimension
+# Note! The current implementation always assumes that ALL available past datapoints go into training.
 
 name: rolling
 
-# By default, take the last 3 dataset years as test years.
-# You may also provide an explicit list, e.g., [2018, 2019, 2020].
-test_years: 3-last
-
-# set a methode for train/val split for hyperparameter search | will be ignored if hp_search==none
+# Specify methods for both train/test (validation of methode) and train/val (used for hyperparameter search or early stopping)
 # Options:
+#   [y1, y2]  - pick list of years
 #   xx%-split - randomly selects xx% of the years for the validation set
 #   k-last    - takes the k last years into val set
-#   k-fold-cv - randomly puts each year into one of k bins to perform CV
-#   loyocv    - full leave-one-year-out-CV
+
+# By default, take the last 3 dataset years as test years and similarly for the val years
+test_years: 3-last
 val_years: 3-last

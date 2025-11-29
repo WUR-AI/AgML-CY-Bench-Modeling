@@ -1,7 +1,7 @@
 import os
 
 from dataclasses import dataclass
-from typing import Dict, Tuple, List, Any, Optional
+from typing import Dict, Tuple, List, Any, Optional, Union
 
 from omegaconf import DictConfig
 
@@ -160,6 +160,21 @@ class EvaluationConfig:
     residual: bool = False
 
 @dataclass
+class ValidationConfig:
+    """
+    Validation configuration class for type checking the YAML configuration under conf/validation/...
+    val_years are optional for hyperparameter search or early-stopping.
+    Options of test_years and val_years:
+      [y1, y2]  - pick list of years
+      xx%-split - randomly selects xx% of the years for the validation set
+      k-last    - takes the k last years into val set
+      loyocv    - full leave-one-year-out-CV
+    """
+    name: str
+    test_years: Any  # Can be List[int] or str
+    val_years: Optional[Any] = None  # Can be List[int] or str
+
+@dataclass
 class ExperimentConfig:
     """
     Experiment configuration class for type checking the final conf/config.py
@@ -167,7 +182,7 @@ class ExperimentConfig:
     dataset: DatasetConfig
     model: Dict[str, Any] # TODO customize as well
     evaluation: EvaluationConfig
-    validation: Dict[str, Any]
+    validation: ValidationConfig
     hp_search: Dict[str, Any] # TODO customize as well
     experiment: Dict[str, Any] # TODO customize as well
     run: Dict[str, Any]

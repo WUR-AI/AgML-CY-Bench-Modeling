@@ -46,7 +46,7 @@ class TorchTrainer(BaseModel):
     dataloader:
         A partial of a DataLoader including all parameters, except the dataset itself.
     epochs:
-        Default number of training epochs, can be overridden in `fit(...)`.
+        Default number of training epochs can be overridden in `fit(...)`.
     max_grad_norm:
         If not None, gradients are clipped to this norm before optimizer.step().
     verbose:

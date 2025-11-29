@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 import os
 from cybench.datasets.dataset import Dataset
 from cybench.datasets.torch_dataset import TorchDataset
@@ -8,6 +8,8 @@ import torch
 import pathlib
 import yaml
 from omegaconf import DictConfig, OmegaConf, ListConfig
+from hydra import compose, initialize_config_dir
+from pathlib import Path
 
 
 def adjust_model_cfg_to_dataset(model_cfg: Dict, dataset: Dataset):
@@ -32,6 +34,25 @@ def remove_search_keys(model_cfg: DictConfig) -> ListConfig:
             return obj
 
     return OmegaConf.create(_clean(cfg_dict))
+
+
+def reload_config_with_overrides(
+        config_dir: Path,
+        config_name: str,
+        overrides: List[str]
+) -> DictConfig:
+    """
+    Reload Hydra config with new overrides (e.g., processor=lstm).
+
+    Args:
+        config_dir: Path to config directory
+        config_name: Name of main config file
+        overrides: List of Hydra overrides like ["model/processor=lstm"]
+    """
+    with initialize_config_dir(config_dir=str(config_dir.absolute()), version_base=None):
+        cfg = compose(config_name=config_name, overrides=overrides)
+    return cfg
+
 
 
 def get_run_description(overrides_path: pathlib.Path) -> str:

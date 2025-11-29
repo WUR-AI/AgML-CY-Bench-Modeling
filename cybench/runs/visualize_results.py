@@ -16,7 +16,7 @@ from cybench.evaluation.eval import (
 
 
 def deduce_crop_country_from_filename(filepath):
-    """Extract crop and country code from filename, e.g. maize_US_year_2018.csv"""
+    """Extract crop and country code from filename, e.g., maize_US_year_2018.csv"""
     filename = os.path.basename(filepath)
     match = re.match(r"([a-zA-Z]+)_([A-Z]{2})_", filename)
     if match:

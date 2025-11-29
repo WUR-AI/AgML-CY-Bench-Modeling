@@ -1,6 +1,5 @@
 # Exhaustive grid search
 
-study_name: grid_search
 n_trials: null  # Will be determined by grid size
 timeout: null
 n_jobs: ${experiment.n_jobs}

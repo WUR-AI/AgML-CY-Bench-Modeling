@@ -1,12 +1,15 @@
 # This validation procedure takes a single set of train and test samples
 # Perfect for testing expensive model architectures, since it requires only a single run
+# Note! The current implementation always assumes that after seperating test and val years ALL remaining datapoints go into training.
 
 name: single
 
-# Define fixed sets of years for train, val and test
-# For no hyperparameter optimization set val_years: []
-train_years: []
-val_years:   []
-test_years:  [2021, 2022, 2023]
-#test_years:  [2019, 2020, 2021]
-#test_years:  [2017]
+# Specify methods for both train/test (validation of methode) and train/val (used for hyperparameter search or early stopping)
+# Options:
+#   [y1, y2]  - pick list of years
+#   xx%-split - randomly selects xx% of the years for the validation set
+#   k-last    - takes the k last years into val set
+
+# By default, take the last 3 dataset years as test years and similarly for the val years
+test_years: 3-last
+val_years: 3-last

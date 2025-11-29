@@ -1,6 +1,5 @@
 # Random search - quick exploration
 
-study_name: random_search
 n_trials: 50
 timeout: 3600  # 1 hour
 n_jobs: ${experiment.n_jobs}

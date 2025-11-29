@@ -13,8 +13,9 @@ from cybench.datasets.data_factory import DataFactory
 from cybench.datasets.torch_dataset import TorchDataset
 from cybench.evaluation.eval import evaluate_predictions
 from cybench.util.config_utils import adjust_model_cfg_to_dataset, set_seed, remove_search_keys
+#from cybench.util.optuna_hyper_opt import OptunaOptimizer
 from cybench.util.store_and_cache import make_split_folder, save_preds, save_meta_dict
-from cybench.util.validation import get_train_test_splits
+from cybench.util.validation import get_splits
 
 # init logger
 log = logging.getLogger(__name__)
@@ -34,15 +35,26 @@ def main(cfg: ExperimentConfig):
     cfg.model = adjust_model_cfg_to_dataset(cfg.model, dataset)
 
     # split data in train- and test-set based on the validation strategy
-    for years_split in get_train_test_splits(cfg=cfg.validation, years=dataset.years):
-        log.info(f"== Split Test: {years_split[-1]} ==")
-        train_dataset, test_dataset = dataset.split_on_years(years_split=years_split)
+    for train_test_split in get_splits(cfg=cfg.validation,
+                                       which="test",
+                                       dataset_years=dataset.years,
+                                       seed=cfg.experiment.seed
+                                       ):
+        log.info(f"== Split Test: {train_test_split[-1]} ==")
+        train_dataset, test_dataset = dataset.split_on_years(years_split=train_test_split)
         # create a folder for each split
-        split_path = make_split_folder(run_dir=hydra.core.hydra_config.HydraConfig.get().runtime.output_dir, split_name=years_split[-1])
+        split_path = make_split_folder(run_dir=hydra.core.hydra_config.HydraConfig.get().runtime.output_dir, split_name=train_test_split[-1])
 
         # check whether hyperparameter tuning is equipped:
         if cfg.hp_search:
-            model_cfg = remove_search_keys(cfg.model) # "TODO: implement Optuna hypercparameter search"
+            """optimizer = OptunaOptimizer(
+                hp_config=cfg.hp_search,
+                val_cfg=cfg.validation,
+                dataset=train_dataset,
+                path=split_path,
+                study_name="_".join(split_path.split("\\")[-2:])
+            )"""
+            model_cfg = remove_search_keys(cfg.model)
         else:
             # _search_ keys for hyperparameter tuning have to be removed before model instantiation
             model_cfg = remove_search_keys(cfg.model)
@@ -60,7 +72,7 @@ def main(cfg: ExperimentConfig):
 
         # evaluate
         eval_metric = evaluate_predictions(y_true=test_dataset.targets, y_pred=test_preds, cfg=cfg.evaluation)
-        log.info(f"Split {years_split[-1]} finished with metrics: {eval_metric}")
+        log.info(f"Split {train_test_split[-1]} finished with metrics: {eval_metric}")
 
 if __name__ == "__main__":
     main()
