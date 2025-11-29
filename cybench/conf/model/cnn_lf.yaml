@@ -12,6 +12,12 @@ epochs: 50
 seed: ${experiment.seed}
 device: ${experiment.device}
 verbose: true
+_search_:
+  epochs:
+    type: int
+    low: 25
+    high: 100
+    step: 25
 
 # data loader configuration
 dataloader:
@@ -20,7 +26,11 @@ dataloader:
   batch_size: 64
   shuffle: True
   _search_:
-    batch_size: [16, 32, 64]
+    batch_size:
+      type: int
+      low: 16
+      high: 128
+      step: 16
 
 # Further overwriting the default torch model
 torch_model:

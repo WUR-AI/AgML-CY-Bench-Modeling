@@ -1,66 +1,220 @@
-from typing import Any, Dict, List
+import logging
+import os
+from pathlib import Path
+from typing import Any, Dict, Union
+
+import hydra
+import numpy as np
 import optuna
-from omegaconf import DictConfig
+import yaml
+from hydra.utils import instantiate
+from omegaconf import DictConfig, OmegaConf
+
+from cybench.config import ValidationConfig
+from cybench.datasets.dataset import Dataset
+from cybench.util.validation import get_splits
+from cybench.util.config_utils import remove_search_keys
+
+log = logging.getLogger(__name__)
 
 
-#class OptunaOptimizer:
-
-def extract_search_space(
-    cfg: DictConfig,
-    trial: optuna.Trial,
-    prefix: str = "",
-    config_group_map: Dict[str, List[str]] = None
-) -> Dict[str, Any]:
+class OptunaOptimizer:
     """
-    Extract search spaces from config, including config group choices.
+    Hyperparameter Optimizer using Optuna.
+
+    This class handles the creation of an Optuna study, the definition of the
+    objective function based on a Hydra configuration with recursive `_search_`
+    keys, and the storage of the optimal configuration.
 
     Args:
-        cfg: Hydra config
-        trial: Optuna trial
-        prefix: Prefix for parameter names
-        config_group_map: Map of config keys to available config file choices
-                         e.g., {"processor": ["cnn", "lstm", "transformer"]}
+        hp_config (DictConfig): Configuration containing Optuna settings (n_trials,
+                                timeout, sampler, storage, logging).
+        val_cfg (DictConfig): Validation configuration used to split the provided
+                              dataset for internal evaluation (train/val).
+        dataset (Dataset): The dataset instance to be used for optimization.
+        base_model_cfg (DictConfig): The initial model configuration containing
+                                     `_search_` keys to be optimized.
+        path (str): Directory path where the `optimal_model.yaml` will be stored.
+        study_name (str): Unique identifier for the Optuna study.
     """
-    suggestions = {}
 
-    def _recursive_extract(node, current_prefix):
-        if isinstance(node, DictConfig):
-            for key, value in node.items():
+    def __init__(
+            self,
+            hp_config: DictConfig,
+            val_cfg: ValidationConfig,
+            dataset: Dataset,
+            base_model_cfg: DictConfig,
+            path: str,
+            study_name: str
+    ):
+        self.hp_config = hp_config
+        self.val_cfg = val_cfg
+        self.dataset = dataset
+        self.base_model_cfg = base_model_cfg
+        self.path = Path(path)
+        self.study_name = study_name
+
+        # Ensure output directory exists
+        self.path.mkdir(parents=True, exist_ok=True)
+
+    def optimize(self) -> DictConfig:
+        """
+        Runs the Optuna optimization process.
+
+        Returns:
+            DictConfig: The best model configuration found, with `_search_` keys
+                        resolved to their optimal values.
+        """
+        log.info(f"Starting Optuna optimization: {self.study_name}")
+
+        # 1. Setup Optuna Storage and Sampler
+        storage = self.hp_config.storage.url if self.hp_config.get("storage") else None
+
+        if "sampler" in self.hp_config:
+            sampler = instantiate(self.hp_config.sampler)
+        else:
+            sampler = optuna.samplers.TPESampler(seed=self.hp_config.seed)
+
+        # 2. Create Study
+        study = optuna.create_study(
+            study_name=self.study_name,
+            storage=storage,
+            sampler=sampler,
+            load_if_exists=self.hp_config.storage.get("load_if_exists", True),
+            direction="minimize"  # Assuming loss minimization; make configurable if needed
+        )
+
+        # 3. Optimize
+        study.optimize(
+            self._objective,
+            n_trials=self.hp_config.get("n_trials", 100),
+            timeout=self.hp_config.get("timeout", None),
+            n_jobs=self.hp_config.get("n_jobs", 1),
+            show_progress_bar=self.hp_config.logging.get("show_progress_bar", True)
+        )
+
+        log.info(f"Optimization finished. Best trial: {study.best_trial.params}")
+
+        # 4. Reconstruct and Save Best Config
+        # We use a FixedTrial with the best params to reconstruct the full config structure
+        best_trial = optuna.trial.FixedTrial(study.best_params)
+        best_config = self.base_model_cfg.copy()
+
+        # Resolve the search space with best values
+        self._resolve_search_space(best_config, best_trial)
+
+        # Clean any remaining artifacts (though _resolve_search_space handles _search_ removal)
+        best_config = remove_search_keys(best_config)
+
+        # Save to disk
+        output_file = self.path / "optimal_model.yaml"
+        with open(output_file, "w") as f:
+            OmegaConf.save(best_config, f)
+
+        log.info(f"Optimal model config saved to: {output_file}")
+
+        return best_config
+
+    def _objective(self, trial: optuna.Trial) -> float:
+        """
+        The objective function for Optuna.
+        1. Clones the base config.
+        2. Samples parameters using the trial.
+        3. Instantiates the model.
+        4. Performs validation (CV or Hold-out).
+        5. Returns the mean validation metric.
+        """
+        # Deep copy to avoid modifying the original config for other trials
+        cfg_copy = self.base_model_cfg.copy()
+
+        # Apply suggested parameters to the config
+        self._resolve_search_space(cfg_copy, trial)
+
+        # Instantiate model with specific trial configuration
+        model_cfg = remove_search_keys(cfg_copy)
+
+        val_metrics = []
+
+        # Get validation splits (Using the 'val' set of the current dataset)
+        splits = get_splits(
+            cfg=self.val_cfg,
+            which="val",
+            dataset_years=self.dataset.years,
+            seed=self.hp_config.seed
+        )
+
+        for train_years, val_years in splits:
+            train_dataset, val_dataset = self.dataset.split_on_years((train_years, val_years))
+
+            # Instantiate and fit
+            model = instantiate(model_cfg, verbose=False)
+            # no val_dataset included yet, but early stopping could require one ;)
+            model.fit(train_dataset)
+
+            # Predict and Evaluate
+            preds, _ = model.predict(val_dataset)
+            assert preds.ndim == val_dataset.targets.ndim, f"The model output shape {preds.shape} does not match {val_dataset.shape}"
+            val_metric = np.mean((val_dataset.targets - preds) ** 2)
+
+            val_metrics.append(val_metric)
+
+            # Optional: Pruning based on intermediate folds
+            trial.report(np.mean(val_metrics), step=len(val_metrics))
+            if trial.should_prune():
+                raise optuna.TrialPruned()
+
+        return float(np.mean(val_metrics))
+
+    def _resolve_search_space(
+            self,
+            cfg: Union[DictConfig, Any],
+            trial: optuna.Trial,
+            prefix: str = ""
+    ) -> None:
+        """
+        Recursively traverses the config, finds `_search_` keys, samples values
+        from Optuna, updates the config in-place, and removes the `_search_` key.
+        """
+        if isinstance(cfg, DictConfig):
+            # Iterate over a copy of keys to allow modification
+            for key in list(cfg.keys()):
+                value = cfg[key]
+
+                # Check if this node has a search definition
                 if key == "_search_":
-                    # Found search space definition
-                    for param_name, search_range in value.items():
-                        full_name = f"{current_prefix}.{param_name}" if current_prefix else param_name
+                    search_params = value
 
-                        # Check if this is a config group choice
-                        if config_group_map and param_name in config_group_map:
-                            # This is a choice between different config files
-                            suggestions[param_name] = trial.suggest_categorical(
-                                full_name,
-                                config_group_map[param_name]
-                            )
-                        elif isinstance(search_range, list):
-                            if len(search_range) == 2 and all(isinstance(x, (int, float)) for x in search_range):
-                                # Numeric range
-                                if all(isinstance(x, int) for x in search_range):
-                                    suggestions[param_name] = trial.suggest_int(
-                                        full_name, search_range[0], search_range[1]
-                                    )
-                                else:
-                                    suggestions[param_name] = trial.suggest_float(
-                                        full_name, search_range[0], search_range[1]
-                                    )
-                            else:
-                                # Categorical (including config names)
-                                suggestions[param_name] = trial.suggest_categorical(
-                                    full_name, search_range
-                                )
-                elif key != "_target_" and isinstance(value, DictConfig):
-                    # Recurse into nested configs
-                    new_prefix = f"{current_prefix}.{key}" if current_prefix else key
-                    nested_suggestions = _recursive_extract(value, new_prefix)
-                    if nested_suggestions:
-                        suggestions[key] = nested_suggestions
+                    # Iterate over parameters defined in _search_
+                    for param_name, param_details in search_params.items():
+                        # Construct unique name for Optuna
+                        full_param_name = f"{prefix}.{param_name}" if prefix else param_name
 
-        return suggestions
+                        # Extract type and constraints
+                        p_type = param_details["type"]
+                        kwargs = {k: v for k, v in OmegaConf.to_container(param_details, resolve=True).items()
+                                  if k != "type"}
 
-    return _recursive_extract(cfg, prefix)
+                        suggestion = None
+
+                        if p_type == "int":
+                            suggestion = trial.suggest_int(full_param_name, **kwargs)
+                        elif p_type == "float":
+                            suggestion = trial.suggest_float(full_param_name, **kwargs)
+                        elif p_type == "categorical":
+                            # 'choices' is required for categorical
+                            choices = kwargs.get("choices")
+                            if not choices:
+                                raise ValueError(f"Categorical param {full_param_name} missing 'choices'")
+                            suggestion = trial.suggest_categorical(full_param_name, choices)
+                        else:
+                            raise ValueError(f"Unknown search type '{p_type}' for {full_param_name}.")
+
+                        cfg[param_name] = suggestion
+
+                    # Remove the _search_ key after processing
+                    del cfg._search_
+
+                elif isinstance(value, (DictConfig, dict)):
+                    # Recurse
+                    new_prefix = f"{prefix}.{key}" if prefix else key
+                    self._resolve_search_space(value, trial, new_prefix)

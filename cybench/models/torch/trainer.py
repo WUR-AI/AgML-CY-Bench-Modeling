@@ -209,7 +209,8 @@ class TorchTrainer(BaseModel):
                 val_loss = self._evaluate_loss(val_loader)
                 self.model.train()
                 history["val_loss"].append(val_loss)
-                print(f"Validation loss: {val_loss} after epoch {epoch+1}")
+                if self.verbose:
+                    print(f"Validation loss: {val_loss} after epoch {epoch+1}")
             else:
                 history["val_loss"].append(None)
 

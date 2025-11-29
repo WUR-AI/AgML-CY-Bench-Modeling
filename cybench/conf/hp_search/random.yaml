@@ -3,6 +3,7 @@
 n_trials: 50
 timeout: 3600  # 1 hour
 n_jobs: ${experiment.n_jobs}
+seed: ${experiment.seed}
 
 sampler:
   _target_: optuna.samplers.RandomSampler

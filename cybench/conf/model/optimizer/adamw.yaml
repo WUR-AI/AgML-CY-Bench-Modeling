@@ -6,3 +6,14 @@ betas: [0.9, 0.999]
 eps: 1e-8
 weight_decay: 0.01
 amsgrad: false
+_search_:
+  lr:
+    type: float
+    low: 1e-6
+    high: 1e-2
+    log: true
+  weight_decay:
+    type: float
+    low: 1e-6
+    high: 1e-1
+    log: true

@@ -13,6 +13,7 @@ from cybench.datasets.data_factory import DataFactory
 from cybench.datasets.torch_dataset import TorchDataset
 from cybench.evaluation.eval import evaluate_predictions
 from cybench.util.config_utils import adjust_model_cfg_to_dataset, set_seed, remove_search_keys
+from cybench.util.optuna_hyper_opt import OptunaOptimizer
 #from cybench.util.optuna_hyper_opt import OptunaOptimizer
 from cybench.util.store_and_cache import make_split_folder, save_preds, save_meta_dict
 from cybench.util.validation import get_splits
@@ -27,9 +28,10 @@ conf_store.store(name="exp_config", node=ExperimentConfig)
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg: ExperimentConfig):
-    print("=== Final Composed Config ===")
-    print(OmegaConf.to_yaml(cfg))
+    #print("=== Final Composed Config ===")
+    #print(OmegaConf.to_yaml(cfg))
     set_seed(cfg.experiment.seed)
+
     log.info("=== Create Datasets ===")
     dataset = DataFactory(cfg.dataset).build()
     cfg.model = adjust_model_cfg_to_dataset(cfg.model, dataset)
@@ -47,14 +49,15 @@ def main(cfg: ExperimentConfig):
 
         # check whether hyperparameter tuning is equipped:
         if cfg.hp_search:
-            """optimizer = OptunaOptimizer(
+            hp_optimizer = OptunaOptimizer(
                 hp_config=cfg.hp_search,
                 val_cfg=cfg.validation,
                 dataset=train_dataset,
+                base_model_cfg=cfg.model,
                 path=split_path,
                 study_name="_".join(split_path.split("\\")[-2:])
-            )"""
-            model_cfg = remove_search_keys(cfg.model)
+            )
+            model_cfg = hp_optimizer.optimize()
         else:
             # _search_ keys for hyperparameter tuning have to be removed before model instantiation
             model_cfg = remove_search_keys(cfg.model)

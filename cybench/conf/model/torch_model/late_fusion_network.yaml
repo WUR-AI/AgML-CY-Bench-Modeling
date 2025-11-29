@@ -17,6 +17,11 @@ context_encoder:
     - ${model.torch_model.embed_dim}
   embed_dim: ${model.torch_model.embed_dim}
   dropout: 0.5
+  _search_:
+    dropout:
+      type: float
+      low: .2
+      high: .8
 
 regression_head:
   _target_: cybench.models.torch.model_components.head.RegressionHead
@@ -24,3 +29,10 @@ regression_head:
     - ${model.torch_model.embed_dim}
     - ${model.torch_model.embed_dim}
   dropout: 0.2
+
+_search_:
+  embed_dim:
+    type: int
+    low: 32
+    high: 256
+    step: 32
