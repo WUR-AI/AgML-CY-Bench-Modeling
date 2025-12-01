@@ -38,6 +38,7 @@ class LateFusionNetwork(nn.Module):
         self,
         context: torch.Tensor,
         temporal: torch.Tensor,
+        doys: torch.Tensor,
     ) -> torch.Tensor:
         """
         Args:
@@ -49,7 +50,7 @@ class LateFusionNetwork(nn.Module):
         """
         # Encode context and temporal streams
         context_emb = self.context_encoder(context)      # (B, D_ctx)
-        temporal_emb = self.temporal_encoder(temporal)  # (B, D_tmp)
+        temporal_emb = self.temporal_encoder(temporal, doys)  # (B, D_tmp)
 
         # Fuse both embeddings
         fused = self.fusion(temporal_emb, context_emb)  # (B, D_fused)

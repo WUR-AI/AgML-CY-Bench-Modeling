@@ -167,14 +167,15 @@ class TorchTrainer(BaseModel):
             num_batches = 0
 
             for batch in train_loader:
-                y, x_ctx, x_ts = batch
+                y, x_ctx, x_ts, doy_ts = batch
                 y = y.to(self.device)
                 x_ctx = x_ctx.to(self.device, non_blocking=True)
                 x_ts = x_ts.to(self.device)
+                doy_ts = doy_ts.to(self.device)
 
                 self.optimizer.zero_grad(set_to_none=True)
 
-                pred = self.model(x_ctx, x_ts)
+                pred = self.model(x_ctx, x_ts, doy_ts)
                 # DEBUG Model:
                 #print(self.model.state_dict()["regression_head.net.3.weight"][0, 0])
                 #print(self.model.context_encoder(x_ctx[0]))
@@ -236,12 +237,13 @@ class TorchTrainer(BaseModel):
 
         with torch.no_grad():
             for batch in dataloader:
-                y, x_ctx, x_ts = batch
+                y, x_ctx, x_ts, doy_ts = batch
                 y = y.to(self.device)
                 x_ctx = x_ctx.to(self.device, non_blocking=True)
                 x_ts = x_ts.to(self.device)
+                doy_ts = doy_ts.to(self.device)
 
-                pred = self.model(x_ctx, x_ts)
+                pred = self.model(x_ctx, x_ts, doy_ts)
                 if pred.ndim > 1:
                     pred = pred.squeeze(-1)
 
@@ -271,12 +273,13 @@ class TorchTrainer(BaseModel):
 
         with torch.no_grad():
             for batch in dataloader:
-                _, x_ctx, x_ts = batch
+                _, x_ctx, x_ts, doy_ts = batch
 
                 x_ctx = x_ctx.to(self.device, non_blocking=True)
                 x_ts = x_ts.to(self.device)
+                doy_ts = doy_ts.to(self.device)
 
-                pred = self.model(x_ctx, x_ts)
+                pred = self.model(x_ctx, x_ts, doy_ts)
                 if pred.ndim > 1:
                     pred = pred.squeeze(-1)
 

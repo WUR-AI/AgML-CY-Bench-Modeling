@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn as nn
 from typing import Optional
@@ -38,6 +40,38 @@ defined in `conf/model/torch/temporal/` YAML files and instantiated via `hydra.u
 
 """
 
+
+# ----------------------------------------------------------------------
+# 0. Utilities
+# ----------------------------------------------------------------------
+
+class SeasonalEmbedding(nn.Module):
+    """
+    Learns embeddings from Day-of-Year (DOY) using Sin/Cos transformations.
+    """
+
+    def __init__(self, embed_dim: int):
+        super().__init__()
+        # We project 2 features (sin, cos) -> embed_dim
+        self.proj = nn.Linear(2, embed_dim)
+
+    def forward(self, doys: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            doys: (B, T) tensor containing day of year (1-366)
+        Returns:
+            (B, T, embed_dim)
+        """
+        # Normalize DOY to [0, 2pi]
+        rads = 2 * math.pi * doys / 365.0
+
+        sin_feat = torch.sin(rads).unsqueeze(-1)  # (B, T', 1)
+        cos_feat = torch.cos(rads).unsqueeze(-1)  # (B, T', 1)
+
+        feats = torch.cat([sin_feat, cos_feat], dim=-1)  # (B, T', 2)
+        return self.proj(feats) # (B, T', embed_dim)
+
+
 # ----------------------------------------------------------------------
 # 1. Tokenizer
 # ----------------------------------------------------------------------
@@ -51,32 +85,53 @@ class ConvTokenizer(nn.Module):
         self,
         in_dim: int,
         embed_dim: int,
-        kernel_size: int = 7,
-        stride: int = 7,
+        use_seasonal_embedding: bool = False,
+        patch_size: int = 7,
+        window_factor: int = 1,
     ):
         super().__init__()
+        self.patch_size = patch_size
 
+        kernel_size = patch_size * window_factor
         padding = (kernel_size - 1) // 2 # keeps the time dimension
 
-        self.proj = nn.Conv1d(
+        self.token_embedder = nn.Conv1d(
             in_channels=in_dim,
             out_channels=embed_dim,
             kernel_size=kernel_size,
-            stride=stride,
+            stride=patch_size,
             padding=padding,
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        self.seasonal_embedder = None
+        if use_seasonal_embedding:
+            self.seasonal_embedder = SeasonalEmbedding(embed_dim)
+
+    def forward(self,
+                x: torch.Tensor,
+                doys: torch.Tensor
+                ) -> torch.Tensor:
         """
         Args:
             x: (B, T, in_dim)
+            doys: (B, T) tensor containing day of year (1-366)
         Returns:
             (B, T', embed_dim)
         """
-        x = x.transpose(1, 2)          # (B, in_dim, T)
-        x = self.proj(x)               # (B, embed_dim, T')
-        x = x.transpose(1, 2)          # (B, T', embed_dim)
-        return x
+        x = x.transpose(1, 2)   # (B, in_dim, T)
+        z = self.token_embedder(x)         # (B, embed_dim, T')
+        z = z.transpose(1, 2)       # (B, T', embed_dim)
+
+        if self.seasonal_embedder is not None:
+            # Note: Ensure sequence length matches conv output (Downsample)
+            doys = doys[:, ::self.patch_size]
+            # Handle potential length mismatch if conv truncated end
+            if doys.shape[1] > z.shape[1]:
+                doys = doys[:, :z.shape[1]]
+            seas_embedding = self.seasonal_embedder(doys)    # (B, T', embed_dim)
+            return z + seas_embedding
+        else:
+            return z
 
 
 # ----------------------------------------------------------------------
@@ -93,6 +148,7 @@ class CNNProcessor(nn.Module):
         num_layers: int = 2,
         kernel_size: int = 3,
         dropout: float = 0.0,
+        use_residual_layer: bool = True,
     ):
         super().__init__()
         layers = []
@@ -113,6 +169,10 @@ class CNNProcessor(nn.Module):
 
         self.net = nn.Sequential(*layers)
 
+        self.residual_layer = None
+        if use_residual_layer:
+            self.residual_layer = nn.Linear(embed_dim, embed_dim)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
@@ -123,7 +183,11 @@ class CNNProcessor(nn.Module):
         x = x.transpose(1, 2)      # (B, embed_dim, T)
         x = self.net(x)            # (B, embed_dim, T)
         x = x.transpose(1, 2)      # (B, T, embed_dim)
-        return x
+        if self.residual_layer is not None:
+            res = self.residual_layer(x)
+            return x + res
+        else:
+            return x
 
 
 class LSTMProcessor(nn.Module):
@@ -292,15 +356,18 @@ class TemporalEncoder(nn.Module):
         self.pooling = pooling
         self.norm = nn.LayerNorm(embed_dim)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self,
+                x: torch.Tensor,
+                doys: torch.Tensor
+                ) -> torch.Tensor:
         """
         Args:
             x: (B, T, in_dim)
         Returns:
             (B, embed_dim)
         """
-        x = self.tokenizer(x)     # (B, T', embed_dim)
-        x = self.processor(x)     # (B, T', embed_dim)
-        x = self.pooling(x)       # (B, embed_dim)
-        x = self.norm(x)          # (B, embed_dim)
+        x = self.tokenizer(x, doys) # (B, T', embed_dim)
+        x = self.processor(x)       # (B, T', embed_dim)
+        x = self.pooling(x)         # (B, embed_dim)
+        x = self.norm(x)            # (B, embed_dim)
         return x

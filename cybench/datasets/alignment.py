@@ -537,16 +537,19 @@ def make_aligned_tensors(
     assert not x_context.isnan().any()
 
     # align the temporal dataset to match the indices:
-    x_ts_samples = [df_ts.loc[ix].values for ix in df_y.index]
+    x_ts_samples = [df_ts.loc[ix] for ix in df_y.index]
     # check for consistency in ts length
     ts_lengths = [len(x) for x in x_ts_samples]
     if not np.all(np.array(ts_lengths) == ts_lengths[0]):
         # cut of early days in the season
         min_ts_length = min(ts_lengths)
-        x_ts_samples = [x[-min_ts_length:] for x in x_ts_samples]
+        doy_ts_samples = [[ix.timetuple().tm_yday for ix in x.index[-min_ts_length:]] for x in x_ts_samples]
+        x_ts_samples = [x.values[-min_ts_length:] for x in x_ts_samples]
+    doy_ts = torch.tensor(np.array(doy_ts_samples), dtype=torch.float32) # (sample_size x T)
     x_ts = torch.tensor(np.array(x_ts_samples), dtype=torch.float32) # (sample_size x T x temp_features)
     assert not x_ts.isnan().any()
+    assert not doy_ts.isnan().any()
 
-    return (y, x_context, x_ts), (df_y.columns, expanded_df_non_temporal.columns, df_ts.columns)
+    return (y, x_context, x_ts), (df_y.columns, expanded_df_non_temporal.columns, df_ts.columns), doy_ts
 
 
