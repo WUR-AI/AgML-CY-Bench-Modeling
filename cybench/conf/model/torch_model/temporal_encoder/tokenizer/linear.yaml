@@ -1,0 +1,11 @@
+
+_target_: cybench.models.torch.model_components.temporal_encoder.ConvTokenizer
+
+in_dim: ${model.torch_model.temporal_in_dim}
+embed_dim: ${model.torch_model.embed_dim}
+
+use_temporal_embedding: true
+
+# simple linear transformation to embedding space
+patch_size: 1
+window_factor: 1

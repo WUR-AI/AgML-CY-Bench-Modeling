@@ -5,4 +5,4 @@ embed_dim: ${model.torch_model.embed_dim}
 num_layers: 4        # number of TransformerEncoder layers
 nhead: 4             # attention heads
 dim_feedforward: 256 # FFN hidden size
-dropout: 0.1
+dropout: 0.2

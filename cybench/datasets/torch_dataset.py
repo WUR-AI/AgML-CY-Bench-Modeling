@@ -11,6 +11,7 @@ class TorchDataset(BaseDataset, torch.utils.data.Dataset):
     def __init__(
             self,
             aligned_tensors: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+            doy_tensor: torch.Tensor,
             column_names: Tuple[list, list, list],
             indices: pd.DataFrame,
     ):
@@ -19,10 +20,12 @@ class TorchDataset(BaseDataset, torch.utils.data.Dataset):
         Implements splitting by year.
 
         :param aligned_tensors: Triplet of (target, context, time_series) tensors
+        :param doy_tensor: Tensor of (samples x ts_length) listing day of the year for each time-point in a sample
         :param column_names: Triplet of column names for the three aligned tensors
         :param indices: DataFrame with at least 'adm_id' and 'year' columns
         """
         self.y, self.x_context, self.x_ts = aligned_tensors
+        self.doy = doy_tensor
         self.y_columns, self.x_context_columns, self.x_ts_columns = column_names
         self.indices = indices
 
@@ -44,7 +47,7 @@ class TorchDataset(BaseDataset, torch.utils.data.Dataset):
         :param index: Index of the sample to retrieve
         :return: Tuple of (target, context, time_series) tensors for the given index
         """
-        sample = self.y[index], self.x_context[index], self.x_ts[index]
+        sample = self.y[index], self.x_context[index], self.x_ts[index], self.doy[index]
         # augment the loaded sample
         if self.augmentation is not None:
             sample = self.augmentation(sample)
@@ -78,6 +81,7 @@ class TorchDataset(BaseDataset, torch.utils.data.Dataset):
                 self.x_context[indices1],
                 self.x_ts[indices1]
             ),
+            doy_tensor=self.doy[indices1],
             column_names=(
                 self.y_columns,
                 self.x_context_columns,
@@ -91,6 +95,7 @@ class TorchDataset(BaseDataset, torch.utils.data.Dataset):
                 self.x_context[indices2],
                 self.x_ts[indices2]
             ),
+            doy_tensor=self.doy[indices2],
             column_names=(
                 self.y_columns,
                 self.x_context_columns,

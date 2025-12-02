@@ -68,7 +68,7 @@ class DataFactory:
             # unifies and interpolate time-series dataframes into a single dataframe
             df_ts = interpolate_time_series_data(dfs_x)
             # align datasets and cast to torch tensors
-            aligned_tensors, column_names = make_aligned_tensors(
+            aligned_tensors, column_names, doy_tensor = make_aligned_tensors(
                 df_y=df_y,
                 df_non_temporal=dfs_x["non_temporal"],
                 df_ts=df_ts,
@@ -77,6 +77,7 @@ class DataFactory:
 
             dataset = TorchDataset(
                 aligned_tensors=aligned_tensors,
+                doy_tensor=doy_tensor,
                 column_names=column_names,
                 indices=df_y.index.to_frame(index=False),
             )
