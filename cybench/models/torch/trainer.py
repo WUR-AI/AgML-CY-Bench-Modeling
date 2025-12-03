@@ -6,7 +6,7 @@ Transformers Trainer (see:
 https://huggingface.co/docs/transformers/main_classes/trainer),
 but is adapted to the CY-Bench codebase and a PyTorch regression setup.
 """
-
+import logging
 import os
 import random
 from functools import partial
@@ -22,6 +22,8 @@ from tqdm import tqdm
 from cybench.datasets.torch_dataset import TorchDataset
 from cybench.models.model import BaseModel
 
+# init logger
+log = logging.getLogger(__name__)
 
 class TorchTrainer(BaseModel):
     """
@@ -77,6 +79,7 @@ class TorchTrainer(BaseModel):
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(device)
         self.model.to(self.device)
+        log.info(f"Loaded {self.name} model | Size: {(sum(p.numel() for p in self.model.parameters()) * 1e-6):.3}M parameters")
 
         # Handle optimizer (could be None, partial, or instantiated)
         if optimizer is None:

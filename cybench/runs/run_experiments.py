@@ -1,20 +1,16 @@
 import time
-
 import hydra
 import matplotlib.pyplot as plt
 import pandas as pd
 from hydra.core.config_store import ConfigStore
 from hydra.utils import instantiate
-from omegaconf import OmegaConf
 import logging
 
 from cybench.config import ExperimentConfig
 from cybench.datasets.data_factory import DataFactory
-from cybench.datasets.torch_dataset import TorchDataset
 from cybench.evaluation.eval import evaluate_predictions
 from cybench.util.config_utils import adjust_model_cfg_to_dataset, set_seed, remove_search_keys
 from cybench.util.optuna_hyper_opt import OptunaOptimizer
-#from cybench.util.optuna_hyper_opt import OptunaOptimizer
 from cybench.util.store_and_cache import make_split_folder, save_preds, save_meta_dict
 from cybench.util.validation import get_splits
 
@@ -48,7 +44,7 @@ def main(cfg: ExperimentConfig):
         split_path = make_split_folder(run_dir=hydra.core.hydra_config.HydraConfig.get().runtime.output_dir, split_name=train_test_split[-1])
 
         # check whether hyperparameter tuning is equipped:
-        if cfg.hp_search:
+        if "hp_search" in cfg:
             hp_optimizer = OptunaOptimizer(
                 hp_config=cfg.hp_search,
                 val_cfg=cfg.validation,
@@ -62,7 +58,7 @@ def main(cfg: ExperimentConfig):
             # _search_ keys for hyperparameter tuning have to be removed before model instantiation
             model_cfg = remove_search_keys(cfg.model)
 
-        # create, fit final model & predict test
+        # create, fit final model and predict test
         log.info(f"Train final model")
         model = instantiate(model_cfg)
         fit_info = model.fit(train_dataset, val_dataset=test_dataset)

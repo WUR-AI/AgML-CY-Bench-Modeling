@@ -6,4 +6,18 @@ embed_dim: ${model.torch_model.embed_dim}
 
 num_layers: 4        # number of Conv1d layers
 kernel_size: 3       # temporal kernel size (odd to keep length with padding)
-dropout: 0.4         # dropout between conv layers
+dropout: 0.2         # dropout between conv layers
+use_residual_layer: True
+
+_search_:
+  num_layers:
+    type: int
+    low: 1
+    high: 4
+  dropout:
+    type: float
+    low: .2
+    high: .8
+  use_residual_layer:
+    type: categorical
+    choices: [false, true]

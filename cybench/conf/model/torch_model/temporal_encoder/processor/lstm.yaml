@@ -5,3 +5,9 @@ embed_dim: ${model.torch_model.embed_dim}
 num_layers: 4        # LSTM layers
 dropout: 0.5         # only used if num_layers > 1
 bidirectional: false # if true, internal H is 2*embed_dim and projected back
+
+_search_:
+  num_layers:
+    type: int
+    low: 1
+    high: 4

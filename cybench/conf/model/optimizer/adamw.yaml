@@ -9,7 +9,7 @@ amsgrad: false
 _search_:
   lr:
     type: float
-    low: 1e-6
+    low: 1e-5
     high: 1e-2
     log: true
   weight_decay:

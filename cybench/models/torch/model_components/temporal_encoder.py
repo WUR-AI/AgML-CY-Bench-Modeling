@@ -148,7 +148,7 @@ class CNNProcessor(nn.Module):
         num_layers: int = 2,
         kernel_size: int = 3,
         dropout: float = 0.0,
-        use_residual_layer: bool = True,
+        use_residual_layer: bool = False,
     ):
         super().__init__()
         layers = []
@@ -180,14 +180,14 @@ class CNNProcessor(nn.Module):
         Returns:
             (B, T, embed_dim)
         """
+        if self.residual_layer is not None:
+            res = self.residual_layer(x)
+        else:
+            res = 0
         x = x.transpose(1, 2)      # (B, embed_dim, T)
         x = self.net(x)            # (B, embed_dim, T)
         x = x.transpose(1, 2)      # (B, T, embed_dim)
-        if self.residual_layer is not None:
-            res = self.residual_layer(x)
-            return x + res
-        else:
-            return x
+        return x + res
 
 
 class LSTMProcessor(nn.Module):
@@ -241,7 +241,7 @@ class TransformerProcessor(nn.Module):
         embed_dim: int,
         num_layers: int = 4,
         nhead: int = 4,
-        dim_feedforward: int = 256,
+        dim_feedforward: int = 128,
         dropout: float = 0.1,
     ):
         super().__init__()

@@ -20,4 +20,4 @@ _search_:
   window_factor:
     type: int
     low: 1
-    high: 3
+    high: 2

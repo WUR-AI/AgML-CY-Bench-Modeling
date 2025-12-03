@@ -10,6 +10,7 @@ import yaml
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
+from cybench.util.config_utils import set_seed
 from cybench.config import ValidationConfig
 from cybench.datasets.dataset import Dataset
 from cybench.util.validation import get_splits
@@ -80,6 +81,7 @@ class OptunaOptimizer:
             study_name=self.study_name,
             storage=storage,
             sampler=sampler,
+            pruner=optuna.pruners.ThresholdPruner(upper=self.dataset.targets.var()),
             load_if_exists=self.hp_config.storage.get("load_if_exists", True),
             direction="minimize"  # Assuming loss minimization; make configurable if needed
         )
@@ -135,33 +137,37 @@ class OptunaOptimizer:
 
         val_metrics = []
 
-        # Get validation splits (Using the 'val' set of the current dataset)
-        splits = get_splits(
-            cfg=self.val_cfg,
-            which="val",
-            dataset_years=self.dataset.years,
-            seed=self.hp_config.seed
-        )
+        for i in range(self.hp_config.repetitions):
+            set_seed(self.hp_config.seed + i)
 
-        for train_years, val_years in splits:
-            train_dataset, val_dataset = self.dataset.split_on_years((train_years, val_years))
+            # Get validation splits (Using the 'val' set of the current dataset)
+            splits = get_splits(
+                cfg=self.val_cfg,
+                which="val",
+                dataset_years=self.dataset.years,
+                seed=self.hp_config.seed
+            )
 
-            # Instantiate and fit
-            model = instantiate(model_cfg, verbose=False)
-            # no val_dataset included yet, but early stopping could require one ;)
-            model.fit(train_dataset)
+            for train_years, val_years in splits:
+                train_dataset, val_dataset = self.dataset.split_on_years((train_years, val_years))
 
-            # Predict and Evaluate
-            preds, _ = model.predict(val_dataset)
-            assert preds.ndim == val_dataset.targets.ndim, f"The model output shape {preds.shape} does not match {val_dataset.shape}"
-            val_metric = np.mean((val_dataset.targets - preds) ** 2)
+                # Instantiate and fit
+                model = instantiate(model_cfg, verbose=False)
+                # no val_dataset included yet, but early stopping could require one ;)
+                model.fit(train_dataset)
 
-            val_metrics.append(val_metric)
+                # Predict and Evaluate
+                preds, _ = model.predict(val_dataset)
+                assert preds.ndim == val_dataset.targets.ndim, f"The model output shape {preds.shape} does not match {val_dataset.shape}"
+                val_metric = np.mean((val_dataset.targets - preds) ** 2)
 
-            # Optional: Pruning based on intermediate folds
-            trial.report(np.mean(val_metrics), step=len(val_metrics))
-            if trial.should_prune():
-                raise optuna.TrialPruned()
+                val_metrics.append(val_metric)
+                log.info(f"Validation metric ({i}): {val_metrics}")
+
+                # Optional: Pruning based on intermediate folds
+                trial.report(np.mean(val_metrics), step=len(val_metrics) * (i + 1))
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
 
         return float(np.mean(val_metrics))
 
