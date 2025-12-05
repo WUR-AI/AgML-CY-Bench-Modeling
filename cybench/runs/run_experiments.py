@@ -5,6 +5,7 @@ import pandas as pd
 from hydra.core.config_store import ConfigStore
 from hydra.utils import instantiate
 import logging
+from codecarbon import track_emissions
 
 from cybench.config import ExperimentConfig
 from cybench.datasets.data_factory import DataFactory
@@ -23,6 +24,7 @@ conf_store.store(name="exp_config", node=ExperimentConfig)
 
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
+@track_emissions(log_level="WARNING")
 def main(cfg: ExperimentConfig):
     #print("=== Final Composed Config ===")
     #print(OmegaConf.to_yaml(cfg))
