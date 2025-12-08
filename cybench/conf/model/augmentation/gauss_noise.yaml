@@ -1,0 +1,5 @@
+# Adds Gaussian noise to the time series features
+_target_: cybench.models.torch.utils.augmentation.AugmentationComposer
+augmentations:
+  - _target_: cybench.models.torch.utils.augmentation.GaussianNoiseTimeSeries
+    std: 0.02

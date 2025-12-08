@@ -252,6 +252,7 @@ class TransformerProcessor(nn.Module):
             dim_feedforward=dim_feedforward,
             dropout=dropout,
             batch_first=True,  # keeps (B, T, D)
+            norm_first=True,
         )
         self.net = nn.TransformerEncoder(
             encoder_layer=encoder_layer,

@@ -1,5 +1,6 @@
 defaults:
   - torch_model: late_fusion_network
+  - augmentation: all
   - optimizer: adamw
   - scheduler: cosine
   - override torch_model/temporal_encoder/processor: cnn # overriding the default processor to cnn
@@ -8,7 +9,7 @@ defaults:
 # Root-level trainer configuration
 _target_: cybench.models.torch.trainer.TorchTrainer
 name: cnn_lf  # Updated name for logging/tracking
-epochs: 50
+epochs: 100
 seed: ${experiment.seed}
 device: ${experiment.device}
 verbose: true
@@ -23,7 +24,7 @@ _search_:
 dataloader:
   _target_: torch.utils.data.DataLoader
   _partial_: true
-  batch_size: 64
+  batch_size: 32
   shuffle: True
   _search_:
     batch_size:

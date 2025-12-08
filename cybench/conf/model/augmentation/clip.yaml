@@ -1,0 +1,7 @@
+
+_target_: cybench.models.torch.utils.augmentation.AugmentationComposer
+augmentations:
+  # Randomly clips time points from the start and end of the sequence
+  - _target_: cybench.models.torch.utils.augmentation.TimeSeriesClipping
+    start: 10  # Max time points to clip from start
+    end: 10    # Max time points to clip from end

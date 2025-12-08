@@ -21,6 +21,7 @@ from tqdm import tqdm
 
 from cybench.datasets.torch_dataset import TorchDataset
 from cybench.models.model import BaseModel
+from cybench.models.torch.utils.augmentation import create_collate_fn, AugmentationComposer
 
 # init logger
 log = logging.getLogger(__name__)
@@ -64,7 +65,7 @@ class TorchTrainer(BaseModel):
         loss_fn: Optional[nn.Module] = None,
         device: Optional[str] = None,
         dataloader: Optional[partial] = None,
-        augmentation_config: Optional[Dict[str, Any]] = None,
+        augmentation: AugmentationComposer = None,
         epochs: int = 100,
         max_grad_norm: Optional[float] = None,
         seed: int = 42,
@@ -102,7 +103,7 @@ class TorchTrainer(BaseModel):
             self.scheduler = scheduler
 
         self.dataloader = dataloader or DataLoader
-        self.augmentation_config = augmentation_config or {}
+        self.augmentation = augmentation
         self.epochs = epochs
         self.max_grad_norm = max_grad_norm
         self.verbose = verbose
@@ -111,12 +112,13 @@ class TorchTrainer(BaseModel):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _create_dataloader(self, dataset, shuffle: bool) -> DataLoader:
+    def _create_dataloader(self, dataset, augment: bool, shuffle: bool) -> DataLoader:
         """
         Create a DataLoader from a TorchDataset using dataloader.
 
         Args:
             dataset: TorchDataset to wrap.
+            augment: whether to augment the dataset.
             shuffle: Whether to shuffle the data.
 
         Returns:
@@ -124,7 +126,11 @@ class TorchTrainer(BaseModel):
         """
         dataloader = self.dataloader
 
-        return dataloader(dataset=dataset,shuffle=shuffle)
+        if self.augmentation is not None and augment:
+            collate_fn = create_collate_fn(augmentation=self.augmentation, context_columns=dataset.x_context_columns)
+            return dataloader(dataset=dataset, collate_fn=collate_fn, shuffle=shuffle)
+        else:
+            return dataloader(dataset=dataset, shuffle=shuffle)
 
     # ------------------------------------------------------------------
     # BaseModel API
@@ -148,9 +154,9 @@ class TorchTrainer(BaseModel):
         val_dataset = fit_params.get("val_dataset", None)
         val_every_n_epochs = fit_params.get("val_every_n_epochs", 5)
 
-        train_loader = self._create_dataloader(dataset, shuffle=True)
+        train_loader = self._create_dataloader(dataset, augment=True, shuffle=True)
         val_loader = (
-            self._create_dataloader(val_dataset, shuffle=False)
+            self._create_dataloader(val_dataset, augment=False, shuffle=False)
             if val_dataset is not None
             else None
         )
@@ -270,7 +276,7 @@ class TorchTrainer(BaseModel):
             A tuple containing a np.ndarray of predictions and a dict with
             additional information.
         """
-        dataloader = self._create_dataloader(dataset, shuffle=False)
+        dataloader = self._create_dataloader(dataset, augment=False, shuffle=False)
 
         self.model.eval()
         preds = []

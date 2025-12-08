@@ -2,9 +2,9 @@ _target_: cybench.models.torch.model_components.temporal_encoder.TransformerProc
 
 embed_dim: ${model.torch_model.embed_dim}
 
-num_layers: 1        # number of TransformerEncoder layers
+num_layers: 1       # number of TransformerEncoder layers
 nhead: 4             # attention heads
-dim_feedforward: 256 # FFN hidden size
+dim_feedforward: 128 # FFN hidden size
 dropout: 0.2
 
 _search_:

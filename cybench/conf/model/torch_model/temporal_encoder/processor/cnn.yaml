@@ -4,10 +4,10 @@ _target_: cybench.models.torch.model_components.temporal_encoder.CNNProcessor
 # Replace ${model.embed_dim} with whatever your config uses.
 embed_dim: ${model.torch_model.embed_dim}
 
-num_layers: 4        # number of Conv1d layers
+num_layers: 2        # number of Conv1d layers
 kernel_size: 3       # temporal kernel size (odd to keep length with padding)
 dropout: 0.2         # dropout between conv layers
-use_residual_layer: True
+use_residual_layer: false
 
 _search_:
   num_layers:
