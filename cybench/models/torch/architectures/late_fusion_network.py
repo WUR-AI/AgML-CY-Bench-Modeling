@@ -44,6 +44,7 @@ class LateFusionNetwork(nn.Module):
         Args:
             context: Static/context features of shape (B, C_ctx).
             temporal: Temporal features of shape (B, T, C_tmp).
+            doys: Day of the year for the temporal tensor. Shape (B, T).
 
         Returns:
             preds: Regression output of shape (B,).

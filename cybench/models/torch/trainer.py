@@ -177,10 +177,10 @@ class TorchTrainer(BaseModel):
 
             for batch in train_loader:
                 y, x_ctx, x_ts, doy_ts = batch
-                y = y.to(self.device)
+                y = y.to(self.device, non_blocking=True)
                 x_ctx = x_ctx.to(self.device, non_blocking=True)
-                x_ts = x_ts.to(self.device)
-                doy_ts = doy_ts.to(self.device)
+                x_ts = x_ts.to(self.device, non_blocking=True)
+                doy_ts = doy_ts.to(self.device, non_blocking=True)
 
                 self.optimizer.zero_grad(set_to_none=True)
 
@@ -248,10 +248,10 @@ class TorchTrainer(BaseModel):
         with torch.no_grad():
             for batch in dataloader:
                 y, x_ctx, x_ts, doy_ts = batch
-                y = y.to(self.device)
+                y = y.to(self.device, non_blocking=True)
                 x_ctx = x_ctx.to(self.device, non_blocking=True)
-                x_ts = x_ts.to(self.device)
-                doy_ts = doy_ts.to(self.device)
+                x_ts = x_ts.to(self.device, non_blocking=True)
+                doy_ts = doy_ts.to(self.device, non_blocking=True)
 
                 pred = self.model(x_ctx, x_ts, doy_ts)
                 if pred.ndim > 1:
@@ -286,8 +286,8 @@ class TorchTrainer(BaseModel):
                 _, x_ctx, x_ts, doy_ts = batch
 
                 x_ctx = x_ctx.to(self.device, non_blocking=True)
-                x_ts = x_ts.to(self.device)
-                doy_ts = doy_ts.to(self.device)
+                x_ts = x_ts.to(self.device, non_blocking=True)
+                doy_ts = doy_ts.to(self.device, non_blocking=True)
 
                 pred = self.model(x_ctx, x_ts, doy_ts)
                 if pred.ndim > 1:
