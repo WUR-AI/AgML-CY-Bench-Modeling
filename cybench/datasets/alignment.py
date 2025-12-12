@@ -98,7 +98,7 @@ def compute_crop_season_window(df, min_year, max_year, start_of_sequence, end_of
         df["start_of_sequence_date"] = df["sos_date"]
     elif "sos-" in start_of_sequence:
         df["start_of_sequence_date"] = df["sos_date"] - pd.to_timedelta(int(start_of_sequence.split("-")[-1]), unit="d")
-    elif "sos-" in start_of_sequence:
+    elif "eos-" in start_of_sequence:
         df["start_of_sequence_date"] = df["eos_date"] - pd.to_timedelta(int(start_of_sequence.split("-")[-1]), unit="d")
     else:
         raise Exception(f'Unrecognized start of sequence: "{start_of_sequence}"')
@@ -543,9 +543,9 @@ def make_aligned_tensors(
     if not np.all(np.array(ts_lengths) == ts_lengths[0]):
         # cut of early days in the season
         min_ts_length = min(ts_lengths)
-        doy_ts_samples = [[ix.timetuple().tm_yday for ix in x.index[-min_ts_length:]] for x in x_ts_samples]
-        x_ts_samples = [x.values[-min_ts_length:] for x in x_ts_samples]
-    doy_ts = torch.tensor(np.array(doy_ts_samples), dtype=torch.float32) # (sample_size x T)
+        x_ts_samples = [x[-min_ts_length:] for x in x_ts_samples]
+    doy_ts_samples = [[ix.timetuple().tm_yday for ix in x.index] for x in x_ts_samples]
+    doy_ts = torch.tensor(np.array(doy_ts_samples), dtype=torch.int16) # (sample_size x T)
     x_ts = torch.tensor(np.array(x_ts_samples), dtype=torch.float32) # (sample_size x T x temp_features)
     assert not x_ts.isnan().any()
     assert not doy_ts.isnan().any()

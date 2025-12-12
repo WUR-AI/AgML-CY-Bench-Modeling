@@ -40,10 +40,11 @@ features:
   tavg:
     type: standard
     params: null
+  rad:
+    type: standard
+    params: null
 
   prec:
-    type: logsinh
-  rad:
     type: logsinh
   et0:
     type: logsinh
