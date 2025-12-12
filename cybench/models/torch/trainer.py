@@ -308,7 +308,7 @@ class TorchTrainer(BaseModel):
     # Persistence
     # ------------------------------------------------------------------
 
-    def save(self, path: str):
+    def save(self, path: str, seed: int):
         """
         Save model, optimizer, and training state to disk.
 
@@ -323,7 +323,7 @@ class TorchTrainer(BaseModel):
             "epochs": self.epochs,
             "max_grad_norm": self.max_grad_norm,
         }
-        torch.save(checkpoint, os.path.join(path, self.name + ".pt"))
+        torch.save(checkpoint, os.path.join(path, self.name + f"_{seed}.pt"))
 
     @classmethod
     def load(cls, model_path: str, model: nn.Module, optimizer: torch.optim.Optimizer, **kwargs):

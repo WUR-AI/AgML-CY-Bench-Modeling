@@ -95,12 +95,21 @@ class ConvTokenizer(nn.Module):
         kernel_size = patch_size * window_factor
         padding = (kernel_size - 1) // 2 # keeps the time dimension
 
-        self.token_embedder = nn.Conv1d(
-            in_channels=in_dim,
-            out_channels=embed_dim,
-            kernel_size=kernel_size,
-            stride=patch_size,
-            padding=padding,
+        self.token_embedder = nn.Sequential(
+            # 1. Dense Feature Extraction
+            nn.Conv1d(
+                in_channels=in_dim,
+                out_channels=embed_dim,
+                kernel_size=kernel_size,
+                stride=1,
+                padding=padding,
+            ),
+            # 2. Downsampling
+            nn.MaxPool1d(
+                kernel_size=kernel_size,
+                stride=patch_size,
+                padding=padding
+            )
         )
 
         self.seasonal_embedder = None

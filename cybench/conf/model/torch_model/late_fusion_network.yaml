@@ -16,11 +16,11 @@ context_encoder:
   hidden_dims:
     - ${model.torch_model.embed_dim}
   embed_dim: ${model.torch_model.embed_dim}
-  dropout: 0.5
+  dropout: 0.2
   _search_:
     dropout:
       type: float
-      low: .2
+      low: .0
       high: .8
 
 regression_head:

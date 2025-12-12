@@ -61,20 +61,25 @@ def main(cfg: ExperimentConfig):
             # _search_ keys for hyperparameter tuning have to be removed before model instantiation
             model_cfg = remove_search_keys(cfg.model)
 
-        # create, fit final model and predict test
-        log.info(f"Train final model")
-        model = instantiate(model_cfg)
-        fit_info = model.fit(train_dataset, val_dataset=test_dataset)
-        test_preds, pred_info = model.predict(test_dataset)
+        log.info(f"Train final model(s)")
+        for i in range(cfg.experiment.n_repetitions):
+            # set new seed for each repetition
+            seed = cfg.experiment.seed + i
+            set_seed(seed)
+            # create, fit final model and predict test
+            model = instantiate(model_cfg)
+            fit_info = model.fit(train_dataset, val_dataset=test_dataset)
+            test_preds, pred_info = model.predict(test_dataset)
 
-        # save preds, model, ...
-        save_preds(path=split_path, dataset=test_dataset, preds=test_preds, pred_info=pred_info)
-        model.save(path=split_path)
-        save_meta_dict(path=split_path, dict={"fit_info": fit_info, "test_info": pred_info})
+            # save preds, model, ...
+            save_preds(path=split_path, dataset=test_dataset, preds=test_preds, seed=seed)
+            model.save(path=split_path, seed=seed)
+            save_meta_dict(path=split_path, dict={"fit_info": fit_info, "test_info": pred_info}, seed=seed)
 
-        # evaluate
-        eval_metric = evaluate_predictions(y_true=test_dataset.targets, y_pred=test_preds, cfg=cfg.evaluation)
-        log.info(f"Split {train_test_split[-1]} finished with metrics: {eval_metric}")
+            # evaluate
+            eval_metric = evaluate_predictions(y_true=test_dataset.targets, y_pred=test_preds, cfg=cfg.evaluation)
+            log.info(f"Split {train_test_split[-1]} (seed {seed}) finished with metrics: {eval_metric}")
+
 
 if __name__ == "__main__":
     main()

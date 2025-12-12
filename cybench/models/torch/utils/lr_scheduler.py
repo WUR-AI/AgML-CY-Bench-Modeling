@@ -1,26 +1,24 @@
 import math
+from torch.optim.lr_scheduler import LRScheduler
 
 
-class CosineAnnealingWarmupScheduler:
+class CosineAnnealingWarmupScheduler(LRScheduler):
     """Cosine annealing scheduler with warmup."""
 
-    def __init__(self, optimizer, warmup_epochs, total_epochs, min_lr=0):
-        self.optimizer = optimizer
+    def __init__(self, optimizer, warmup_epochs, total_epochs, min_lr=0, last_epoch=-1):
         self.warmup_epochs = warmup_epochs
         self.total_epochs = total_epochs
         self.min_lr = min_lr
-        self.base_lr = optimizer.param_groups[0]['lr']
+        super().__init__(optimizer, last_epoch)
 
-    def step(self, epoch):
-        if epoch < self.warmup_epochs:
+    def get_lr(self):
+        if self.last_epoch < self.warmup_epochs:
             # Linear warmup
-            lr = self.base_lr * (epoch + 1) / self.warmup_epochs
+            return [base_lr * (self.last_epoch + 1) / self.warmup_epochs
+                    for base_lr in self.base_lrs]
         else:
             # Cosine annealing
-            progress = (epoch - self.warmup_epochs) / (self.total_epochs - self.warmup_epochs)
-            lr = self.min_lr + (self.base_lr - self.min_lr) * 0.5 * (1 + math.cos(math.pi * progress))
-
-        for param_group in self.optimizer.param_groups:
-            param_group['lr'] = lr
-
-        return lr
+            progress = (self.last_epoch - self.warmup_epochs) / (self.total_epochs - self.warmup_epochs)
+            cos_factor = 0.5 * (1 + math.cos(math.pi * progress))
+            return [self.min_lr + (base_lr - self.min_lr) * cos_factor
+                    for base_lr in self.base_lrs]

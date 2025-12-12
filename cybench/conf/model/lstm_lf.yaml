@@ -2,7 +2,7 @@ defaults:
   - torch_model: late_fusion_network
   - optimizer: adamw
   - augmentation: all
-  - scheduler: cosine
+  - scheduler: cosine_warmup
   - _self_
 
 # Root-level trainer configuration
@@ -12,10 +12,22 @@ epochs: 100
 seed: ${experiment.seed}
 device: ${experiment.device}
 verbose: true
+_search_:
+  epochs:
+    type: int
+    low: 25
+    high: 100
+    step: 25
 
 # data loader configuration
 dataloader:
   _target_: torch.utils.data.DataLoader
   _partial_: true
-  batch_size: 32
+  batch_size: 64
   shuffle: True
+  _search_:
+    batch_size:
+      type: int
+      low: 32
+      high: 128
+      step: 32

@@ -10,9 +10,14 @@ dropout: 0.2
 _search_:
   dropout:
     type: float
-    low: .2
+    low: .0
     high: .8
   num_layers:
     type: int
     low: 1
     high: 4
+  nhead:
+    type: int
+    low: 4
+    high: 8
+    step: 4

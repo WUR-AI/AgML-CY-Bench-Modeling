@@ -16,8 +16,9 @@ _search_:
   patch_size:
     type: int
     low: 1
-    high: 14
-  window_factor:
-    type: int
-    low: 1
-    high: 2
+    high: 9
+    step: 2
+  #window_factor:
+  #  type: int
+  #  low: 1
+  #  high: 2

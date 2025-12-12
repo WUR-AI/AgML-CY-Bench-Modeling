@@ -48,25 +48,25 @@ def make_split_folder(run_dir: str, split_name) -> str:
 def save_preds(
         path: str,
         dataset: Dataset,
-        preds: np.ndarray[tuple[int],
-        np.dtype[np.number]], pred_info: dict):
+        preds: np.ndarray[tuple[int], np.dtype[np.number]],
+        seed: int
+        ):
     """
     Save predictions to a csv file.
     Args:
         path:
         dataset: Dataset to get targets and indices from.
         preds: Predicted targets.
-        pred_info: Any dict containing info about the predictions.
     Returns: Nada
     """
     dataset.indices.merge(
         pd.DataFrame({"targets": dataset.targets, "preds": preds}),
         left_index=True, right_index=True
-    ).to_csv(os.path.join(path, 'preds.csv'), index=False)
+    ).to_csv(os.path.join(path, f'preds_{seed}.csv'), index=False)
     return None
 
 
-def save_meta_dict(path, dict):
+def save_meta_dict(path, dict, seed):
     """
     Save a dict of any metadata after training.
     Args:
@@ -75,6 +75,6 @@ def save_meta_dict(path, dict):
 
     Returns: Nichts
     """
-    with open('meta.pkl', 'wb') as handle:
+    with open(f'meta_{seed}.pkl', 'wb') as handle: # TODO fix path
         pickle.dump(dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return None

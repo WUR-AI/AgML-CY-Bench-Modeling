@@ -1,0 +1,6 @@
+# CosineAnnealingWarmupScheduler: Cosine decay schedule, smoothly decreases LR following cosine curve, but with a warmup period for stable convergence
+_target_: cybench.models.torch.utils.lr_scheduler.CosineAnnealingWarmupScheduler
+_partial_: true
+warmup_epochs: 10
+min_lr: 1e-6
+total_epochs: ${model.epochs}

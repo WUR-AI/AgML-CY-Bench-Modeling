@@ -2,6 +2,8 @@ _target_: cybench.models.torch.model_components.fusion.AddFusion
 
 # temporal_dim and static_dim supplied at runtime from code.
 
+temporal_dim: ${model.torch_model.embed_dim}
+static_dim: ${model.torch_model.embed_dim}
 out_dim: null          # defaults to temporal_dim
 dropout: 0.0
 use_layernorm: true

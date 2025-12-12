@@ -1,6 +1,6 @@
 # Extensive Bayesian optimization with TPE
 
-n_trials: 200
+n_trials: 100
 timeout: 14400  # 4 hours
 n_jobs: ${experiment.n_jobs}
 seed: ${experiment.seed}
@@ -9,7 +9,7 @@ repetitions: 2
 sampler:
   _target_: optuna.samplers.TPESampler
   seed: ${experiment.seed}
-  n_startup_trials: 50
+  n_startup_trials: 25
   multivariate: true
   warn_independent_sampling: true
 
