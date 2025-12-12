@@ -9,6 +9,7 @@ but is adapted to the CY-Bench codebase and a PyTorch regression setup.
 import logging
 import os
 import random
+import time
 from functools import partial
 from typing import Any, Dict, Optional, Tuple
 
@@ -170,7 +171,9 @@ class TorchTrainer(BaseModel):
             pbar = tqdm(total=total_batches, desc=f"{self.__class__.__name__}")
 
         self.model.train()
-
+        # TODO delete time tracking. Only for debugging
+        tt = 0
+        start_training = time.time()
         for epoch in range(epochs):
             total_loss = 0.0
             num_batches = 0
@@ -183,7 +186,7 @@ class TorchTrainer(BaseModel):
                 doy_ts = doy_ts.to(self.device, non_blocking=True)
 
                 self.optimizer.zero_grad(set_to_none=True)
-
+                start = time.time()
                 pred = self.model(x_ctx, x_ts, doy_ts)
                 # DEBUG Model:
                 #print(self.model.state_dict()["regression_head.net.3.weight"][0, 0])
@@ -195,7 +198,7 @@ class TorchTrainer(BaseModel):
 
                 loss = self.loss_fn(pred, y.squeeze(-1))
                 loss.backward()
-
+                tt += time.time() - start
                 if self.max_grad_norm is not None:
                     torch.nn.utils.clip_grad_norm_(
                         self.model.parameters(),
@@ -226,7 +229,7 @@ class TorchTrainer(BaseModel):
 
             if self.scheduler is not None:
                 self.scheduler.step()
-
+        print("Forward and backward pass took", np.round(tt / (time.time() - start_training) * 100), "% of training time.")
         if pbar is not None:
             pbar.close()
         return history
@@ -243,7 +246,7 @@ class TorchTrainer(BaseModel):
         """
         self.model.eval()
         total_loss = 0.0
-        num_batches = 0
+        total_samples = 0
 
         with torch.no_grad():
             for batch in dataloader:
@@ -257,9 +260,20 @@ class TorchTrainer(BaseModel):
                 if pred.ndim > 1:
                     pred = pred.squeeze(-1)
 
-                total_loss += self.loss_fn(pred, y.squeeze(-1)).item()
-                num_batches += 1
-        return total_loss / num_batches
+                loss = self.loss_fn(pred, y.squeeze(-1))
+
+                # --- FIX STARTS HERE ---
+                # Get the actual size of this specific batch
+                current_batch_size = y.size(0)
+
+                # 1. "Undo" the mean reduction to get the total sum of errors for this batch
+                total_loss += loss.item() * current_batch_size
+
+                # 2. Track the total number of samples seen
+                total_samples += current_batch_size
+
+            # Calculate the true average over all samples
+            return total_loss / total_samples
 
     # ------------------------------------------------------------------
     # Prediction

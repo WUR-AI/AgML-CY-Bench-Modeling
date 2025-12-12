@@ -11,7 +11,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from cybench.util.config_utils import set_seed
-from cybench.config import ValidationConfig
+from cybench.config import ValidationConfig, ExperimentConfig
 from cybench.datasets.dataset import Dataset
 from cybench.util.validation import get_splits
 from cybench.util.config_utils import remove_search_keys
@@ -28,30 +28,24 @@ class OptunaOptimizer:
     keys, and the storage of the optimal configuration.
 
     Args:
-        hp_config (DictConfig): Configuration containing Optuna settings (n_trials,
-                                timeout, sampler, storage, logging).
-        val_cfg (DictConfig): Validation configuration used to split the provided
-                              dataset for internal evaluation (train/val).
+        cfg (ExperimentConfig): Configuration containing hp_config (Optuna settings), val_cfg (for val-splitting) &
+                                model_cfg (model plus `_search_` keys to be optimized)
         dataset (Dataset): The dataset instance to be used for optimization.
-        base_model_cfg (DictConfig): The initial model configuration containing
-                                     `_search_` keys to be optimized.
         path (str): Directory path where the `optimal_model.yaml` will be stored.
         study_name (str): Unique identifier for the Optuna study.
     """
 
     def __init__(
             self,
-            hp_config: DictConfig,
-            val_cfg: ValidationConfig,
+            cfg: ExperimentConfig,
             dataset: Dataset,
-            base_model_cfg: DictConfig,
             path: str,
             study_name: str
     ):
-        self.hp_config = hp_config
-        self.val_cfg = val_cfg
+        self.cfg = cfg
+        self.hp_config = cfg.hp_search
+        self.val_cfg = cfg.validation
         self.dataset = dataset
-        self.base_model_cfg = base_model_cfg
         self.path = Path(path)
         self.study_name = study_name
 
@@ -100,22 +94,23 @@ class OptunaOptimizer:
         # 4. Reconstruct and Save Best Config
         # We use a FixedTrial with the best params to reconstruct the full config structure
         best_trial = optuna.trial.FixedTrial(study.best_params)
-        best_config = self.base_model_cfg.copy()
+        best_config = self.cfg.copy()
 
         # Resolve the search space with best values
         self._resolve_search_space(best_config, best_trial)
+        best_model_config = best_config.model
 
         # Clean any remaining artifacts (though _resolve_search_space handles _search_ removal)
-        best_config = remove_search_keys(best_config)
+        best_model_config = remove_search_keys(best_model_config)
 
         # Save to disk
         output_file = self.path / "optimal_model.yaml"
         with open(output_file, "w") as f:
-            OmegaConf.save(best_config, f)
+            OmegaConf.save(best_model_config, f)
 
         log.info(f"Optimal model config saved to: {output_file}")
 
-        return best_config
+        return best_model_config
 
     def _objective(self, trial: optuna.Trial) -> float:
         """
@@ -127,13 +122,14 @@ class OptunaOptimizer:
         5. Returns the mean validation metric.
         """
         # Deep copy to avoid modifying the original config for other trials
-        cfg_copy = self.base_model_cfg.copy()
+        cfg_copy = self.cfg.copy()
 
         # Apply suggested parameters to the config
         self._resolve_search_space(cfg_copy, trial)
+        trail_model_cfg = cfg_copy.model
 
         # Instantiate model with specific trial configuration
-        model_cfg = remove_search_keys(cfg_copy)
+        trail_model_cfg = remove_search_keys(trail_model_cfg)
 
         val_metrics = []
 
@@ -152,7 +148,7 @@ class OptunaOptimizer:
                 train_dataset, val_dataset = self.dataset.split_on_years((train_years, val_years))
 
                 # Instantiate and fit
-                model = instantiate(model_cfg, verbose=False)
+                model = instantiate(trail_model_cfg, verbose=False)
                 # no val_dataset included yet, but early stopping could require one ;)
                 model.fit(train_dataset)
 
@@ -162,7 +158,7 @@ class OptunaOptimizer:
                 val_metric = np.mean((val_dataset.targets - preds) ** 2)
 
                 val_metrics.append(val_metric)
-                log.info(f"Validation metric ({i}): {val_metrics}")
+                log.info(f"Validation metric ({i}): {val_metric}")
 
                 # Optional: Pruning based on intermediate folds
                 trial.report(np.mean(val_metrics), step=len(val_metrics) * (i + 1))

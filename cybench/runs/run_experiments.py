@@ -49,10 +49,8 @@ def main(cfg: ExperimentConfig):
         # check whether hyperparameter tuning is equipped:
         if "hp_search" in cfg:
             hp_optimizer = OptunaOptimizer(
-                hp_config=cfg.hp_search,
-                val_cfg=cfg.validation,
+                cfg=cfg,
                 dataset=train_dataset,
-                base_model_cfg=cfg.model,
                 path=split_path,
                 study_name="_".join(split_path.split("\\")[-2:])
             )

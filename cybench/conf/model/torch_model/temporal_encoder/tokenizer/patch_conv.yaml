@@ -6,10 +6,9 @@ embed_dim: ${model.torch_model.embed_dim}
 
 use_seasonal_embedding: false
 
-# standard weekly patch embeddings
-# The window_factor determines the kernel_size = patch_size * window_factor
+# patch embeddings
+# for simplicity the window size is eqaul the patch size
 patch_size: 7
-window_factor: 1
 
 # Search space for hyperparameter tuning
 _search_:
@@ -18,7 +17,3 @@ _search_:
     low: 1
     high: 9
     step: 2
-  #window_factor:
-  #  type: int
-  #  low: 1
-  #  high: 2
