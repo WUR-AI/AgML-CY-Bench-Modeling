@@ -1,6 +1,6 @@
 defaults:
   - torch_model: late_fusion_network
-  - augmentation: all
+  - augmentation: extensive
   - optimizer: adamw
   - scheduler: cosine_warmup
   - override torch_model/temporal_encoder/processor: transformer # overriding the default processor to cnn

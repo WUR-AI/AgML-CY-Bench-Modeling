@@ -1,0 +1,37 @@
+_target_: cybench.models.torch.utils.augmentation.AugmentationComposer
+
+augmentations:
+  time_clipping:
+    _target_: cybench.models.torch.utils.augmentation.TimeSeriesClipping
+    start: 10
+    end: 10
+    _search_:
+      start:
+        type: int
+        low: 0
+        high: 50
+        step: 10
+      end:
+        type: int
+        low: 0
+        high: 50
+        step: 10
+
+  gaussian_noise:
+    _target_: cybench.models.torch.utils.augmentation.GaussianNoiseTimeSeries
+    std: 0.02
+    _search_:
+      std:
+        type: float
+        low: 1e-3
+        high: 0.1
+        log: true 
+
+  year_noise:
+    _target_: cybench.models.torch.utils.augmentation.YearUniformNoise
+    noise_range: 0.15
+    _search_:
+      noise_range:
+        type: float
+        low: 0.00
+        high: 0.3

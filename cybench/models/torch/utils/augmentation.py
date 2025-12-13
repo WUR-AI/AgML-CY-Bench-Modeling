@@ -1,6 +1,8 @@
 import torch
 import numpy as np
-from typing import List, Tuple, Any, Optional
+from typing import List, Tuple, Any, Optional, Union, Dict
+
+from omegaconf import DictConfig
 
 
 class TimeSeriesClipping:
@@ -135,16 +137,21 @@ class YearUniformNoise:
 
 class AugmentationComposer:
     """
-    Composes multiple augmentations and applies them sequentially on a batch.
-    Also serves as the collate function for DataLoader.
+    Composes multiple augmentations.
+    Now supports both List (positional) and Dict (named) configurations.
     """
 
-    def __init__(self, augmentations: List[Any]):
-        """
-        Args:
-            augmentations: List of augmentation instances to apply sequentially
-        """
-        self.augmentations = augmentations
+    def __init__(self, augmentations: Union[List[Any], Dict[str, Any], DictConfig]):
+        # Handle Dictionary (extract values)
+        if isinstance(augmentations, (dict, DictConfig)):
+             # Sorting by key ensures deterministic order if that matters,
+             # otherwise .values() is usually insertion-ordered in modern Python.
+            self.augmentations = list(augmentations.values())
+        # Handle List
+        elif isinstance(augmentations, list):
+            self.augmentations = augmentations
+        else:
+            raise TypeError(f"Augmentations must be List or Dict, got {type(augmentations)}")
 
     def __call__(self,
                  batch_list: List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]],

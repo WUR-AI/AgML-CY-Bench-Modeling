@@ -1,7 +1,7 @@
 defaults:
   - torch_model: late_fusion_network
   - optimizer: adamw
-  - augmentation: all
+  - augmentation: extensive
   - scheduler: cosine_warmup
   - _self_
 
