@@ -1,10 +1,10 @@
+from datetime import datetime
+
 import pandas as pd
 import numpy as np
 import torch
 
-from cybench.datasets.features import dekad_from_date, unpack_time_series
 from cybench.datasets.normalizer import Normalizer
-from cybench.util.data import data_to_pandas
 from cybench.config import (
     KEY_LOC,
     KEY_YEAR,
@@ -12,10 +12,50 @@ from cybench.config import (
     KEY_TARGET,
     CROP_CALENDAR_DOYS,
     CROP_CALENDAR_DATES,
-    TIME_SERIES_INPUTS,
-    TIME_SERIES_PREDICTORS,
-    TIME_SERIES_AGGREGATIONS,
 )
+
+
+
+def fortnight_from_date(dt: datetime):
+    """Get the fortnight number from date.
+
+    Args:
+      dt: date
+
+    Returns:
+      Fortnight number, "YYYY0101" to "YYYY0115" -> 1.
+    """
+    month = dt.month
+    day_of_month = dt.day
+    fortnight_number = (month - 1) * 2
+    if day_of_month <= 15:
+        return fortnight_number + 1
+    else:
+        return fortnight_number + 2
+
+
+def dekad_from_date(dt: datetime):
+    """Get the dekad number from date.
+
+    Args:
+      dt: date
+
+    Returns:
+      Dekad number, e.g. "YYYY0101" to "YYYY0110" -> 1,
+                         "YYYY0111" to "YYYY0120" -> 2,
+                         "YYYY0121" to "YYYY0131" -> 3
+    """
+    month = dt.month
+    day_of_month = dt.day
+    dekad = (month - 1) * 3
+    if day_of_month <= 10:
+        dekad += 1
+    elif day_of_month <= 20:
+        dekad += 2
+    else:
+        dekad += 3
+
+    return dekad
 
 
 def add_cutoff_days(df: pd.DataFrame, end_of_sequence: str):
@@ -113,6 +153,8 @@ def compute_crop_season_window(df, min_year, max_year, start_of_sequence, end_of
 
 def ensure_same_categories_union(df_1, df_2, cat_key=KEY_LOC):
     """Ensures that cat_key has the same categories in both DataFrames, using the union of unique values."""
+    df_1 = df_1.copy()
+    df_2 = df_2.copy()
 
     # Convert cat_key to categorical in both DataFrames
     if cat_key in df_1.columns:
@@ -120,7 +162,6 @@ def ensure_same_categories_union(df_1, df_2, cat_key=KEY_LOC):
     if cat_key in df_2.columns:
         df_2[cat_key] = df_2[cat_key].astype("category")
 
-    # Combine unique values
     if cat_key in df_1.columns and cat_key in df_2.columns:
         unique_values_df_1 = df_1[cat_key].unique()
         unique_values_df_2 = df_2[cat_key].unique()
@@ -409,8 +450,7 @@ def align_inputs_and_labels(df_y: pd.DataFrame, dfs_x: dict) -> tuple:
     index_y_locations = set([loc_id for loc_id, _ in index_y_selection])
     index_y_years = set([year for _, year in index_y_selection])
 
-    for x in dfs_x:
-        df_x = dfs_x[x]
+    for dataset_name, df_x in dfs_x.items():
         if len(df_x.index.names) == 1:
             df_x = df_x.loc[list(index_y_locations)]
 
@@ -420,13 +460,16 @@ def align_inputs_and_labels(df_y: pd.DataFrame, dfs_x: dict) -> tuple:
         if len(df_x.index.names) == 3:
             index_names = df_x.index.names
             df_x.reset_index(inplace=True)
+            # filter by location
+            df_x = df_x[df_x.adm_id.isin(index_y_locations)]
+            # filter by year
             df_x = df_x[
                 (df_x[KEY_YEAR] >= min(index_y_years))
                 & (df_x[KEY_YEAR] <= max(index_y_years))
             ]
             df_x.set_index(index_names, inplace=True)
 
-        dfs_x[x] = df_x
+        dfs_x[dataset_name] = df_x
 
     return df_y, dfs_x
 
@@ -453,71 +496,6 @@ def interpolate_time_series_data(
     df_ts = df_ts.groupby([KEY_LOC, KEY_YEAR], group_keys=False).apply(
         lambda group: group.interpolate(method="linear", limit_direction="both")
     )
-    return df_ts
-
-
-def interpolate_time_series_data_items(X: list, max_season_window_length: int):
-    """Add dates covering season window length and interpolate to fill in NAs.
-
-    Args:
-        X (list): data samples
-        max_season_window_length (int): maximum season window length
-
-    Returns:
-        pd.DataFrame with interpolated data
-    """
-    ts_inputs = []
-    for x, ts_cols in TIME_SERIES_INPUTS.items():
-        df = data_to_pandas(X, [KEY_LOC, KEY_YEAR, KEY_DATES] + ts_cols)
-        df = unpack_time_series(df, ts_cols)
-        df.set_index([KEY_LOC, KEY_YEAR, "date"], inplace=True)
-        df = df.astype({k: "float" for k in ts_cols})
-        ts_inputs.append(df)
-
-    df_crop_season = data_to_pandas(X, [KEY_LOC, KEY_YEAR] + CROP_CALENDAR_DATES)
-    df_crop_season.set_index([KEY_LOC, KEY_YEAR], inplace=True)
-    df_ts = interpolate_time_series_data(
-        ts_inputs, df_crop_season, max_season_window_length
-    )
-
-    return df_ts
-
-
-def aggregate_time_series_data(df_ts: pd.DataFrame, aggregate_time_series_to: str):
-    """Aggregate time series data to the specified resolution.
-
-    Args:
-        df_ts (pd.DataFrame): time series data in daily resolution
-        aggregate_time_series_to (str): resolution of aggregated data
-
-    Returns:
-        pd.DataFrame with interpolated data
-    """
-    if aggregate_time_series_to not in ["week", "dekad"]:
-        raise Exception(
-            f"Unsupported time series aggregation resolution {aggregate_time_series_to}"
-        )
-
-    if "date" not in df_ts.columns:
-        assert "date" in df_ts.index.names
-        df_ts.reset_index(inplace=True)
-
-    assert "date" in df_ts.columns
-    if aggregate_time_series_to == "week":
-        df_ts["week"] = df_ts["date"].dt.isocalendar().week
-    else:
-        df_ts["dekad"] = df_ts.apply(lambda r: dekad_from_date(r["date"]), axis=1)
-
-    ts_aggrs = {k: TIME_SERIES_AGGREGATIONS[k] for k in TIME_SERIES_PREDICTORS}
-    # Primarily to avoid losing the "date" column.
-    ts_aggrs["date"] = "min"
-    df_ts = (
-        df_ts.groupby([KEY_LOC, KEY_YEAR, aggregate_time_series_to], observed=True)
-        .agg(ts_aggrs)
-        .reset_index()
-    )
-    df_ts.drop(columns=[aggregate_time_series_to], inplace=True)
-
     return df_ts
 
 

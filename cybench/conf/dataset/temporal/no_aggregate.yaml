@@ -12,28 +12,39 @@ season:
 sources:
   meteo:
     name: meteo
-    features:
+    select:
       - tmin
       - tmax
       - tavg
       - prec
       - rad
+      - cwb
       - et0
       - vpd
-      - cwb
 
   ndvi:
     name: ndvi
-    features:
+    select:
       - ndvi
 
   fpar:
     name: fpar
-    features:
+    select:
       - fpar
 
   soil_moisture:
     name: soil_moisture
-    features:
+    select:
       - ssm
       - rsm
+
+  #standardized_indices:
+  #  name: standardized_indices
+  #  select:
+  #    - sti1
+  #    - spi1
+  #    - spi6
+  #    - sssm1
+  #    - sssm6
+  #    - srsm1
+  #    - srsm6

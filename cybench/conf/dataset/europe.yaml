@@ -1,13 +1,46 @@
 defaults:
+  - _self_
   - target: yield
+  - crop: maize
   - non_temporal: geometric_transform
-  - temporal: aggregate
+  - temporal: no_aggregate
+  - normalizer: fit
 
-# set crop and country | optionally: set multiple countries such as in europe.yaml
+
+# set crop and country
 crop: maize
 country:
   - NL
   - FR
+  - DE
+  - PL
+  - ES
+  - IT
+  - AT
+  - BE
+  - BG
+  - CZ
+  - DK
+  - EL
+  - HR
+  - HU
+  - LT
+  - RO
+  - SE
+  - SK
 
 # name will show in experiment name
 name: europe
+
+# years to be considered
+min_year: 2000
+max_year: 2024
+
+# framework is auto-resolved from the model config (model.framework: pandas or torch)
+# pandas - creates Dataset instance ready for tabular frameworks such as Sklearn or XGBoost. Call: X, y = dataset.make_X_y() # TODO
+# torch  - creates TorchDataset - a wrapper for compatibility with torch DataLoader objects
+framework: ${model.framework}
+
+# Optional: (true or false) whether to cache the final dataset or load the cached dataset if it got created before
+# This creates extra files in cybench/data/cache/ but can save a lot of time when running multiple experiments on the same data
+use_cache: true

@@ -4,7 +4,7 @@ n_trials: 100
 timeout: 14400  # 4 hours
 n_jobs: ${experiment.n_jobs}
 seed: ${experiment.seed}
-repetitions: 2
+repetitions: 1
 
 sampler:
   _target_: optuna.samplers.TPESampler
@@ -12,6 +12,18 @@ sampler:
   n_startup_trials: 25
   multivariate: true
   warn_independent_sampling: true
+
+pruner:
+  - _target_: optuna.pruners.NopPruner
+  #- _target_: optuna.pruners.ThresholdPruner
+  #  upper: 5
+  #- _target_: optuna.pruners.MedianPruner
+  #  n_startup_trials: 5
+  #  n_warmup_steps: 0
+  #  interval_steps: 1
+
+# HPO transfer: Will try the top 10 trials from last year before exploring
+enqueue_n_best: 10
 
 storage:
   url: sqlite:///optuna_studies.db

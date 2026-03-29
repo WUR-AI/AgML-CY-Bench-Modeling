@@ -2,7 +2,7 @@ _target_: cybench.models.torch.model_components.temporal_encoder.LSTMProcessor
 
 embed_dim: ${model.torch_model.embed_dim}
 
-num_layers: 4        # LSTM layers
+num_layers: 1        # LSTM layers
 dropout: 0.2         # only used if num_layers > 1
 bidirectional: false # if true, internal H is 2*embed_dim and projected back
 
@@ -10,8 +10,11 @@ _search_:
   num_layers:
     type: int
     low: 1
-    high: 4
+    high: 6
   dropout:
     type: float
     low: .0
-    high: .8
+    high: .5
+  bidirectional:
+    type: categorical
+    choices: [false, true]

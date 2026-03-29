@@ -81,7 +81,7 @@ class GaussianNoiseTimeSeries:
         y, x_ctx, x_ts, doy_ts = batch
 
         # Generate noise for entire batch at once
-        noise = torch.randn_like(x_ts) * self.std
+        noise = torch.randn_like(x_ts, device=x_ts.device) * self.std
 
         return y, x_ctx, x_ts + noise, doy_ts
 
@@ -95,7 +95,7 @@ class YearUniformNoise:
     def __init__(self, noise_range: float):
         """
         Args:
-            noise_range: The bound for the uniform noise. Noise is drawn from U(-noise_range, noise_range).
+            noise_range: The bound for the uniform noise. Noise is drawn from U(-noise_range/2, noise_range/2).
         """
         self.noise_range = noise_range
 
@@ -117,14 +117,13 @@ class YearUniformNoise:
         year_index = None
         if "context_columns" in kwargs:
             year_indices = np.where(kwargs["context_columns"] == "year")[0]
-            if len(year_indices) > 0:
-                year_index = year_indices[0]
+            if len(year_indices) == 0: return batch
+            year_index = year_indices[0]
 
-        if year_index is not None:
             batch_size = x_ctx.shape[0]
 
             # Draw noise for entire batch at once: U(-noise_range, noise_range)
-            noise = (torch.rand(batch_size) * 2 * self.noise_range) - self.noise_range
+            noise = (torch.rand(batch_size, device=x_ctx.device) * self.noise_range) - self.noise_range / 2
 
             # Clone context to avoid in-place modification
             x_ctx_aug = x_ctx.clone()

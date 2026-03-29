@@ -1,7 +1,8 @@
-_target_: path_to.XGBRegressor
+_target_: cybench.models.gradient_boosting_models.XGBoostModel
 name: xgboost
+framework: pandas
 
-# default parameter
+# default parameters (forwarded to xgboost XGBRegressor)
 n_estimators: 100
 max_depth: 6
 learning_rate: 0.3
@@ -12,16 +13,16 @@ min_child_weight: 1
 gamma: 0
 reg_alpha: 0
 reg_lambda: 1
-random_state: ${experiment.seed}
 n_jobs: -1
 tree_method: auto
+verbosity: 0
 
 # parameter range for hyperparameter optimization
-_search_space:
+_search_:
   n_estimators:
     type: int
     low: 50
-    high: 500
+    high: 1000
     step: 50
   max_depth:
     type: int

@@ -1,0 +1,18 @@
+_target_: cybench.models.trend_models.TrendModel
+name: trend
+framework: pandas
+
+# default parameters (forwarded to TrendModel)
+min_trend_window: 5
+max_trend_window: 10
+
+# parameter range for hyperparameter optimization
+_search_:
+  min_trend_window:
+    type: int
+    low: 3
+    high: 8
+  max_trend_window:
+    type: int
+    low: 5
+    high: 20

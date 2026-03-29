@@ -1,7 +1,6 @@
 _target_: cybench.models.torch.model_components.temporal_encoder.CNNProcessor
 
 # embed_dim is usually tied to the model's main embedding size.
-# Replace ${model.embed_dim} with whatever your config uses.
 embed_dim: ${model.torch_model.embed_dim}
 
 num_layers: 2        # number of Conv1d layers
@@ -13,11 +12,11 @@ _search_:
   num_layers:
     type: int
     low: 1
-    high: 4
+    high: 6
   kernel_size:
     type: int
     low: 3
-    high: 7
+    high: 9
     step: 2
   dropout:
     type: float

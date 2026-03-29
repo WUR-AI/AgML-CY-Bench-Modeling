@@ -1,23 +1,139 @@
 import logging
 import os
+import re
+import copy
+import threading
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any, Dict, Union, Optional, List
 
 import hydra
 import numpy as np
 import optuna
+import torch
 import yaml
 from hydra.utils import instantiate
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, ListConfig
 
 from cybench.util.config_utils import set_seed
-from cybench.config import ValidationConfig, ExperimentConfig
 from cybench.datasets.dataset import Dataset
 from cybench.util.validation import get_splits
 from cybench.util.config_utils import remove_search_keys
 
 log = logging.getLogger(__name__)
 
+#### Custom Multi Pruner
+
+class SequentialPruner(optuna.pruners.BasePruner):
+    """Apply pruners in order; first one that wants to prune wins."""
+    def __init__(self, pruners):
+        self._pruners = list(pruners)
+
+    def prune(self, study, trial) -> bool:
+        return any(p.prune(study, trial) for p in self._pruners)
+
+def build_pruner(cfg_pruner):
+    if cfg_pruner is None:
+        return optuna.pruners.NopPruner()
+
+    # list of pruners
+    if isinstance(cfg_pruner, (list, ListConfig)):
+        pruners = [instantiate(p) for p in cfg_pruner]
+        if len(pruners) == 1:
+            return pruners[0]
+        return SequentialPruner(pruners)
+
+    # single pruner
+    return instantiate(cfg_pruner)
+
+
+def _extract_search_space(cfg: Union[DictConfig, Any], prefix: str = "") -> dict:
+    """
+    Recursively extract all _search_: definitions from a config, keyed by their
+    dotted parameter path (e.g. "epochs", "dataloader.batch_size").
+    Returns a flat dict suitable for saving as search_space.yaml.
+    """
+    result = {}
+    if isinstance(cfg, DictConfig):
+        for key, value in cfg.items():
+            if key == "_search_":
+                for param_name, param_details in value.items():
+                    full_name = f"{prefix}.{param_name}" if prefix else param_name
+                    result[full_name] = OmegaConf.to_container(param_details, resolve=True)
+            elif isinstance(value, DictConfig):
+                new_prefix = f"{prefix}.{key}" if prefix else key
+                result.update(_extract_search_space(value, new_prefix))
+    return result
+
+
+def load_previous_best_trials(storage: str, current_study_name: str, n_best: Optional[int] = None) -> Optional[
+    List[optuna.trial.FrozenTrial]]:
+    """
+    Load a previously saved study (t-1) from storage if it exists, filtering for the best trials.
+    Regex logic: Looks strictly at the LAST 4 digits as the year, treating everything before as the prefix.
+    """
+    # 1. Flexible Regex: Capture everything (Group 1) up until the last 4 digits (Group 2)
+    # ^(.*)    -> Group 1: The Prefix (Greedy, includes separators like _ or /)
+    # (\d{4})$ -> Group 2: The Year (Last 4 digits)
+    match = re.search(r"^(.*)(\d{4})$", current_study_name)
+
+    if not match:
+        log.warning(f"Could not parse year from study name: {current_study_name}. Warm start disabled.")
+        return None
+
+    # FIX: Unpack explicitly. Group 2 is the year.
+    prefix = match.group(1)
+    year_str = match.group(2)
+
+    try:
+        current_year = int(year_str)
+    except ValueError:
+        log.warning(f"Failed to convert year '{year_str}' to int.")
+        return None
+
+    target_year = current_year - 1
+
+    # 2. Reconstruct the Target Name
+    # We simply append the (year - 1) to the exact prefix we found.
+    # e.g. "path/to/2020" -> prefix="path/to/" -> target="path/to/2019"
+    # e.g. "exp_2020"     -> prefix="exp_"     -> target="exp_2019"
+    target_study_name = f"{prefix}{target_year}"
+
+    # 3. Check if this study exists in storage
+    summaries = optuna.get_all_study_summaries(storage=storage)
+    study_exists = any(s.study_name == target_study_name for s in summaries)
+
+    if not study_exists:
+        log.info(f"No previous study found: {target_study_name} (derived from {current_study_name})")
+        return None
+
+    log.info(f"Loading source trials from previous study: {target_study_name}")
+    try:
+        previous_study = optuna.load_study(study_name=target_study_name, storage=storage)
+    except Exception as e:
+        log.warning(f"Failed to load previous study {target_study_name}: {e}")
+        return None
+
+    # 4. Filter for COMPLETE trials only
+    valid_trials = [t for t in previous_study.trials if
+                    t.state == optuna.trial.TrialState.COMPLETE and t.value is not None]
+
+    if not valid_trials:
+        log.warning(f"Previous study {target_study_name} has no complete trials. Warm start skipped.")
+        return None
+
+    # 5. Filter n_best
+    if n_best is not None and n_best > 0:
+        # Sort based on direction (Assuming minimization for Loss)
+        valid_trials.sort(key=lambda t: t.value, reverse=False)
+
+        original_count = len(valid_trials)
+        valid_trials = valid_trials[:n_best]
+        log.info(f"Filtered top {len(valid_trials)}/{original_count} trials from {target_year} for warm start.")
+
+    return valid_trials
+
+
+####
 
 class OptunaOptimizer:
     """
@@ -28,7 +144,7 @@ class OptunaOptimizer:
     keys, and the storage of the optimal configuration.
 
     Args:
-        cfg (ExperimentConfig): Configuration containing hp_config (Optuna settings), val_cfg (for val-splitting) &
+        cfg: Configuration containing hp_config (Optuna settings), val_cfg (for val-splitting) &
                                 model_cfg (model plus `_search_` keys to be optimized)
         dataset (Dataset): The dataset instance to be used for optimization.
         path (str): Directory path where the `optimal_model.yaml` will be stored.
@@ -37,11 +153,23 @@ class OptunaOptimizer:
 
     def __init__(
             self,
-            cfg: ExperimentConfig,
+            cfg,
             dataset: Dataset,
             path: str,
             study_name: str
     ):
+        self.multi_gpu = False
+        if cfg.experiment.n_jobs > 1:
+            if cfg.experiment.device == "cuda":
+                # check whether there are enough GPUs for parallel trials
+                self._n_gpus = torch.cuda.device_count()
+                assert self._n_gpus >= 1, f"No GPU found. Check cuda installation or fallback to CPU: in config.yaml change experiment.device=cpu."
+                assert self._n_gpus == cfg.experiment.n_jobs, f"Number of available GPUs ({self._n_gpus}) is not equal to number of parallel jobs ({cfg.experiment.n_jobs}). Match those numbers to achieve optimal runtime and utilization."
+                # assign multi-GPU scheduling state
+                self._gpu_active_trials = [0] * self._n_gpus
+                self._gpu_lock = threading.Lock()
+                self.multi_gpu = True
+
         self.cfg = cfg
         self.hp_config = cfg.hp_search
         self.val_cfg = cfg.validation
@@ -62,28 +190,75 @@ class OptunaOptimizer:
         """
         log.info(f"Starting Optuna optimization: {self.study_name}")
 
-        # 1. Setup Optuna Storage and Sampler
+        # 1. Setup Optuna Storage, Sampler & Pruner
         storage = self.hp_config.storage.url if self.hp_config.get("storage") else None
 
-        if "sampler" in self.hp_config:
-            sampler = instantiate(self.hp_config.sampler)
+        # 2. Create Pruner
+        if "pruner" in self.hp_config and self.hp_config.pruner is not None:
+            pruner = build_pruner(self.hp_config.pruner)
         else:
+            pruner = None
+
+        # 3. Get transfer parameters for sampler
+        n_warmup = self.hp_config.get("n_warmup_best", 0)
+        n_enqueue = self.hp_config.get("enqueue_n_best", 0)
+        n_warmup_trials = None
+        n_enqueue_trials = None
+        if n_warmup and storage:
+            n_warmup_trials = load_previous_best_trials(storage, self.study_name, n_warmup)
+        if n_enqueue and storage:
+            n_enqueue_trials = load_previous_best_trials(storage, self.study_name, n_enqueue)
+        # further the finetuning might shrink the amount of necessary trials
+        n_finetune_trials = self.hp_config.get("n_finetune_trials", 0)
+        # Check if we successfully loaded ANY previous knowledge
+        has_prior_knowledge = (n_warmup_trials is not None and len(n_warmup_trials) > 0) or \
+                              (n_enqueue_trials is not None and len(n_enqueue_trials) > 0)
+
+        if n_finetune_trials and has_prior_knowledge:
+            log.info(f"Transfer successful. Reducing trials to n_finetune_trials={n_finetune_trials}")
+            n_trials = n_finetune_trials
+            # Ensure we have at least 1 startup trial to register search space if using pure warm start
+            self.hp_config.sampler.n_startup_trials = 1
+        else:
+            n_trials = self.hp_config.get("n_trials", 100)
+
+        # 4. Create Sampler
+        if "sampler" in self.hp_config:
+            # We explicitly check the target to decide how to instantiate: CmaEsSampler
+            is_cma = "CmaEsSampler" in self.hp_config.sampler.get("_target_", "")
+
+            if is_cma and n_warmup > 0 and n_warmup_trials:
+                # CMA-ES: Pass source_trials into __init__
+                sampler = instantiate(self.hp_config.sampler, source_trials=n_warmup_trials)
+                log.info(f"Initialized CMA-ES with {len(n_warmup_trials)} source trials.")
+            else:
+                # Standard Instantiation (TPE or CMA without history)
+                sampler = instantiate(self.hp_config.sampler)
+        else:
+            log.info("No sampler specified: falling back to `optuna.samplers.TPESampler`. Specifying sampler is recommended.")
             sampler = optuna.samplers.TPESampler(seed=self.hp_config.seed)
 
-        # 2. Create Study
+        # 5. Create Study
         study = optuna.create_study(
             study_name=self.study_name,
             storage=storage,
             sampler=sampler,
-            pruner=optuna.pruners.ThresholdPruner(upper=self.dataset.targets.var()),
+            pruner=pruner,
             load_if_exists=self.hp_config.storage.get("load_if_exists", True),
-            direction="minimize"  # Assuming loss minimization; make configurable if needed
+            direction="minimize"
         )
 
-        # 3. Optimize
+        # 6. Enqueue the best previous trails
+        if n_enqueue:
+            if n_enqueue_trials:
+                log.info(f"Enqueueing {len(n_enqueue_trials)} best trials for TPE warm start.")
+                for t in n_enqueue_trials:
+                    study.enqueue_trial(t.params)
+
+        # 7. Optimize
         study.optimize(
             self._objective,
-            n_trials=self.hp_config.get("n_trials", 100),
+            n_trials=n_trials,
             timeout=self.hp_config.get("timeout", None),
             n_jobs=self.hp_config.get("n_jobs", 1),
             show_progress_bar=self.hp_config.logging.get("show_progress_bar", True)
@@ -91,7 +266,7 @@ class OptunaOptimizer:
 
         log.info(f"Optimization finished. Best trial: {study.best_trial.params}")
 
-        # 4. Reconstruct and Save Best Config
+        # 8. Reconstruct and Save Best Config
         # We use a FixedTrial with the best params to reconstruct the full config structure
         best_trial = optuna.trial.FixedTrial(study.best_params)
         best_config = self.cfg.copy()
@@ -108,6 +283,13 @@ class OptunaOptimizer:
         with open(output_file, "w") as f:
             OmegaConf.save(best_model_config, f)
 
+        # Save search space metadata for post-hoc boundary analysis
+        search_space = _extract_search_space(self.cfg.model)
+        if search_space:
+            ss_file = self.path / "search_space.yaml"
+            OmegaConf.save(OmegaConf.create(search_space), ss_file)
+            log.info(f"Search space metadata saved to: {ss_file}")
+
         log.info(f"Optimal model config saved to: {output_file}")
 
         return best_model_config
@@ -122,50 +304,67 @@ class OptunaOptimizer:
         5. Returns the mean validation metric.
         """
         # Deep copy to avoid modifying the original config for other trials
-        cfg_copy = self.cfg.copy()
+        cfg_copy = copy.deepcopy(self.cfg)
 
         # Apply suggested parameters to the config
         self._resolve_search_space(cfg_copy, trial)
-        trail_model_cfg = cfg_copy.model
+        trial_model_cfg = cfg_copy.model
 
         # Instantiate model with specific trial configuration
-        trail_model_cfg = remove_search_keys(trail_model_cfg)
+        trial_model_cfg = remove_search_keys(trial_model_cfg)
+
+        if self.multi_gpu:
+            device = self._assign_gpu()
+            log.debug(
+                f"[Trial {trial.number}] | device={device} | "
+                f"thread={threading.current_thread().name} | "
+                f"gpu_load={self._gpu_active_trials}"  # e.g. [2, 1, 1, 1]
+            )
+            trial_model_cfg["device"] = device
 
         val_metrics = []
+        try:
+            for i in range(self.hp_config.repetitions):
+                set_seed(self.hp_config.seed + i)
 
-        for i in range(self.hp_config.repetitions):
-            set_seed(self.hp_config.seed + i)
+                # Get validation splits (Using the 'val' set of the current dataset)
+                splits = get_splits(
+                    cfg=self.val_cfg,
+                    which="val",
+                    dataset_years=self.dataset.years,
+                    seed=self.hp_config.seed
+                )
 
-            # Get validation splits (Using the 'val' set of the current dataset)
-            splits = get_splits(
-                cfg=self.val_cfg,
-                which="val",
-                dataset_years=self.dataset.years,
-                seed=self.hp_config.seed
-            )
+                for train_years, val_years in splits:
+                    train_dataset, val_dataset = self.dataset.split_on_years((train_years, val_years))
 
-            for train_years, val_years in splits:
-                train_dataset, val_dataset = self.dataset.split_on_years((train_years, val_years))
+                    if "pretrained_from" in trial_model_cfg:
+                        # append the test-year to the model config, so that it loads the model that only trained on years before the test-year
+                        trial_model_cfg["test_years"] = [int(year) for year in val_years]
 
-                # Instantiate and fit
-                model = instantiate(trail_model_cfg, verbose=False)
-                # no val_dataset included yet, but early stopping could require one ;)
-                model.fit(train_dataset)
+                    # Instantiate and fit
+                    model = instantiate(trial_model_cfg, verbose=False)
+                    if "early_stopping" in trial_model_cfg:
+                        model.fit(train_dataset, val_dataset=val_dataset)
+                    else:
+                        model.fit(train_dataset)
 
-                # Predict and Evaluate
-                preds, _ = model.predict(val_dataset)
-                assert preds.ndim == val_dataset.targets.ndim, f"The model output shape {preds.shape} does not match {val_dataset.shape}"
-                val_metric = np.mean((val_dataset.targets - preds) ** 2)
+                    # Predict and Evaluate
+                    preds, _ = model.predict(val_dataset)
+                    assert preds.ndim == val_dataset.targets.ndim, f"The model output shape {preds.shape} does not match {val_dataset.shape}"
+                    val_metric = np.mean((val_dataset.targets - preds) ** 2)
 
-                val_metrics.append(val_metric)
-                log.info(f"Validation metric ({i}): {val_metric}")
+                    val_metrics.append(val_metric)
+                    log.debug(f"Validation metric ({i} / {val_years}): {val_metric}")
 
-                # Optional: Pruning based on intermediate folds
-                trial.report(np.mean(val_metrics), step=len(val_metrics) * (i + 1))
-                if trial.should_prune():
-                    raise optuna.TrialPruned()
-
-        return float(np.mean(val_metrics))
+                    # Optional: Pruning based on intermediate folds
+                    trial.report(float(np.mean(val_metrics)), step=len(val_metrics))
+                    if trial.should_prune():
+                        raise optuna.TrialPruned()
+            return float(np.mean(val_metrics))
+        finally:
+            if self.multi_gpu:
+                self._release_gpu(device)
 
     def _resolve_search_space(
             self,
@@ -220,3 +419,20 @@ class OptunaOptimizer:
                     # Recurse
                     new_prefix = f"{prefix}.{key}" if prefix else key
                     self._resolve_search_space(value, trial, new_prefix)
+
+    def _assign_gpu(self) -> str:
+        """Pick the GPU with the fewest active trials."""
+        if self._n_gpus == 0:
+            return "cpu"
+        with self._gpu_lock:
+            gpu_id = int(np.argmin(self._gpu_active_trials))
+            self._gpu_active_trials[gpu_id] += 1
+            return f"cuda:{gpu_id}"
+
+    def _release_gpu(self, device: str) -> None:
+        """Decrement counter when trial finishes or fails."""
+        if device == "cpu":
+            return
+        gpu_id = int(device.split(":")[-1])
+        with self._gpu_lock:
+            self._gpu_active_trials[gpu_id] = max(0, self._gpu_active_trials[gpu_id] - 1)

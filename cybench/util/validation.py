@@ -1,14 +1,14 @@
+import logging
 from typing import Optional, List, Dict
 from zoneinfo import available_timezones
 
 import numpy as np
-from omegaconf import DictConfig
+from omegaconf import ListConfig
 
-from cybench.config import ValidationConfig
-
+log = logging.getLogger(__name__)
 
 def get_splits(
-        cfg: ValidationConfig,
+        cfg,
         which: str,
         dataset_years: set,
         seed: int = 42,
@@ -18,7 +18,7 @@ def get_splits(
     Yields (train_years, val_years) tuples
 
     Params:
-        cfg: ValidationConfig
+        cfg:
         which: either 'test' or 'val'
         dataset_years: the set of available years in the dataset to be split
         seed: random seed for all splitting requiring randomness
@@ -32,7 +32,8 @@ def get_splits(
     split_years = cfg.test_years if which == 'test' else cfg.val_years
 
     #### 1. Step: Identify the set of hold-out years
-    if isinstance(split_years, list):
+    if isinstance(split_years, ListConfig):
+        split_years = list(split_years)
         # test if year selection is available
         assert all([year in dataset_years for year in
                     split_years]), f"Selected test years ({split_years}) are not in dataset: {dataset_years}"
@@ -47,7 +48,19 @@ def get_splits(
         elif split_years.endswith('-last'):
             # Take k last years (e.g., "3-last")
             k = int(split_years.split('-')[0])
-            assert k <= len(dataset_years), f"Requested {k} last years but only {len(dataset_years)} available"
+
+            if (which == 'test'):
+                # test whether there are enough years are in the dataset
+                # subtract at least 1 year for training
+                available_test_years = len(dataset_years) - 1
+                # subtract the years needed for validation
+                if cfg.val_years.endswith('-last'):
+                    available_test_years = available_test_years - int(cfg.val_years.split('-')[0])
+
+                assert available_test_years, f"Your validation configuration doesnt fit to the number of available years. Only {len(dataset_years)} available"
+                if k > available_test_years:
+                    log.warning(f"Validation doesnt happen on {k} last years but only on the {available_test_years} available")
+                    k = available_test_years
             hold_out_years = dataset_years[-k:]
 
         elif split_years.endswith('%-split'):

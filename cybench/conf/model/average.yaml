@@ -1,0 +1,6 @@
+_target_: cybench.models.naive_models.AverageYieldModel
+name: average_yield
+framework: pandas
+
+# default parameters (forwarded to AverageYieldModel)
+group_by: admin # options: admin, country

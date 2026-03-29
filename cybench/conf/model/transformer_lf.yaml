@@ -9,6 +9,7 @@ defaults:
 # Root-level trainer configuration
 _target_: cybench.models.torch.trainer.TorchTrainer
 name: transformer_lf  # Updated name for logging/tracking
+framework: torch
 epochs: 100
 seed: ${experiment.seed}
 device: ${experiment.device}

@@ -1,0 +1,8 @@
+name: maize
+# Collect crop specific configurations
+
+# Growing degree day parameters
+# Used by the `gdd` create type — injected at runtime, not repeated in source configs
+gdd:
+  tbase: 10.0        # base temperature below which no development occurs (°C)
+  upper_limit: 35.0  # temperature above which GDD accumulation is capped (°C)

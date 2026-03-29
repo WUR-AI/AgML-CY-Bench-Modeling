@@ -1,7 +1,0 @@
-name: yield
-
-transform: null # optionally: log
-
-residualize:
-  level: admin # optionally: country, crop
-  methode: linear # optionally: average, quadratic, poly-5, rolling-average

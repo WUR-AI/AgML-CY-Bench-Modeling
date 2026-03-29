@@ -7,13 +7,16 @@ features:
     params:
       min: 2000
       max: 2025
+
+  # phenology
   sos:
-    type: minmax
+    type: standard
     params: null
   eos:
-    type: minmax
+    type: standard
     params: null
 
+  # location
   latitude:
     type: standard
     params: null
@@ -21,6 +24,7 @@ features:
     type: standard
     params: null
 
+  # soil
   awc:
     type: standard
     params: null
@@ -31,6 +35,7 @@ features:
     type: standard
     params: null   # categorical-but-numeric; encode earlier
 
+  # meteo
   tmin:
     type: standard
     params: null
@@ -53,6 +58,7 @@ features:
   cwb:
     type: logsinh
 
+  # vegetation
   ndvi:
     type: standard
     params: null
@@ -60,9 +66,69 @@ features:
     type: standard
     params: null
 
+  # soil moisture
   ssm:
     type: standard
     params: null
   rsm:
+    type: standard
+    params: null
+
+  # aggregated features
+  tmin_min:
+    type: standard
+    params: null
+  tmax_max:
+    type: standard
+    params: null
+  tavg_mean:
+    type: standard
+    params: null
+  rad_mean:
+    type: standard
+    params: null
+  et0_mean:
+    type: standard
+    params: null
+  vpd_mean:
+    type: standard
+    params: null
+  cwb_mean:
+    type: standard
+    params: null
+  gdd_sum:
+    type: standard
+    params: null
+  cum_gdd_max:
+    type: standard
+    params: null
+  cum_prec_max:
+    type: standard
+    params: null
+  cum_cwb_mean:
+    type: standard
+    params: null
+  prec_sum:
+    type: standard
+    params: null
+  prec_max:
+    type: standard
+    params: null
+  ndvi_mean:
+    type: standard
+    params: null
+  cum_ndvi_max:
+    type: standard
+    params: null
+  fpar_mean:
+    type: standard
+    params: null
+  cum_fpar_max:
+    type: standard
+    params: null
+  ssm_mean:
+    type: standard
+    params: null
+  rsm_mean:
     type: standard
     params: null

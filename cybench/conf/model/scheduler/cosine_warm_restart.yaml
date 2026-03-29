@@ -3,3 +3,13 @@ _partial_: true
 T_0: 10  # Period of first restart
 T_mult: 1  # Factor to increase T_i after each restart
 eta_min: 1e-6
+
+_search_:
+  T_mult:
+    type: int
+    low: 1
+    high: 2
+  T_0:
+    type: int
+    low: 5
+    high: 20

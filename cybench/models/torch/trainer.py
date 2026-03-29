@@ -10,12 +10,14 @@ import logging
 import os
 import random
 import time
+from contextlib import nullcontext
 from functools import partial
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 import numpy as np
 import torch
 import torch.nn as nn
+from omegaconf import DictConfig
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -23,6 +25,7 @@ from tqdm import tqdm
 from cybench.datasets.torch_dataset import TorchDataset
 from cybench.models.model import BaseModel
 from cybench.models.torch.utils.augmentation import create_collate_fn, AugmentationComposer
+from cybench.models.torch.utils.early_stopping import EarlyStopping
 
 # init logger
 log = logging.getLogger(__name__)
@@ -31,55 +34,85 @@ class TorchTrainer(BaseModel):
     """
     High-level training and inference wrapper around a PyTorch model.
 
+    This trainer supports both training from scratch and transfer learning from
+    pretrained checkpoints. It provides flexible fine-tuning strategies including
+    linear probing, feature extraction, and selective layer freezing.
+
     Parameters
     ----------
-    torch_model:
-        The underlying PyTorch model (e.g. LateFusionNetwork) with
-        forward(context, temporal) -> (B,) or (B, 1).
-    optimizer:
+    name : str
+        Identifier for the trainer/model (used for logging and saving).
+    torch_model : nn.Module, optional
+        The underlying PyTorch model (e.g., ContextConditionalNetwork) with
+        forward(context, temporal, doy) -> (B,) or (B, 1).
+        Required if not using pretrained_from.
+    pretrained_from : DictConfig, optional
+        Configuration for loading a pretrained model. Required if torch_model is None.
+        Should contain:
+            - run_path: str, path to the pretrained run directory
+            - split: str, optional, specific split subfolder to load from
+            - non_transferred_modules: List[str], modules to keep randomly initialized
+            - freeze_modules: List[str], modules to freeze during training
+            - use_lora: bool, whether to apply LoRA adapters (not yet implemented)
+    test_years : List[int], optional
+        Test years used to locate the correct checkpoint when loading pretrained models.
+        Required when using pretrained_from.
+    optimizer : torch.optim.Optimizer or callable, optional
         Optimizer instance, Hydra partial function, or None (defaults to AdamW).
         If a partial function, it will be instantiated with model.parameters().
-    scheduler:
+    scheduler : torch.optim.lr_scheduler.LRScheduler or callable, optional
         LR scheduler instance, Hydra partial function, or None. If a partial
         function, it will be instantiated with the optimizer. When provided,
-        scheduler.step() is called after each training step.
-    loss_fn:
+        scheduler.step() is called after each epoch.
+    loss_fn : nn.Module, optional
         Loss function used for training. Defaults to MSELoss for regression.
-    device:
-        Device string, e.g. "cuda", "cuda:0", or "cpu".
-    dataloader:
-        A partial of a DataLoader including all parameters, except the dataset itself.
-    epochs:
-        Default number of training epochs can be overridden in `fit(...)`.
-    max_grad_norm:
-        If not None, gradients are clipped to this norm before optimizer.step().
-    verbose:
-        Decide whether to show progress bar or not.
+    device : str, optional
+        Device string, e.g. "cuda", "cuda:0", or "cpu". Auto-detects if None.
+    dataloader : callable, optional
+        A partial of a DataLoader including all parameters except the dataset itself.
+        Should be created using functools.partial or Hydra's _partial_: true.
+    augmentation : AugmentationComposer, optional
+        Augmentation strategy to apply during training. Applied via custom collate_fn.
+    epochs : int, default=100
+        Default number of training epochs. Can be overridden in fit().
+    max_grad_norm : float, optional, default=1.0
+        Maximum gradient norm for clipping. If None, no clipping is applied.
+        Helps prevent exploding gradients during training.
+    seed : int, default=42
+        Random seed for reproducibility. Used for checkpoint loading and initialization.
+    verbose : bool, default=False
+        If True, displays progress bar during training and additional logging.
     """
 
     def __init__(
         self,
         name: str,
-        torch_model: nn.Module,
+        torch_model: Optional[nn.Module] = None,
+        pretrained_from: Optional[DictConfig] = None,
+        test_years: Optional[List[int]] = None,
         optimizer = None,  # Could be Optimizer OR partial function OR None
         scheduler = None,  # Could be Scheduler OR partial function OR None
         loss_fn: Optional[nn.Module] = None,
         device: Optional[str] = None,
+        preload_to_device: Optional[bool] = False,
         dataloader: Optional[partial] = None,
         augmentation: AugmentationComposer = None,
         epochs: int = 100,
-        max_grad_norm: Optional[float] = None,
+        early_stopping: Optional[EarlyStopping] = None,
+        max_grad_norm: Optional[float] = 1,
         seed: int = 42,
         verbose: bool = False,
+        **kwargs
     ):
         self.name = name
         self.seed = seed
-        self.model = torch_model
         self.loss_fn = loss_fn or nn.MSELoss()
+        self.model = torch_model
 
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(device)
+        self.preload_to_device = preload_to_device
         self.model.to(self.device)
         log.info(f"Loaded {self.name} model | Size: {(sum(p.numel() for p in self.model.parameters()) * 1e-6):.3}M parameters")
 
@@ -106,6 +139,7 @@ class TorchTrainer(BaseModel):
         self.dataloader = dataloader or DataLoader
         self.augmentation = augmentation
         self.epochs = epochs
+        self.early_stopping = early_stopping
         self.max_grad_norm = max_grad_norm
         self.verbose = verbose
 
@@ -153,7 +187,12 @@ class TorchTrainer(BaseModel):
         """
         epochs = fit_params.get("epochs", self.epochs)
         val_dataset = fit_params.get("val_dataset", None)
-        val_every_n_epochs = fit_params.get("val_every_n_epochs", 5)
+        val_every_n_epochs = fit_params.get("val_every_n_epochs", 1)
+
+        if self.preload_to_device:
+            dataset = dataset.to(self.device)
+            if val_dataset is not None:
+                val_dataset = val_dataset.to(self.device)
 
         train_loader = self._create_dataloader(dataset, augment=True, shuffle=True)
         val_loader = (
@@ -164,11 +203,10 @@ class TorchTrainer(BaseModel):
 
         history = {"train_loss": [], "val_loss": []}
 
-        pbar = None
         if self.verbose:
-            print(f"Starting training for {epochs} epochs...")
-            total_batches = epochs * len(train_loader)  # Total iterations across all epochs
-            pbar = tqdm(total=total_batches, desc=f"{self.__class__.__name__}")
+            log.info(f"Starting training for {epochs} epochs...")
+        total_batches = epochs * len(train_loader)
+        pbar = tqdm(range(total_batches), desc=self.__class__.__name__) if self.verbose else None
 
         self.model.train()
         # TODO delete time tracking. Only for debugging
@@ -180,10 +218,11 @@ class TorchTrainer(BaseModel):
 
             for batch in train_loader:
                 y, x_ctx, x_ts, doy_ts = batch
-                y = y.to(self.device, non_blocking=True)
-                x_ctx = x_ctx.to(self.device, non_blocking=True)
-                x_ts = x_ts.to(self.device, non_blocking=True)
-                doy_ts = doy_ts.to(self.device, non_blocking=True)
+                if (not self.preload_to_device) and (self.device != "cpu"):
+                    y = y.to(self.device, non_blocking=True)
+                    x_ctx = x_ctx.to(self.device, non_blocking=True)
+                    x_ts = x_ts.to(self.device, non_blocking=True)
+                    doy_ts = doy_ts.to(self.device, non_blocking=True)
 
                 self.optimizer.zero_grad(set_to_none=True)
                 start = time.time()
@@ -216,24 +255,49 @@ class TorchTrainer(BaseModel):
             avg_loss = total_loss / num_batches
             history["train_loss"].append(avg_loss)
 
+            val_loss = None
             # Validate every N epochs
             if val_loader is not None and (epoch + 1) % val_every_n_epochs == 0:
-                self.model.eval()
                 val_loss = self._evaluate_loss(val_loader)
-                self.model.train()
                 history["val_loss"].append(val_loss)
-                if self.verbose:
-                    print(f"Validation loss: {val_loss} after epoch {epoch+1}")
+                # Check Early Stopping
+                if self.early_stopping is not None:
+                    self.early_stopping(val_loss, self.model)
+                    if self.early_stopping.early_stop:
+                        log.info("Early stopping triggered.")
+                        print(f"Early stopping triggered: after epoch {epoch+1}")
+                        break
             else:
                 history["val_loss"].append(None)
 
+            # Step Scheduler (ReduceLROnPlateau requires val loss)
             if self.scheduler is not None:
-                self.scheduler.step()
-        print("Forward and backward pass took", np.round(tt / (time.time() - start_training) * 100), "% of training time.")
+                if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    # Only step if we have a valid metric this epoch
+                    if val_loss is not None:
+                        self.scheduler.step(val_loss)
+                else:
+                    self.scheduler.step()
+
+            if self.verbose:
+                lr = self.optimizer.param_groups[0]['lr']
+                msg = f"Epoch {epoch + 1:4d}/{epochs} | train {avg_loss:.4f}"
+                if val_loss is not None:
+                    msg += f" | val {val_loss:.4f}"
+                msg += f" | lr {lr:.2e}"
+                tqdm.write(msg)
+
+        log.debug("Forward and backward pass took", np.round(tt / (time.time() - start_training) * 100), "% of training time.")
         if pbar is not None:
             pbar.close()
+
+        # Restore Best Weights (Critical Step)
+        if self.early_stopping is not None and self.early_stopping.best_model_state is not None:
+            log.info(f"Restoring best model weights (Loss: {self.early_stopping.best_loss:.3f})")
+            self.model.load_state_dict(self.early_stopping.best_model_state)
         return history
 
+    @torch.no_grad()
     def _evaluate_loss(self, dataloader: DataLoader) -> float:
         """
         Evaluate model loss on a dataloader.
@@ -248,62 +312,84 @@ class TorchTrainer(BaseModel):
         total_loss = 0.0
         total_samples = 0
 
-        with torch.no_grad():
-            for batch in dataloader:
-                y, x_ctx, x_ts, doy_ts = batch
+        for batch in dataloader:
+            y, x_ctx, x_ts, doy_ts = batch
+            if (not self.preload_to_device) and (self.device != "cpu"):
                 y = y.to(self.device, non_blocking=True)
                 x_ctx = x_ctx.to(self.device, non_blocking=True)
                 x_ts = x_ts.to(self.device, non_blocking=True)
                 doy_ts = doy_ts.to(self.device, non_blocking=True)
 
-                pred = self.model(x_ctx, x_ts, doy_ts)
-                if pred.ndim > 1:
-                    pred = pred.squeeze(-1)
+            pred = self.model(x_ctx, x_ts, doy_ts)
+            if pred.ndim > 1:
+                pred = pred.squeeze(-1)
 
-                loss = self.loss_fn(pred, y.squeeze(-1))
+            loss = self.loss_fn(pred, y.squeeze(-1))
 
-                # --- FIX STARTS HERE ---
-                # Get the actual size of this specific batch
-                current_batch_size = y.size(0)
+            # --- FIX STARTS HERE ---
+            # Get the actual size of this specific batch
+            current_batch_size = y.size(0)
 
-                # 1. "Undo" the mean reduction to get the total sum of errors for this batch
-                total_loss += loss.item() * current_batch_size
+            # 1. "Undo" the mean reduction to get the total sum of errors for this batch
+            total_loss += loss.item() * current_batch_size
 
-                # 2. Track the total number of samples seen
-                total_samples += current_batch_size
+            # 2. Track the total number of samples seen
+            total_samples += current_batch_size
 
-            # Calculate the true average over all samples
-            return total_loss / total_samples
+        self.model.train()
+        # Calculate the true average over all samples
+        return total_loss / total_samples
 
     # ------------------------------------------------------------------
     # Prediction
     # ------------------------------------------------------------------
 
-    def predict(self, dataset: TorchDataset, **kwargs) -> Tuple[np.ndarray, Dict[str, Any]]:
+    def predict(self,
+                dataset: TorchDataset,
+                **kwargs) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
         Run fitted model on dataset.
 
         Args:
             dataset: TorchDataset to predict on.
-            **kwargs: Additional parameters.
+            **kwargs: Additional parameters. Supported:
+                - inspector: ModelInspector instance. When provided, hooks are
+                  registered once around the entire dataloader loop and the
+                  concatenated results (one tensor per layer per key, spanning
+                  all batches) are returned under ``info["inspect_results"]``.
+
         Returns:
-            A tuple containing a np.ndarray of predictions and a dict with
-            additional information.
+            A tuple of:
+                - preds: np.ndarray of shape (N,) with model predictions.
+                - info: dict. Contains ``"inspect_results"`` when an inspector
+                  is supplied: ``Dict[layer_name, Dict[key, Tensor(N, ...)]]``.
         """
+        if self.preload_to_device:
+            dataset = dataset.to(self.device)
         dataloader = self._create_dataloader(dataset, augment=False, shuffle=False)
 
-        self.model.eval()
+        inspector = kwargs.get("inspector", None)
+        info: Dict[str, Any] = {}
         preds = []
 
-        with torch.no_grad():
+        self.model.eval()
+
+        # Wrap the entire loop in inspector.session() so hooks are registered
+        # once, buffers accumulate across all batches, and hooks are cleaned up
+        # when the loop finishes — regardless of exceptions.
+        session_ctx = inspector.session() if inspector is not None else nullcontext()
+
+        with torch.no_grad(), session_ctx:
             for batch in dataloader:
                 _, x_ctx, x_ts, doy_ts = batch
 
-                x_ctx = x_ctx.to(self.device, non_blocking=True)
-                x_ts = x_ts.to(self.device, non_blocking=True)
-                doy_ts = doy_ts.to(self.device, non_blocking=True)
+                if (not self.preload_to_device) and (self.device != "cpu"):
+                    x_ctx = x_ctx.to(self.device, non_blocking=True)
+                    x_ts = x_ts.to(self.device, non_blocking=True)
+                    doy_ts = doy_ts.to(self.device, non_blocking=True)
 
                 pred = self.model(x_ctx, x_ts, doy_ts)
+
                 if pred.ndim > 1:
                     pred = pred.squeeze(-1)
 
@@ -311,7 +397,9 @@ class TorchTrainer(BaseModel):
 
         preds = torch.cat(preds).numpy()
 
-        info = {} # TODO add whatever's interesting
+        if inspector is not None:
+            # results() cats all per-batch tensors → one tensor per layer/key
+            info["inspect_results"] = inspector.results()
 
         return preds, info
 
@@ -322,22 +410,32 @@ class TorchTrainer(BaseModel):
     # Persistence
     # ------------------------------------------------------------------
 
-    def save(self, path: str, seed: int):
+    def save(self, path: str, compress: bool = True, seed: Optional[int] = None):
         """
         Save model, optimizer, and training state to disk.
 
         Args:
             path: File path that will be used to save the model.
+            compress: Whether to compress the model or not, using half-precision (16bit)
+            seed: add seed to file name in case of multiple repetitions.
         """
+        model_state_dict = self.model.state_dict()
+        if compress:
+            # Half-precision
+            model_state_dict = {k: v.half() for k, v in model_state_dict.items()}
+
+
         checkpoint = {
-            "model_state_dict": self.model.state_dict(),
+            "model_state_dict": model_state_dict,
             "optimizer_state_dict": self.optimizer.state_dict(),
             "scheduler_state_dict": self.scheduler.state_dict() if self.scheduler else None,
-            "dataloader": self.dataloader,
             "epochs": self.epochs,
             "max_grad_norm": self.max_grad_norm,
         }
-        torch.save(checkpoint, os.path.join(path, self.name + f"_{seed}.pt"))
+        if seed is not None:
+            torch.save(checkpoint, os.path.join(path, self.name + f"_{seed}.pt"))
+        else:
+            torch.save(checkpoint, os.path.join(path, self.name + ".pt"))
 
     @classmethod
     def load(cls, model_path: str, model: nn.Module, optimizer: torch.optim.Optimizer, **kwargs):

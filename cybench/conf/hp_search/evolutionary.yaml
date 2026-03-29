@@ -1,0 +1,40 @@
+# Evolutionary optimization with CMA-ES
+# Best for continuous search spaces and capturing correlations between parameters.
+
+n_trials: 100
+timeout: 14400  # 4 hours
+n_jobs: ${experiment.n_jobs}
+seed: ${experiment.seed}
+repetitions: 1
+
+sampler:
+  _target_: optuna.samplers.CmaEsSampler
+  seed: ${experiment.seed}
+  n_startup_trials: 20
+
+  # IPOP-CMA-ES (Increasing Population) is generally more robust than default CMA-ES
+  # It restarts with a larger population if it gets stuck in a local optimum.
+  restart_strategy: "ipop"
+  inc_popsize: 2
+
+  # Initial variance (sigma0).
+  # If None, defaults to min_range / 6. You can tune this if you know your scale.
+  #sigma0: null
+
+# HPO transfer: Selects top 25 trials as source-trails from previous study on year-1
+n_warmup_best: 25
+
+# CMA-ES does not support standard pruning (Median/Threshold) effectively
+# because it relies on complete population generations to update its covariance matrix.
+# It is safer to disable the pruner or use a very conservative one.
+pruner:
+  - _target_: optuna.pruners.NopPruner
+
+storage:
+  url: sqlite:///optuna_studies.db
+  load_if_exists: true
+
+logging:
+  log_interval: 5
+  show_progress_bar: true
+  verbose: true

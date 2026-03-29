@@ -1,16 +1,16 @@
-_target_: sklearn.linear_model.Ridge
+_target_: cybench.models.sklearn_models.Ridge
 name: ridge
+framework: pandas
 
-# default parameter
+# default parameters (forwarded to sklearn Ridge)
 alpha: 1.0
 fit_intercept: true
 solver: auto
 max_iter: null
 tol: 0.0001
-random_state: ${experiment.seed}
 
 # parameter range for hyperparameter optimization
-_search_space:
+_search_:
   alpha:
     type: float
     low: 1e-9

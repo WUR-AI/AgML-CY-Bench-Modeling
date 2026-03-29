@@ -1,216 +1,139 @@
 import pickle
+import logging
+from pathlib import Path
+
 import numpy as np
-from collections.abc import Iterable
 from statsmodels.regression.linear_model import OLS
 from statsmodels.tools.tools import add_constant
 import pymannkendall as trend_mk
 
 from cybench.models.model import BaseModel
-from cybench.datasets.dataset import Dataset
-from cybench.util.data import data_to_pandas
-
+from cybench.datasets.dataset import PandasDataset
 from cybench.config import KEY_LOC, KEY_YEAR, KEY_TARGET
+
+log = logging.getLogger(__name__)
 
 
 class TrendModel(BaseModel):
-    """Default trend estimator.
+    """Linear trend estimator using years as the sole predictor.
 
-    Trend is estimated using years as features.
+    For each test location, finds an optimal trend window via the
+    Mann-Kendall test and fits OLS on (year -> yield).  Falls back
+    to the location mean (or global mean) when no significant trend
+    is detected or when training data is insufficient.
+
+    Operates on PandasDataset; compatible with Hydra instantiation.
+
+    Parameters
+    ----------
+    name : str
+        Model name, used for saving artifacts.
+    min_trend_window : int
+        Minimum number of years required to estimate a trend.
+    max_trend_window : int
+        Maximum number of years considered when searching for the
+        optimal trend window via the Mann-Kendall test.
     """
 
-    MIN_TREND_WINDOW_SIZE = 5
-    MAX_TREND_WINDOW_SIZE = 10
-
-    def __init__(self):
+    def __init__(
+        self,
+        name: str = "trend",
+        min_trend_window: int = 5,
+        max_trend_window: int = 10,
+    ):
+        self.name = name
+        self.min_trend_window = min_trend_window
+        self.max_trend_window = max_trend_window
         self._train_df = None
 
-    def fit(self, dataset: Dataset, **fit_params) -> tuple:
-        """Fit or train the model.
-        Args:
-          dataset: Dataset
-          **fit_params: Additional parameters.
+    def fit(self, dataset: PandasDataset, **fit_params) -> dict:
+        y = dataset.y
+        self._train_df = y.reset_index()[[KEY_LOC, KEY_YEAR, KEY_TARGET]]
+        return {}
 
-        Returns:
-          A tuple containing the fitted model and a dict with additional information.
-        """
-        self._train_df = data_to_pandas(
-            dataset, data_cols=[KEY_LOC, KEY_YEAR, KEY_TARGET]
-        )
-        # NOTE: We save training data and do trend estimation during inference.
+    def predict(self, dataset: PandasDataset, **predict_params):
+        y = dataset.y
+        test_df = y.reset_index()
+        predictions = np.empty(len(test_df))
 
-        return self, {}
+        for i, (_, row) in enumerate(test_df.iterrows()):
+            loc = row[KEY_LOC]
+            test_year = row[KEY_YEAR]
+            predictions[i] = self._predict_single(loc, test_year)
 
-    def _estimate_trend(self, trend_x: list, trend_y: list, test_x: int):
-        """Implements a linear trend.
-        From @mmeronijrc: Small sample sizes and the use of quadratic or loess trend
-        can lead to strange results.
+        return predictions, {}
 
-        Args:
-          trend_x (list): year in the trend window.
-          trend_y (list): values (e.g. yields) in the trend window
-          test_x (int): test year
+    # ------------------------------------------------------------------
+    # internals
+    # ------------------------------------------------------------------
 
-        Returns:
-          estimated trend (float)
-        """
-        assert len(trend_y) >= self.MIN_TREND_WINDOW_SIZE
+    def _predict_single(self, loc, test_year):
+        sel = self._train_df[self._train_df[KEY_LOC] == loc]
+
+        # Case 1: no training data for location
+        if sel.empty:
+            return self._train_df[KEY_TARGET].mean()
+
+        train_labels = sel[[KEY_YEAR, KEY_TARGET]].values
+        train_years = sorted(sel[KEY_YEAR].unique())
+
+        lt = [yr for yr in train_years if yr < test_year]
+        gt = [yr for yr in train_years if yr > test_year]
+
+        # Case 2: not enough years on either side
+        if len(lt) < self.min_trend_window and len(gt) < self.min_trend_window:
+            return sel[KEY_TARGET].mean()
+
+        trend = None
+
+        # Case 3: trend from years before test year
+        if len(lt) >= self.min_trend_window:
+            window = self._find_optimal_window(train_labels, lt, extend_forward=False)
+            if window is not None:
+                vals = train_labels[np.isin(train_labels[:, 0], window)][:, 1]
+                trend = self._estimate_trend(window, vals, test_year)
+
+        # Case 4: trend from years after test year
+        if trend is None and len(gt) >= self.min_trend_window:
+            window = self._find_optimal_window(train_labels, gt, extend_forward=True)
+            if window is not None:
+                vals = train_labels[np.isin(train_labels[:, 0], window)][:, 1]
+                trend = self._estimate_trend(window, vals, test_year)
+
+        # Case 5: no significant trend — use location mean
+        if trend is None:
+            trend = sel[KEY_TARGET].mean()
+
+        return trend
+
+    def _estimate_trend(self, trend_x, trend_y, test_x):
+        """Fit OLS on (year, yield) and predict at test_x."""
         trend_x = add_constant(trend_x)
-        linear_trend_est = OLS(trend_y, trend_x).fit()
-        pred_x = np.array([test_x]).reshape((1, 1))
-        pred_x = add_constant(pred_x, has_constant="add")
+        model = OLS(trend_y, trend_x).fit()
+        pred_x = add_constant(np.array([[test_x]]), has_constant="add")
+        return model.predict(pred_x)[0]
 
-        return linear_trend_est.predict(pred_x)[0]
-
-    def _find_optimal_trend_window(
-        self, train_labels: np.ndarray, window_years: list, extend_forward: bool = False
-    ):
-        """Find the optimal trend window based on pymannkendall statistical test.
-
-        Args:
-          train_labels (np.ndarray): years and values for a specific location.
-          window_years (list): years to consider in a window
-          extend_forward (bool): if true, extend trend window forward, else backward
-
-        Returns:
-          a list of years representing the optimal trend window
-        """
+    def _find_optimal_window(self, train_labels, window_years, extend_forward=False):
+        """Select the window size that yields the most significant Mann-Kendall trend."""
         min_p = float("inf")
-        opt_trend_years = None
-        for i in range(
-            self.MIN_TREND_WINDOW_SIZE,
-            min(self.MAX_TREND_WINDOW_SIZE, len(window_years)) + 1,
-        ):
-            # should the search window be extended forward, i.e. towards later years
-            if extend_forward:
-                trend_x = window_years[:i]
-            else:
-                trend_x = window_years[-i:]
+        best = None
+        upper = min(self.max_trend_window, len(window_years)) + 1
 
-            trend_y = train_labels[np.in1d(train_labels[:, 0], trend_x)][:, 1]
-            result = trend_mk.original_test(trend_y)
-
-            # select based on p-value, lower the better
-            if result.h and (result.p < min_p):
+        for i in range(self.min_trend_window, upper):
+            years = window_years[:i] if extend_forward else window_years[-i:]
+            vals = train_labels[np.isin(train_labels[:, 0], years)][:, 1]
+            result = trend_mk.original_test(vals)
+            if result.h and result.p < min_p:
                 min_p = result.p
-                opt_trend_years = trend_x
+                best = years
 
-        return opt_trend_years
+        return best
 
-    def _predict_trend(self, test_data: Iterable):
-        """Predict the trend for each data item in test data.
-
-        Args:
-          test_data (Iterable): Dataset or a list of data items
-
-        Returns:
-          np.ndarray of predictions
-        """
-        trend_predictions = np.zeros((len(test_data), 1))
-        for i, item in enumerate(test_data):
-            loc = item[KEY_LOC]
-            test_year = item[KEY_YEAR]
-
-            sel_train_df = self._train_df[self._train_df[KEY_LOC] == loc]
-            train_labels = sel_train_df[[KEY_YEAR, KEY_TARGET]].values
-            train_years = sorted(sel_train_df[KEY_YEAR].unique())
-            assert test_year not in train_years
-
-            # Case 1: no training data for location
-            if sel_train_df.empty:
-                trend = self._train_df[KEY_TARGET].mean()
-            else:
-                lt_test_yr = [yr for yr in train_years if yr < test_year]
-                gt_test_yr = [yr for yr in train_years if yr > test_year]
-
-                # Case 2: Not enough years to estimate trend
-                if (len(lt_test_yr) < self.MIN_TREND_WINDOW_SIZE) and (
-                    len(gt_test_yr) < self.MIN_TREND_WINDOW_SIZE
-                ):
-                    trend = sel_train_df[KEY_TARGET].mean()
-                else:
-                    trend = None
-                    # Case 3: Estimate trend using years before
-                    if len(lt_test_yr) >= self.MIN_TREND_WINDOW_SIZE:
-                        window_years = self._find_optimal_trend_window(
-                            train_labels, lt_test_yr, extend_forward=False
-                        )
-                        if window_years is not None:
-                            window_values = train_labels[
-                                np.isin(train_labels[:, 0], window_years)
-                            ][:, 1]
-                            assert len(window_years) == len(window_values)
-                            trend = self._estimate_trend(
-                                window_years, window_values, test_year
-                            )
-
-                    # Case 4: Estimate trend using years after
-                    if (trend is None) and (
-                        len(gt_test_yr) >= self.MIN_TREND_WINDOW_SIZE
-                    ):
-                        window_years = self._find_optimal_trend_window(
-                            train_labels, gt_test_yr, extend_forward=True
-                        )
-                        if window_years is not None:
-                            window_values = train_labels[
-                                np.isin(train_labels[:, 0], window_years)
-                            ][:, 1]
-                            assert len(window_years) == len(window_values)
-                            trend = self._estimate_trend(
-                                window_years, window_values, test_year
-                            )
-
-                    # Case 5: No significant trend exists
-                    if trend is None:
-                        trend = sel_train_df[KEY_TARGET].mean()
-
-            trend_predictions[i, 0] = trend
-
-        return trend_predictions
-
-    def predict(self, dataset: Dataset, **predict_params):
-        """Run fitted model on a test dataset.
-
-        Args:
-          dataset: Dataset
-          **predict_params: Additional parameters
-
-        Returns:
-          A tuple containing a np.ndarray and a dict with additional information.
-        """
-        predictions = self._predict_trend(dataset)
-
-        return predictions.flatten(), {}
-
-    def predict_items(self, X: list, **predict_params):
-        """Run fitted model on a list of data items.
-
-        Args:
-          X: a list of data items, each of which is a dict
-          **predict_params: Additional parameters
-
-        Returns:
-          A tuple containing a np.ndarray and a dict with additional information.
-        """
-        predictions = self._predict_trend(X)
-
-        return predictions.flatten(), {}
-
-    def save(self, model_name):
-        """Save model, e.g. using pickle.
-        Args:
-          model_name: Filename that will be used to save the model.
-        """
-        with open(model_name, "wb") as f:
+    def save(self, path):
+        with open(Path(path) / f"{self.name}.pkl", "wb") as f:
             pickle.dump(self, f)
 
-    def load(cls, model_name):
-        """Deserialize a saved model.
-        Args:
-          model_name: Filename that was used to save the model.
-        Returns:
-          The deserialized model.
-        """
-        with open(model_name, "rb") as f:
-            saved_model = pickle.load(f)
-
-        return saved_model
+    @classmethod
+    def load(cls, path):
+        with open(path, "rb") as f:
+            return pickle.load(f)

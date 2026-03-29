@@ -3,18 +3,18 @@ name: aggregate
 # define cut-off-dates to achieve nowcast (eos) or forecast (<eos)
 season:
   # define timepoints for cutting out seasonal data per datapoint
-  end_of_sequence: eos-60 # end-of-season minus x days | optionally: eos, mid-season, quarter-season
+  end_of_sequence: eos # end-of-season minus x days | optionally: eos, mid-season, quarter-season
   start_of_sequence: sos-60 # optionally: sos, sos-60, eos-200
   # Note: choosing an interval such as [sos-60, eos-60] will result into differently sized season lengths per region
   #       due to seasonal differences. To harmonize regions the processor will automatically cut of the earliest days
   #       in a sequence to align with the region with the shortest crop season.
 
-aggregate: 60 # days
+aggregate: 30 # days
 
 sources:
   meteo:
     name: meteo
-    features:
+    select:
       - tmin
       - tmax
       - tavg
@@ -23,7 +23,7 @@ sources:
       - et0
       - vpd
       - cwb
-    agg_function:
+    aggregate:
       tmin: min
       tmax: max
       tavg: mean
@@ -35,23 +35,23 @@ sources:
 
   ndvi:
     name: ndvi
-    features:
+    select:
       - ndvi
-    agg_function:
+    aggregate:
       ndvi: mean
 
   fpar:
     name: fpar
-    features:
+    select:
       - fpar
-    agg_function:
+    aggregate:
       fpar: mean
 
   soil_moisture:
     name: soil_moisture
-    features:
+    select:
       - ssm
       - rsm
-    agg_function:
+    aggregate:
       ssm: mean
       rsm: mean

@@ -1,102 +1,112 @@
 import pickle
-import numpy as np
 import logging
+from pathlib import Path
+
+import numpy as np
 
 from cybench.models.model import BaseModel
-from cybench.datasets.dataset import Dataset
-from cybench.util.data import data_to_pandas
+from cybench.datasets.dataset import PandasDataset
 from cybench.config import KEY_LOC, KEY_YEAR, KEY_TARGET
+
+log = logging.getLogger(__name__)
 
 
 class AverageYieldModel(BaseModel):
-    """A naive yield prediction model.
+    """Predicts the average training-set yield, grouped by location.
 
-    Predicts the average of the training set by location.
-    If the location is not in the training data, then predicts the global average.
+    For unseen test locations, finds the nearest training location
+    using coordinate columns (loc_x/y/z or longitude/latitude) and
+    returns that neighbor's average. Falls back to the global average
+    only when no location features are available.
+
+    Operates on PandasDataset; compatible with Hydra instantiation.
+
+    Parameters
+    ----------
+    name : str
+        Model name, used for saving artifacts.
+    group_by : str
+        Index level to group training targets by when computing
+        averages (e.g. ``admin`` for per-location averages).
     """
 
-    def __init__(self, group_by=[KEY_LOC]):
+    def __init__(self, name: str = "average_yield", group_by: str = KEY_LOC):
+        self.name = name
+        if group_by == "admin": group_by = KEY_LOC
         self._group_by = group_by
-        self._train_df = None
-        self._logger = logging.getLogger(__name__)
+        self._averages = None
+        self._global_avg = None
+        self._location_columns = None
+        self._location_df = None
+        self._train_loc_coords = None
 
-    def fit(self, dataset: Dataset, **fit_params) -> tuple:
-        """Fit or train the model.
+    def fit(self, dataset: PandasDataset, **fit_params) -> dict:
+        x, y = dataset.xy
+        y = y.reset_index()
+        self._averages = y.groupby(self._group_by)[KEY_TARGET].mean()
+        self._global_avg = y[KEY_TARGET].mean()
 
-        Args:
-          dataset: Dataset
+        # Build per-location coordinate lookup for nearest-neighbor fallback
+        if 'loc_x' in x.columns:
+            self._location_columns = ['loc_x', 'loc_y', 'loc_z']
+        elif 'longitude' in x.columns:
+            self._location_columns = ['longitude', 'latitude']
+        else:
+            self._location_columns = None
 
-          **fit_params: Additional parameters.
+        if self._location_columns is not None:
+            self._location_df = x[self._location_columns]
+            # One coordinate row per training location (deduplicate over years)
+            self._train_loc_coords = (
+                self._location_df
+                .groupby(level=KEY_LOC)
+                .first()
+            )
+        return {}
 
-        Returns:
-          A tuple containing the fitted model and a dict with additional information.
-        """
-        sel_cols = [KEY_LOC, KEY_YEAR, KEY_TARGET]
-        self._train_df = data_to_pandas(dataset, data_cols=sel_cols)
-        # check group by columns are in the dataframe
-        assert set(self._group_by).intersection(set(self._train_df.columns)) == set(
-            self._group_by
-        )
-        self._averages = (
-            self._train_df.groupby(self._group_by, observed=True)
-            .agg(GROUP_AVG=(KEY_TARGET, "mean"))
-            .reset_index()
-        )
+    def predict(self, dataset: PandasDataset, **predict_params):
+        x, y = dataset.xy
+        locs = y.index.get_level_values(KEY_LOC)
+        predictions = np.empty(len(locs))
 
-        return self, {}
-
-    def predict_items(self, X: list):
-        """Run fitted model on a list of data items.
-
-        Args:
-          X: a list of data items, each of which is a dict
-
-        Returns:
-          A tuple containing a np.ndarray and a dict with additional information.
-        """
-        predictions = np.zeros((len(X), 1))
-        for i, item in enumerate(X):
-            filter_condition = None
-            for g in self._group_by:
-                if filter_condition is None:
-                    filter_condition = self._averages[g] == item[g]
-                else:
-                    filter_condition &= self._averages[g] == item[g]
-
-            filtered = self._averages[filter_condition]
-            # If there is no matching group in training data,
-            # predict the global average
-            if filtered.empty:
-                self._logger.warning(
-                    "No matching group found; predicting global average"
-                )
-                y_pred = self._train_df[KEY_TARGET].mean()
+        for i, loc in enumerate(locs):
+            if loc in self._averages.index:
+                predictions[i] = self._averages[loc]
             else:
-                y_pred = filtered["GROUP_AVG"].values[0]
+                predictions[i] = self._nearest_neighbor_avg(loc, x)
 
-            predictions[i] = y_pred
+        return predictions, {}
 
-        return predictions.flatten(), {}
+    def _nearest_neighbor_avg(self, loc, test_x):
+        """Look up the average of the nearest training location by coordinates.
 
-    def save(self, model_name):
-        """Save model, e.g. using pickle.
-
-        Args:
-          model_name: Filename that will be used to save the model.
+        Falls back to the global average when no coordinate columns are available
+        or the test location has no coordinate data.
         """
-        with open(model_name, "wb") as f:
+        if self._train_loc_coords is None or self._location_columns is None:
+            return self._global_avg
+
+        # Get coordinates for the query location from the test features
+        if loc not in test_x.index.get_level_values(KEY_LOC):
+            return self._global_avg
+
+        query = test_x.loc[loc, self._location_columns].values
+        if query.ndim > 1:
+            query = query[0]
+
+        # Euclidean distance to every training location
+        train_coords = self._train_loc_coords.values
+        dists = np.linalg.norm(train_coords - query, axis=1)
+        nearest_loc = self._train_loc_coords.index[np.argmin(dists)]
+
+        log.info("Unseen location %s -> nearest neighbor %s", loc, nearest_loc)
+        return self._averages[nearest_loc]
+
+    def save(self, path):
+        with open(Path(path) / f"{self.name}.pkl", "wb") as f:
             pickle.dump(self, f)
 
-    def load(cls, model_name):
-        """Deserialize a saved model.
-
-        Args:
-          model_name: Filename that was used to save the model.
-
-        Returns:
-          The deserialized model.
-        """
-        with open(model_name, "rb") as f:
-            saved_model = pickle.load(f)
-
-        return saved_model
+    @classmethod
+    def load(cls, path):
+        with open(path, "rb") as f:
+            return pickle.load(f)

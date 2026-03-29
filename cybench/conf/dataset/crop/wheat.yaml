@@ -1,0 +1,9 @@
+name: wheat
+# Collect crop specific configurations
+
+# Growing degree day parameters
+# Used by the `gdd` create type — injected at runtime, not repeated in source configs
+gdd:
+  tbase: 0.0        # base temperature below which no development occurs (°C)
+  upper_limit: null  # temperature above which GDD accumulation is capped (°C)
+ 

@@ -11,5 +11,5 @@ name: rolling
 #   k-last    - takes the k last years into val set
 
 # By default, take the last 3 dataset years as test years and similarly for the val years
-test_years: 3-last
-val_years: 3-last
+test_years: 5-last
+val_years: 1-last

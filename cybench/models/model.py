@@ -30,21 +30,7 @@ class BaseModel(ABC):
         Returns:
           A tuple containing a np.ndarray and a dict with additional information.
         """
-        batch = [d for d in dataset]
-        return self.predict_items(batch, **predict_params)
-
-    @abstractmethod
-    def predict_items(self, X: list, **predict_params):
-        """Run fitted model on a list of data items.
-
-        Args:
-          X: a list of data items, each of which is a dict
-          **predict_params: Additional parameters.
-
-        Returns:
-          A tuple containing a np.ndarray and a dict with additional information.
-        """
-        raise NotImplementedError
+        return NotImplementedError
 
     @abstractmethod
     def save(self, model_path):

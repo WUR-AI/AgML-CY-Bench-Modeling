@@ -5,7 +5,7 @@ from typing import Optional
 
 from cybench.models.model import BaseModel
 from cybench.datasets.dataset import Dataset
-from cybench.config import KEY_TARGET, KEY_LOC, EvaluationConfig
+from cybench.config import KEY_TARGET, KEY_LOC
 
 implemented_metrics = {}
 
@@ -17,7 +17,7 @@ def metric(func):
 
 
 def evaluate_model(
-    cfg: EvaluationConfig,
+    cfg,
     model: BaseModel,
     dataset: Dataset,
 ):
@@ -25,7 +25,7 @@ def evaluate_model(
     Evaluate the performance of a model using specified metrics.
 
     Args:
-      cfg: EvaluationConfig controlling which metrics are computed.
+      cfg: controlling which metrics are computed.
       model: The trained model to be evaluated.
       dataset: Dataset.
 
@@ -42,7 +42,7 @@ def evaluate_model(
 def evaluate_predictions(
     y_true: np.ndarray,
     y_pred: np.ndarray,
-    cfg: EvaluationConfig,
+    cfg,
 ):
     """
     Evaluate predictions using specified metrics.
@@ -50,7 +50,7 @@ def evaluate_predictions(
     Args:
       y_true (numpy.ndarray): True labels for evaluation.
       y_pred (numpy.ndarray): Predicted values.
-      cfg: EvaluationConfig controlling which metrics are computed.
+      cfg: controlling which metrics are computed.
 
     Returns:
       A dictionary containing the calculated metrics.

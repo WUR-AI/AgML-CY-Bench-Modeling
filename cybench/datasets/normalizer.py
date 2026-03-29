@@ -63,7 +63,7 @@ class Normalizer:
             range = max - min
             if range == 0:
                 return series * 0.0
-            return (series - max/2 - min/2) / (range / 2)
+            return (series - max / 2 - min / 2) / (range / 2)
 
         if ftype == "standard":
             if params["std"] == 0:
@@ -76,6 +76,31 @@ class Normalizer:
 
         raise ValueError(f"Unknown normalization type: {ftype}")
 
+    def _reverse_feature(self, value, ftype: str, params: dict):
+        """Apply inverse normalization using fitted parameters."""
+        if ftype == "none":
+            return value
+
+        if ftype == "minmax":
+            min_val, max_val = params["min"], params["max"]
+            range_val = max_val - min_val
+            if range_val == 0:
+                return value
+            # Reverse: y = (x - mid) / (range/2) -> x = y * (range/2) + mid
+            return value * (range_val / 2) + (max_val / 2 + min_val / 2)
+
+        if ftype == "standard":
+            if params["std"] == 0:
+                return value
+            # Reverse: y = (x - mean) / std -> x = y * std + mean
+            return value * params["std"] + params["mean"]
+
+        if ftype == "logsinh":
+            # Reverse: y = arcsinh(x) -> x = sinh(y)
+            return np.sinh(value)
+
+        raise ValueError(f"Unknown normalization type: {ftype}")
+
     def fit_normalize(self, dfs):
         """
         Fits parameters across all DataFrames and returns
@@ -85,11 +110,11 @@ class Normalizer:
         for source_name, df in dfs.items():
             for feature, cfg in self.feature_cfg.items():
                 ftype = cfg["type"]
-                if ftype == "logsinh": # logsinh has no parameter
+                if ftype == "logsinh":  # logsinh has no parameter
                     continue
 
                 params = cfg["params"]
-                if params: # parameter already set
+                if params:  # parameter already set
                     continue
                 if feature not in df.columns:
                     continue
@@ -125,6 +150,49 @@ class Normalizer:
         ftype = cfg["type"]
         params = cfg.get("params", {})
         return self._apply_feature(series, ftype, params)
+
+    def denormalize(self, data, feature_names):
+        """
+        Reverses normalization for a value, array, or matrix.
+        The feature dimension must be the last dimension.
+
+        Args:
+            data: Input data (numpy array or tensor).
+            feature_names: List of feature names matching the last dimension of data.
+
+        Returns:
+            Numpy array of denormalized data.
+        """
+        # Convert Torch tensors to numpy if necessary
+        if hasattr(data, "cpu"):
+            data = data.detach().cpu().numpy()
+
+        # Ensure data is a numpy array
+        data = np.array(data)
+
+        # Validate dimensions
+        if data.shape[-1] != len(feature_names):
+            raise ValueError(
+                f"Last dimension size ({data.shape[-1]}) does not match "
+                f"the number of feature names provided ({len(feature_names)})."
+            )
+
+        # Create a copy to avoid modifying the input in-place
+        denorm_data = data.copy()
+
+        for i, feature in enumerate(feature_names):
+            if feature not in self.feature_cfg:
+                continue
+
+            cfg = self.feature_cfg[feature]
+            ftype = cfg["type"]
+            params = cfg.get("params", {})
+
+            # Apply inverse transformation to the specific feature slice
+            # usage of [...] preserves all preceding dimensions (batch, time, etc.)
+            denorm_data[..., i] = self._reverse_feature(denorm_data[..., i], ftype, params)
+
+        return denorm_data
 
     def to_omegaconf(self):
         """

@@ -1,12 +1,12 @@
-# ReduceLROnPlateau: Adaptive scheduler, reduces LR when monitored metric plateaus
+# ReduceLROnPlateau: Reduce learning rate when a metric has stopped improving.
 _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
 _partial_: true
 mode: min
-factor: 0.1
-patience: 10
+factor: 0.1      # Factor by which the learning rate will be reduced. new_lr = lr * factor
+patience: 4      # Number of epochs with no improvement after which learning rate will be reduced.
 threshold: 0.0001
 threshold_mode: rel
 cooldown: 0
 min_lr: 0
-eps: 1e-8
-
+eps: 1e-08
+verbose: false    # Print a message to stdout for each update.

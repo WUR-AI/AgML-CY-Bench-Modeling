@@ -1,0 +1,105 @@
+name: feature_design
+
+# This temporal feature config aim to create strong and compressed features derived from raw time series - ready to
+# plug into any ML model.
+# You can make a chain of decisions about the input features from the selecting time windows to novel feature creation.
+# --------
+# 1. Time window (start- and end- of the sequence of interest)
+# 2. Time Series aggregation to patches of T days
+# 3. Data sources and select features from the indicator data
+# 4. Create new features based on expert knowledge such as the growing-degree days (GDD)
+# 5. Choose meaningful aggregation function for all features
+# --------
+# Note: A aggregation-free configuration is possible. See no_aggregate.yaml
+
+
+# define cut-off-dates to achieve nowcast (eos) or forecast (<eos)
+season:
+  # define timepoints for cutting out seasonal data per datapoint
+  end_of_sequence: eos # end-of-season minus x days | optionally: eos, mid-season, quarter-season
+  start_of_sequence: sos-60 # optionally: sos, sos-60, eos-200
+  # Note: choosing an interval such as [sos-60, eos-60] will result into differently sized season lengths per region
+  #       due to seasonal differences. To harmonize regions the processor will automatically cut of the earliest days
+  #       in a sequence to align with the region with the shortest crop season.
+
+aggregate: 30  # days per window — EOS-anchored, so the last window always ends at EOS
+
+sources:
+  meteo:
+    # 1. select — raw columns to load from CSV
+    select:
+      - tmin
+      - tmax
+      - tavg
+      - prec
+      - rad
+      - et0
+      - vpd
+      - cwb
+
+    # 2. create — derived features, computed in order before aggregation
+    #    Each entry produces a new column
+    #    Crop-level params (tbase, upper_limit) are listed in conf/crop/<crop>.yaml
+    create:
+      - name: gdd
+        type: gdd          # clip(tavg - tbase, 0, upper_limit) — params from crop config
+        input: tavg
+
+      - name: cum_gdd
+        type: cumsum       # running total within each (loc, year) season
+        input: gdd
+
+      - name: cum_prec
+        type: cumsum
+        input: prec
+
+      - name: cum_cwb
+        type: cumsum
+        input: cwb
+
+    # 3. aggregate — applied to both selected and created columns uniformly
+    #    Values can be a single function string or a list for multi-output columns,
+    #    e.g. prec: [sum, max] produces prec_sum and prec_max.
+    aggregate:
+      tmin: min
+      tmax: max
+      tavg: mean
+      prec: [sum, max]
+      rad: mean
+      et0: mean
+      vpd: mean
+      cwb: mean
+      gdd: sum
+      cum_gdd: max
+      cum_prec: max
+      cum_cwb: mean
+
+  ndvi:
+    select:
+      - ndvi
+    create:
+      - name: cum_ndvi
+        type: cumsum
+        input: ndvi
+    aggregate:
+      ndvi: mean
+      cum_ndvi: max
+
+  fpar:
+    select:
+      - fpar
+    create:
+      - name: cum_fpar
+        type: cumsum
+        input: fpar
+    aggregate:
+      fpar: mean
+      cum_fpar: max
+
+  soil_moisture:
+    select:
+      - ssm
+      - rsm
+    aggregate:
+      ssm: mean
+      rsm: mean
