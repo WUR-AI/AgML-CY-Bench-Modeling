@@ -329,7 +329,7 @@ def align_to_crop_season_window_numpy(
         start_of_sequence_date[crop_indices[valid_mask]]
     )
     valid_end[valid_mask] = (
-        date_max[valid_mask] + tolerance >= end_of_sequence_date[crop_indices[valid_mask]]
+        date_max[valid_mask] + tolerance > end_of_sequence_date[crop_indices[valid_mask]]
     )
     invalid_season_mask = (~valid_start) | (~valid_end)
     invalid_season_pairs = grouped.index[invalid_season_mask]
@@ -424,7 +424,6 @@ def align_inputs_and_labels(df_y: pd.DataFrame, dfs_x: dict) -> tuple:
     index_y_selection = set(df_y.index.values)
 
     for df_x in dfs_x.values():
-        #print(df_x.head(), len(index_y_selection))
         if len(df_x.index.names) == 1:
             index_y_selection = {
                 (loc_id, year)

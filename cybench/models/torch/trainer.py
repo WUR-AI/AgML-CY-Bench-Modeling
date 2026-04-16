@@ -8,7 +8,6 @@ but is adapted to the CY-Bench codebase and a PyTorch regression setup.
 """
 import logging
 import os
-import random
 import time
 from contextlib import nullcontext
 from functools import partial
@@ -18,7 +17,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 from omegaconf import DictConfig
-from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 

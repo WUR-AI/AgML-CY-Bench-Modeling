@@ -21,19 +21,22 @@ def adjust_model_cfg_to_dataset(model_cfg: Dict, dataset: Dataset):
     return model_cfg
 
 
-def remove_search_keys(model_cfg: DictConfig) -> ListConfig:
+def remove_keys(model_cfg: DictConfig, key="_search_") -> ListConfig:
     """Recursively remove _search_ keys from config before instantiation. Only important for hyperparameter search."""
     cfg_dict = OmegaConf.to_container(model_cfg, resolve=True)
 
     def _clean(obj):
         if isinstance(obj, dict):
-            return {k: _clean(v) for k, v in obj.items() if k != "_search_"}
+            return {k: _clean(v) for k, v in obj.items() if k != key}
         elif isinstance(obj, list):
             return [_clean(item) for item in obj]
         else:
             return obj
 
     return OmegaConf.create(_clean(cfg_dict))
+
+def remove_search_keys(model_cfg: DictConfig) -> ListConfig:
+    return remove_keys(model_cfg, key="_search_")
 
 
 def reload_config_with_overrides(

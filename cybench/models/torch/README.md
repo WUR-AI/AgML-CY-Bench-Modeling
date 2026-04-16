@@ -2,7 +2,7 @@
 
 To train neural network models using PyTorch, we construct a PyTorch Trainer - inspired by [HuggingFace's Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) - 
 to orchestrate the complex pipeline of PyTorch models creation, training and evaluation. This README shall motivate the 
-choise of this implementation. Finally we go into the detail of an example for a torch model architecture.
+choice of this implementation. Finally we go into the detail of an example for a torch model architecture.
 
 ## Why We Need a Trainer Class?
 

@@ -1,11 +1,8 @@
 import os
-import time
 from functools import reduce
-from omegaconf import OmegaConf
 import numpy as np
 import pandas as pd
 import torch
-from sympy.physics.quantum.gate import normalized
 
 from cybench.config import DATASETS, PATH_DATA_DIR, KEY_LOC, KEY_YEAR, KEY_TARGET
 from cybench.datasets.alignment import compute_crop_season_window, ensure_same_categories_union, \
@@ -36,6 +33,7 @@ class DataFactory:
     def build(self) -> Dataset:
         # Caching Strategy: Check existing
         use_cache = getattr(self.cfg, 'use_cache', False)
+        use_memory_optimization = getattr(self.cfg, 'use_memory_optimization', True)
         cache_dir = os.path.join(PATH_DATA_DIR, "cache")
 
         if use_cache:
@@ -55,12 +53,12 @@ class DataFactory:
                 raise NotImplementedError(f"You try to load a cached dataset using an unknown framework: {self.cfg.framework}")
 
         if isinstance(self.cfg.country, str):
-            df_y, dfs_x = self.load_dfs(crop=self.cfg.crop, country_code=self.cfg.country)
+            df_y, dfs_x = self.load_dfs(crop=self.cfg.crop, country_code=self.cfg.country, use_memory_optimization=use_memory_optimization)
         else:
             df_y = pd.DataFrame()
             dfs_x = {}
             for country in self.cfg.country:
-                df_y_cn, dfs_x_cn = self.load_dfs(crop=self.cfg.crop, country_code=country)
+                df_y_cn, dfs_x_cn = self.load_dfs(crop=self.cfg.crop, country_code=country, use_memory_optimization=use_memory_optimization)
 
                 df_y = pd.concat([df_y, df_y_cn], axis=0)
 
@@ -151,7 +149,7 @@ class DataFactory:
         df_non_temporal = self.load_non_temporal(crop=crop.name, country_code=country_code)
 
         # temporal
-        dfs_x = self.load_temporal(crop=crop, country_code=country_code)
+        dfs_x = self.load_temporal(crop=crop, country_code=country_code, use_memory_optimization=use_memory_optimization)
 
         dfs_x["non_temporal"] = df_non_temporal
         df_y, dfs_temporal = align_inputs_and_labels(df_y, dfs_x)
@@ -206,7 +204,7 @@ class DataFactory:
         non_temp_df.fillna(non_temp_df.mean())
         return non_temp_df
 
-    def load_temporal(self, crop: dict, country_code: str):
+    def load_temporal(self, crop: dict, country_code: str, use_memory_optimization=True):
         path_data_cn = os.path.join(PATH_DATA_DIR, crop.name, country_code)
 
         # crop calendar
@@ -233,7 +231,7 @@ class DataFactory:
                 source_cfg=source_cfg,
                 aggregate=getattr(self.cfg.temporal, 'aggregate', None),
                 crop_season_df=df_crop_cal,
-                use_memory_optimization=True,
+                use_memory_optimization=use_memory_optimization,
             )
 
             assert not df_ts.isnull().values.any(), f"Unexpected NaN in df_ts ({file_name})"
@@ -248,7 +246,7 @@ class DataFactory:
             source_cfg,
             aggregate,
             crop_season_df,
-            use_memory_optimization=False,
+            use_memory_optimization=True,
             verbose=False,
     ):
         """A helper function to load and preprocess time series data.
