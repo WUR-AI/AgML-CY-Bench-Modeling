@@ -31,7 +31,7 @@ def dataset_cfg():
             overrides=[
                 "crop=maize",
                 "country=NL",
-                "framework=torch",
+                "framework=pandas",
                 "target.filter_samples=null",
                 "use_cache=false",
                 # 'temporal.sources.meteo.select=["tmin","tmax","tavg","prec","rad","cwb"]',
