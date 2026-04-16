@@ -168,6 +168,7 @@ def dataset_cfg():
                 "country=NL",
                 "framework=pandas",
                 "target.filter_samples=null",
+                "use_cache=false",
             ],
         )
     return cfg

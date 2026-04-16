@@ -33,6 +33,7 @@ def dataset_cfg():
                 "country=NL",
                 "framework=torch",
                 "target.filter_samples=null",
+                "use_cache=false",
                 # 'temporal.sources.meteo.select=["tmin","tmax","tavg","prec","rad","cwb"]',
             ],
         )
