@@ -7,7 +7,7 @@ embed_dim: ${model.torch_model.embed_dim}
 use_seasonal_embedding: false
 
 # patch embeddings
-# for simplicity the window size is eqaul the patch size
+# for simplicity the window size is equal the patch size
 patch_size: 7
 
 # Search space for hyperparameter tuning

@@ -1,12 +1,11 @@
 import os
-import torch
 import pandas as pd
 import numpy as np
 import pytest
 from hydra import compose, initialize
 from hydra.utils import instantiate
 import copy
-from omegaconf import open_dict
+
 
 from cybench.datasets.dataset import Dataset, PandasDataset
 from cybench.models.naive_models import AverageYieldModel
@@ -16,7 +15,7 @@ from cybench.models.trend_models import TrendModel
 # from cybench.models.torch.nn_models import BaselineLSTM
 from cybench.evaluation.eval import evaluate_predictions
 from cybench.datasets.data_factory import DataFactory
-from cybench.util.config_utils import remove_keys
+from cybench.util.config_utils import remove_keys, adjust_model_cfg_to_dataset
 
 from cybench.config import PATH_DATA_DIR
 from cybench.config import (
@@ -159,40 +158,24 @@ def test_trend_model():
 
 
 @pytest.fixture
-def dataset_cfg():
-    with initialize(version_base=None, config_path="../../cybench/conf/dataset"):
+def cfg():
+    with initialize(version_base=None, config_path="../../cybench/conf"):
         cfg = compose(
-            config_name="default",
+            config_name="config",
             overrides=[
-                "crop=wheat",
-                "country=NL",
-                "framework=pandas",
-                "target.filter_samples=null",
-                "use_cache=false",
+                "dataset/crop=wheat",
+                "dataset.country=NL",
+                "dataset.framework=pandas",
+                "dataset.target.filter_samples=null",
+                "dataset.use_cache=false",
+                "model=ridge",
             ],
         )
     return cfg
 
-
-@pytest.fixture
-def model_cfg():
-    with initialize(version_base=None, config_path="../../cybench/conf/model"):
-        cfg = compose(
-            config_name="ridge",
-        )
-    return cfg
-
-@pytest.fixture
-def evaluation_cfg():
-    with initialize(version_base=None, config_path="../../cybench/conf/evaluation"):
-        cfg = compose(
-            config_name="default",
-        )
-    return cfg
-
-def test_sklearn_model(dataset_cfg, model_cfg, evaluation_cfg):
+def test_sklearn_model(cfg):
     # Test 1: Test with raw data
-    dataset_wheat = DataFactory(dataset_cfg).build()
+    dataset_wheat = DataFactory(cfg.dataset).build()
     all_years = list(range(2001, 2019))
     test_years = [2017, 2018]
     train_years = [yr for yr in all_years if yr not in test_years]
@@ -201,7 +184,7 @@ def test_sklearn_model(dataset_cfg, model_cfg, evaluation_cfg):
     )
 
     # Model
-    model_cfg = remove_keys(model_cfg, "framework")
+    model_cfg = remove_keys(cfg.model, "framework")
     model_cfg = remove_keys(model_cfg, "_search_")
 
     model = instantiate(model_cfg)
@@ -231,7 +214,7 @@ def test_sklearn_model(dataset_cfg, model_cfg, evaluation_cfg):
 
     # TODO: Need alternative to hardcoding expected metrics.
     targets = test_dataset.targets
-    evaluation_result = evaluate_predictions(targets, test_preds, evaluation_cfg)
+    evaluation_result = evaluate_predictions(targets, test_preds, cfg.evaluation)
     expected_values = {
         "normalized_rmse": [10.0, 20.0],
         "mape": [0.10, 0.20],
@@ -295,7 +278,47 @@ def test_sklearn_model(dataset_cfg, model_cfg, evaluation_cfg):
 #
 #
 # # TODO: Uncomment after TorchDataset is working.
-# def test_nn_model():
+
+@pytest.fixture
+def cfg_nn():
+    with initialize(version_base=None, config_path="../../cybench/conf"):
+        cfg = compose(
+            config_name="config",
+            overrides=[
+                "dataset/crop=wheat",
+                "dataset.country=NL",
+                "dataset.framework=torch",
+                "dataset.target.filter_samples=null",
+                "dataset.use_cache=false",
+                "model=cnn_lf",
+                "experiment.device=cpu"
+            ],
+        )
+    return cfg
+
+
+
+def test_nn_model(cfg_nn):
+    test_cfg = copy.deepcopy(cfg_nn)
+    dataset_wheat = DataFactory(test_cfg.dataset).build()
+    model_nn_cfg = adjust_model_cfg_to_dataset(test_cfg.model, dataset_wheat)
+
+    even_years = {x for x in dataset_wheat.years if x % 2 == 0}
+    odd_years = dataset_wheat.years - even_years
+    train_dataset, test_dataset = dataset_wheat.split_on_years(years_split=(even_years, odd_years))
+    model_nn_cfg = remove_keys(test_cfg.model, "_search_")
+    # model_nn_cfg = remove_keys(model_nn_cfg, "framework")
+    model = instantiate(model_nn_cfg)
+
+
+    fit_info = model.fit(train_dataset, val_dataset=test_dataset)
+    test_preds, pred_info = model.predict(test_dataset)
+    evaluation_result = evaluate_predictions(y_true=test_dataset.targets, y_pred=test_preds, cfg=test_cfg.evaluation)
+    print(evaluation_result)
+
+
+
+
 #     train_dataset = Dataset.load("maize_NL")
 #     test_dataset = Dataset.load("maize_NL")
 #     device = "cuda" if torch.cuda.is_available() else "cpu"
