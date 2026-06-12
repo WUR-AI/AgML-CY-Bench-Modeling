@@ -1,14 +1,19 @@
 """Model base class
 """
 
-from abc import ABC, abstractmethod
+from __future__ import annotations
 
-from cybench.datasets.dataset import Dataset
+from abc import ABC, abstractmethod
+from typing import Any
+
+import numpy.typing as npt
+
+from cybench.datasets.dataset import BaseDataset
 
 
 class BaseModel(ABC):
     @abstractmethod
-    def fit(self, dataset: Dataset, **fit_params) -> tuple:
+    def fit(self, dataset: BaseDataset, **fit_params) -> tuple[Any, dict[str, Any]]:
         """Fit or train the model.
 
         Args:
@@ -20,7 +25,9 @@ class BaseModel(ABC):
         """
         raise NotImplementedError
 
-    def predict(self, dataset: Dataset, **predict_params) -> tuple:
+    def predict(
+        self, dataset: BaseDataset, **predict_params
+    ) -> tuple[npt.NDArray[Any], dict[str, Any]]:
         """Run fitted model on data.
 
         Args:
@@ -30,10 +37,10 @@ class BaseModel(ABC):
         Returns:
           A tuple containing a np.ndarray and a dict with additional information.
         """
-        return NotImplementedError
+        raise NotImplementedError
 
     @abstractmethod
-    def save(self, model_path):
+    def save(self, model_path: str) -> None:
         """Save model, e.g. using pickle.
 
         Args:
@@ -42,7 +49,8 @@ class BaseModel(ABC):
         raise NotImplementedError
 
     @classmethod
-    def load(cls, model_path):
+    @abstractmethod
+    def load(cls, model_path: str) -> BaseModel:
         """Deserialize a saved model.
 
         Args:

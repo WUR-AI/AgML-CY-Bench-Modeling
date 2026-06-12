@@ -1,6 +1,10 @@
+from __future__ import annotations
+
+from copy import deepcopy
+from typing import Any
+
 import numpy as np
 import pandas as pd
-from copy import deepcopy
 from omegaconf import OmegaConf
 
 
@@ -26,9 +30,9 @@ class Normalizer:
       - "none"
     """
 
-    def __init__(self, norm_cfg: dict):
+    def __init__(self, norm_cfg: dict[str, Any]):
         self.name = norm_cfg["name"]
-        self.feature_cfg = norm_cfg.features
+        self.feature_cfg: dict[str, Any] = norm_cfg["features"]
 
     def _fit_feature(self, series: pd.Series, ftype: str):
         """Compute needed statistics depending on normalization type."""
@@ -53,7 +57,7 @@ class Normalizer:
 
         raise ValueError(f"Unknown normalization type: {ftype}")
 
-    def _apply_feature(self, series: pd.Series, ftype: str, params: dict):
+    def _apply_feature(self, series: pd.Series, ftype: str, params: dict[str, Any]):
         """Apply normalization using already-fitted parameters."""
         if ftype == "none":
             return series
@@ -76,7 +80,7 @@ class Normalizer:
 
         raise ValueError(f"Unknown normalization type: {ftype}")
 
-    def _reverse_feature(self, value, ftype: str, params: dict):
+    def _reverse_feature(self, value, ftype: str, params: dict[str, Any]):
         """Apply inverse normalization using fitted parameters."""
         if ftype == "none":
             return value
@@ -145,8 +149,11 @@ class Normalizer:
 
         Returns: normalized sequence.
         """
-        assert series.name in self.feature_cfg.keys(), f"{series.name} not in normalizer feature keys: {self.feature_cfg.keys()}"
-        cfg = self.feature_cfg[series.name]
+        feature_name = str(series.name)
+        assert feature_name in self.feature_cfg, (
+            f"{feature_name} not in normalizer feature keys: {self.feature_cfg.keys()}"
+        )
+        cfg = self.feature_cfg[feature_name]
         ftype = cfg["type"]
         params = cfg.get("params", {})
         return self._apply_feature(series, ftype, params)

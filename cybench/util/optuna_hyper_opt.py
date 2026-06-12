@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import logging
 import os
 import re
 import copy
 import threading
 from pathlib import Path
-from typing import Any, Dict, Union, Optional, List
+from typing import Any, Optional, cast
 
 import hydra
 import numpy as np
@@ -15,7 +17,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf, ListConfig
 
 from cybench.util.config_utils import set_seed
-from cybench.datasets.dataset import Dataset
+from cybench.datasets.dataset import BaseDataset
 from cybench.util.validation import get_splits
 from cybench.util.config_utils import remove_search_keys
 
@@ -46,7 +48,7 @@ def build_pruner(cfg_pruner):
     return instantiate(cfg_pruner)
 
 
-def _extract_search_space(cfg: Union[DictConfig, Any], prefix: str = "") -> dict:
+def _extract_search_space(cfg: DictConfig | Any, prefix: str = "") -> dict[str, Any]:
     """
     Recursively extract all _search_: definitions from a config, keyed by their
     dotted parameter path (e.g. "epochs", "dataloader.batch_size").
@@ -60,13 +62,17 @@ def _extract_search_space(cfg: Union[DictConfig, Any], prefix: str = "") -> dict
                     full_name = f"{prefix}.{param_name}" if prefix else param_name
                     result[full_name] = OmegaConf.to_container(param_details, resolve=True)
             elif isinstance(value, DictConfig):
-                new_prefix = f"{prefix}.{key}" if prefix else key
+                key_str = str(key)
+                new_prefix = f"{prefix}.{key_str}" if prefix else key_str
                 result.update(_extract_search_space(value, new_prefix))
     return result
 
 
-def load_previous_best_trials(storage: str, current_study_name: str, n_best: Optional[int] = None) -> Optional[
-    List[optuna.trial.FrozenTrial]]:
+def load_previous_best_trials(
+    storage: str,
+    current_study_name: str,
+    n_best: Optional[int] = None,
+) -> list[optuna.trial.FrozenTrial] | None:
     """
     Load a previously saved study (t-1) from storage if it exists, filtering for the best trials.
     Regex logic: Looks strictly at the LAST 4 digits as the year, treating everything before as the prefix.
@@ -124,7 +130,10 @@ def load_previous_best_trials(storage: str, current_study_name: str, n_best: Opt
     # 5. Filter n_best
     if n_best is not None and n_best > 0:
         # Sort based on direction (Assuming minimization for Loss)
-        valid_trials.sort(key=lambda t: t.value, reverse=False)
+        valid_trials.sort(
+            key=lambda t: t.value if t.value is not None else float("inf"),
+            reverse=False,
+        )
 
         original_count = len(valid_trials)
         valid_trials = valid_trials[:n_best]
@@ -146,7 +155,7 @@ class OptunaOptimizer:
     Args:
         cfg: Configuration containing hp_config (Optuna settings), val_cfg (for val-splitting) &
                                 model_cfg (model plus `_search_` keys to be optimized)
-        dataset (Dataset): The dataset instance to be used for optimization.
+        dataset (BaseDataset): The dataset instance to be used for optimization.
         path (str): Directory path where the `optimal_model.yaml` will be stored.
         study_name (str): Unique identifier for the Optuna study.
     """
@@ -154,8 +163,8 @@ class OptunaOptimizer:
     def __init__(
             self,
             cfg,
-            dataset: Dataset,
-            path: str,
+            dataset: BaseDataset,
+            path: str | Path,
             study_name: str
     ):
         self.multi_gpu = False
@@ -323,6 +332,7 @@ class OptunaOptimizer:
             trial_model_cfg["device"] = device
 
         val_metrics = []
+        device = "cpu"
         try:
             for i in range(self.hp_config.repetitions):
                 set_seed(self.hp_config.seed + i)
@@ -351,7 +361,10 @@ class OptunaOptimizer:
 
                     # Predict and Evaluate
                     preds, _ = model.predict(val_dataset)
-                    assert preds.ndim == val_dataset.targets.ndim, f"The model output shape {preds.shape} does not match {val_dataset.shape}"
+                    assert preds.ndim == val_dataset.targets.ndim, (
+                        f"The model output shape {preds.shape} does not match "
+                        f"target shape {val_dataset.targets.shape}"
+                    )
                     val_metric = np.mean((val_dataset.targets - preds) ** 2)
 
                     val_metrics.append(val_metric)
@@ -368,9 +381,9 @@ class OptunaOptimizer:
 
     def _resolve_search_space(
             self,
-            cfg: Union[DictConfig, Any],
-            trial: optuna.Trial,
-            prefix: str = ""
+            cfg: DictConfig | Any,
+            trial: optuna.trial.Trial | optuna.trial.FixedTrial,
+            prefix: str = "",
     ) -> None:
         """
         Recursively traverses the config, finds `_search_` keys, samples values
@@ -392,8 +405,13 @@ class OptunaOptimizer:
 
                         # Extract type and constraints
                         p_type = param_details["type"]
-                        kwargs = {k: v for k, v in OmegaConf.to_container(param_details, resolve=True).items()
-                                  if k != "type"}
+                        param_container = cast(
+                            dict[str, Any],
+                            OmegaConf.to_container(param_details, resolve=True),
+                        )
+                        kwargs = {
+                            k: v for k, v in param_container.items() if k != "type"
+                        }
 
                         suggestion = None
 
@@ -417,7 +435,8 @@ class OptunaOptimizer:
 
                 elif isinstance(value, (DictConfig, dict)):
                     # Recurse
-                    new_prefix = f"{prefix}.{key}" if prefix else key
+                    key_str = str(key)
+                    new_prefix = f"{prefix}.{key_str}" if prefix else key_str
                     self._resolve_search_space(value, trial, new_prefix)
 
     def _assign_gpu(self) -> str:

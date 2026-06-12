@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
@@ -5,7 +9,7 @@ import pandas as pd
 def dummy_encode(
     df: pd.DataFrame,
     feature: str,
-    classes: list,
+    classes: list[Any],
     drop_original: bool = True,
     unknown_value: float = 0.0,
 ) -> pd.DataFrame:
@@ -38,7 +42,7 @@ def dummy_encode(
 
     # handle unknown categories explicitly
     known_mask = values.isin(classes)
-    if not known_mask.all():
+    if not bool(known_mask.all()):
         for cls in classes:
             df.loc[~known_mask, f"{feature}_{cls}"] = unknown_value
 

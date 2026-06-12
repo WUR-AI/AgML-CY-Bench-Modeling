@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import logging
-from typing import Optional, List, Dict
-from zoneinfo import available_timezones
+from collections.abc import Iterator
+from typing import Any
 
 import numpy as np
 from omegaconf import ListConfig
@@ -10,9 +12,9 @@ log = logging.getLogger(__name__)
 def get_splits(
         cfg,
         which: str,
-        dataset_years: set,
+        dataset_years: set[Any],
         seed: int = 42,
-):
+) -> Iterator[tuple[list[Any], list[Any]]]:
     """
     Builds an iterator over test or val years based on a validation config file, see /conf/validation/...
     Yields (train_years, val_years) tuples
@@ -28,22 +30,22 @@ def get_splits(
             train_ds, val_ds = dataset.split_on_years((train, val))
     """
     # available years in the dataset
-    dataset_years = sorted(dataset_years)
+    years_list = sorted(dataset_years)
     split_years = cfg.test_years if which == 'test' else cfg.val_years
 
     #### 1. Step: Identify the set of hold-out years
     if isinstance(split_years, ListConfig):
         split_years = list(split_years)
         # test if year selection is available
-        assert all([year in dataset_years for year in
-                    split_years]), f"Selected test years ({split_years}) are not in dataset: {dataset_years}"
+        assert all([year in years_list for year in
+                    split_years]), f"Selected test years ({split_years}) are not in dataset: {years_list}"
         # Explicit list of years provided
         hold_out_years = split_years
 
     elif isinstance(split_years, str):
         if split_years == 'loyocv':
             # Leave-one-year-out CV: all years become hold-out years
-            hold_out_years = dataset_years
+            hold_out_years = years_list
 
         elif split_years.endswith('-last'):
             # Take k last years (e.g., "3-last")
@@ -52,25 +54,25 @@ def get_splits(
             if (which == 'test'):
                 # test whether there are enough years are in the dataset
                 # subtract at least 1 year for training
-                available_test_years = len(dataset_years) - 1
+                available_test_years = len(years_list) - 1
                 # subtract the years needed for validation
                 if cfg.val_years.endswith('-last'):
                     available_test_years = available_test_years - int(cfg.val_years.split('-')[0])
 
-                assert available_test_years, f"Your validation configuration doesnt fit to the number of available years. Only {len(dataset_years)} available"
+                assert available_test_years, f"Your validation configuration doesnt fit to the number of available years. Only {len(years_list)} available"
                 if k > available_test_years:
                     log.warning(f"Validation doesnt happen on {k} last years but only on the {available_test_years} available")
                     k = available_test_years
-            hold_out_years = dataset_years[-k:]
+            hold_out_years = years_list[-k:]
 
         elif split_years.endswith('%-split'):
             # Random percentage split (e.g., "20%-split")
             percentage = int(split_years.split('%')[0])
             assert 0 < percentage < 100, f"Invalid percentage: {percentage}"
-            n_hold_out = max(1, int(len(dataset_years) * percentage / 100))
+            n_hold_out = max(1, int(len(years_list) * percentage / 100))
             # Use numpy for reproducible random selection (could add seed from cfg)
             rng = np.random.RandomState(seed)
-            hold_out_years = sorted(rng.choice(dataset_years, size=n_hold_out, replace=False))
+            hold_out_years = sorted(rng.choice(years_list, size=n_hold_out, replace=False).tolist())
 
         else:
             raise ValueError(f"Unknown split_years format: {split_years}")
@@ -79,23 +81,23 @@ def get_splits(
 
     #### 2. Step: Select the training-set based on the split methode
     if cfg.name == 'single':
-        # returning a single set of train- and hol-out- years
-        train_years = [y for y in dataset_years if y not in hold_out_years]
-        assert train_years, f"No train years left. Hold-out-years: {hold_out_years} | Available years: {dataset_years}"
+        # returning a single set of train- and hold-out- years
+        train_years = [y for y in years_list if y not in hold_out_years]
+        assert train_years, f"No train years left. Hold-out-years: {hold_out_years} | Available years: {years_list}"
         yield train_years, hold_out_years
 
     elif cfg.name == 'rolling':
-        # returning a set of PAST train-years for each hol-out-year
+        # returning a set of PAST train-years for each hold-out-year
         for hold_out_year in sorted(hold_out_years):
-            train_years = [y for y in dataset_years if y < hold_out_year]
-            assert train_years, f"No train years left. Hold-out-year: {hold_out_year} | Available years: {dataset_years}"
+            train_years = [y for y in years_list if y < hold_out_year]
+            assert train_years, f"No train years left. Hold-out-year: {hold_out_year} | Available years: {years_list}"
             yield train_years, [hold_out_year]
 
     elif cfg.name == 'loyocv':
-        # returning a set of train-years for each hol-out-year
+        # returning a set of train-years for each hold-out-year
         for hold_out_year in sorted(hold_out_years):
-            train_years = [y for y in dataset_years if y != hold_out_year]
-            assert train_years, f"No train years left. Hold-out-year: {hold_out_year} | Available years: {dataset_years}"
+            train_years = [y for y in years_list if y != hold_out_year]
+            assert train_years, f"No train years left. Hold-out-year: {hold_out_year} | Available years: {years_list}"
             yield train_years, [hold_out_year]
     else:
         raise ValueError('Unknown split:', cfg.name)

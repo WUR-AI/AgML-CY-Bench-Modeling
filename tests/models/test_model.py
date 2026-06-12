@@ -1,4 +1,6 @@
 import os
+from typing import cast
+
 import pandas as pd
 import numpy as np
 import pytest
@@ -7,7 +9,7 @@ from hydra.utils import instantiate
 import copy
 
 
-from cybench.datasets.dataset import Dataset, PandasDataset
+from cybench.datasets.dataset import PandasDataset
 from cybench.models.naive_models import AverageYieldModel
 from cybench.models.trend_models import TrendModel
 # from cybench.models.sklearn_models import SklearnRidge
@@ -38,7 +40,7 @@ def test_average_yield_model():
         ["US-01-002", 2002, 6.2],
         ["US-01-002", 2003, 5.8],
     ]
-    yield_df = pd.DataFrame(dummy_data, columns=[KEY_LOC, KEY_YEAR, KEY_TARGET])
+    yield_df = pd.DataFrame(dummy_data, columns=pd.Index([KEY_LOC, KEY_YEAR, KEY_TARGET]))
     yield_df = yield_df.set_index([KEY_LOC, KEY_YEAR])
 
     # test prediction for an existing item
@@ -50,7 +52,7 @@ def test_average_yield_model():
     filtered_df = yield_df[yield_df.index.get_level_values(0) == sel_loc]
     expected_pred = filtered_df[KEY_TARGET].mean()
     test_index = pd.MultiIndex.from_tuples([(sel_loc, sel_year)], names=[KEY_LOC, KEY_YEAR])
-    test_y = pd.DataFrame(index=test_index, columns=[KEY_TARGET], data=[[0.0]])
+    test_y = pd.DataFrame(index=test_index, columns=pd.Index([KEY_TARGET]), data=[[0.0]])
     test_x = pd.DataFrame(index=test_index)
     test_dataset = PandasDataset(cfg=None, y=test_y, x=test_x)
     test_preds, _ = model.predict(test_dataset)
@@ -61,7 +63,7 @@ def test_average_yield_model():
     filtered_df = yield_df[yield_df.index.get_level_values(0) == sel_loc]
     expected_pred = filtered_df[KEY_TARGET].mean()
     test_index = pd.MultiIndex.from_tuples([(sel_loc, sel_year)], names=[KEY_LOC, KEY_YEAR])
-    test_y = pd.DataFrame(index=test_index, columns=[KEY_TARGET], data=[[0.0]])
+    test_y = pd.DataFrame(index=test_index, columns=pd.Index([KEY_TARGET]), data=[[0.0]])
     test_x = pd.DataFrame(index=test_index)
     test_dataset = PandasDataset(cfg=None, y=test_y, x=test_x)
     test_preds, _ = model.predict(test_dataset)
@@ -72,7 +74,7 @@ def test_average_yield_model():
     assert sel_loc not in yield_df.index.get_level_values(0)
     expected_pred = yield_df[KEY_TARGET].mean()
     test_index = pd.MultiIndex.from_tuples([(sel_loc, sel_year)], names=[KEY_LOC, KEY_YEAR])
-    test_y = pd.DataFrame(index=test_index, columns=[KEY_TARGET], data=[[0.0]])
+    test_y = pd.DataFrame(index=test_index, columns=pd.Index([KEY_TARGET]), data=[[0.0]])
     test_x = pd.DataFrame(index=test_index)
     test_dataset = PandasDataset(cfg=None, y=test_y, x=test_x)
     test_preds, _ = model.predict(test_dataset)
@@ -114,10 +116,10 @@ def test_trend_model():
         ["US-01-004", 2008, 6.1],
         ["US-01-004", 2009, 6.0],
     ]
-    yield_df = pd.DataFrame(dummy_data, columns=[KEY_LOC, KEY_YEAR, KEY_TARGET])
+    yield_df = pd.DataFrame(dummy_data, columns=pd.Index([KEY_LOC, KEY_YEAR, KEY_TARGET]))
 
     for sel_loc in yield_df[KEY_LOC].unique():
-        yield_loc_df = yield_df[yield_df[KEY_LOC] == sel_loc]
+        yield_loc_df = yield_df.loc[yield_df[KEY_LOC] == sel_loc]
         all_years = sorted(yield_loc_df[KEY_YEAR].unique())
 
         if sel_loc in ["US-01-001", "US-01-002"]:
@@ -125,14 +127,15 @@ def test_trend_model():
             for idx in test_indexes:
                 test_year = all_years[idx]
                 train_years = [y for y in all_years if y != test_year]
-                train_yields = yield_loc_df[yield_loc_df[KEY_YEAR].isin(train_years)]
-                train_yields = train_yields.set_index([KEY_LOC, KEY_YEAR])
-                test_yields = yield_loc_df[yield_loc_df[KEY_YEAR] == test_year]
+                train_yields = yield_loc_df.loc[
+                    yield_loc_df[KEY_YEAR].isin(train_years)
+                ].set_index([KEY_LOC, KEY_YEAR])
+                test_yields = yield_loc_df.loc[yield_loc_df[KEY_YEAR] == test_year]
                 train_dataset = PandasDataset(cfg=None, y=train_yields, x=pd.DataFrame(index=train_yields.index.copy()))
                 model = TrendModel()
                 model.fit(train_dataset)
                 test_index = pd.MultiIndex.from_tuples([(sel_loc, test_year)], names=[KEY_LOC, KEY_YEAR])
-                test_y = pd.DataFrame(index=test_index, columns=[KEY_TARGET], data=[[0.0]])
+                test_y = pd.DataFrame(index=test_index, columns=pd.Index([KEY_TARGET]), data=[[0.0]])
                 test_x = pd.DataFrame(index=test_index)
                 test_dataset = PandasDataset(cfg=None, y=test_y, x=test_x)
                 test_preds, _ = model.predict(test_dataset)
@@ -141,15 +144,16 @@ def test_trend_model():
         else:
             test_year = all_years[-1]
             train_years = [y for y in all_years if y != test_year]
-            train_yields = yield_loc_df[yield_loc_df[KEY_YEAR].isin(train_years)]
-            train_yields = train_yields.set_index([KEY_LOC, KEY_YEAR])
+            train_yields = yield_loc_df.loc[
+                yield_loc_df[KEY_YEAR].isin(train_years)
+            ].set_index([KEY_LOC, KEY_YEAR])
             train_dataset = PandasDataset(cfg=None, y=train_yields, x=pd.DataFrame(index=train_yields.index.copy()))
 
             # Expect the average due to insufficient data or no trend
             model = TrendModel()
             model.fit(train_dataset)
             test_index = pd.MultiIndex.from_tuples([(sel_loc, test_year)], names=[KEY_LOC, KEY_YEAR])
-            test_y = pd.DataFrame(index=test_index, columns=[KEY_TARGET], data=[[0.0]])
+            test_y = pd.DataFrame(index=test_index, columns=pd.Index([KEY_TARGET]), data=[[0.0]])
             test_x = pd.DataFrame(index=test_index)
             test_dataset = PandasDataset(cfg=None, y=test_y, x=test_x)
             test_preds, _ = model.predict(test_dataset)
@@ -167,7 +171,6 @@ def cfg():
                 "dataset.country=NL",
                 "dataset.framework=pandas",
                 "dataset.target.filter_samples=null",
-                "dataset.use_cache=false",
                 "model=ridge",
             ],
         )
@@ -195,16 +198,16 @@ def test_sklearn_model(cfg):
     data_path = os.path.join(PATH_DATA_DIR, "features", "maize", "US")
     train_csv = os.path.join(data_path, "grain_maize_US_train.csv")
     train_df = pd.read_csv(train_csv, index_col=[KEY_LOC, KEY_YEAR])
-    train_yields = train_df[[KEY_TARGET]].copy()
+    train_yields = cast(pd.DataFrame, train_df[[KEY_TARGET]].copy())
     feature_cols = [c for c in train_df.columns if c != KEY_TARGET]
-    train_features = train_df[feature_cols].copy()
+    train_features = cast(pd.DataFrame, train_df.loc[:, feature_cols].copy())
     dataset_cv = PandasDataset(cfg=None, y=train_yields, x=train_features)
 
     # Test dataset
     test_csv = os.path.join(data_path, "grain_maize_US_train.csv")
     test_df = pd.read_csv(test_csv, index_col=[KEY_LOC, KEY_YEAR])
-    test_yields = test_df[[KEY_TARGET]].copy()
-    test_features = test_df[feature_cols].copy()
+    test_yields = cast(pd.DataFrame, test_df[[KEY_TARGET]].copy())
+    test_features = cast(pd.DataFrame, test_df.loc[:, feature_cols].copy())
     test_dataset = PandasDataset(cfg=None, y=test_yields, x=test_features)
 
     model = instantiate(model_cfg)
@@ -229,55 +232,10 @@ def test_sklearn_model(cfg):
         ), f"Value of metric '{metric}' does not match expected value"
 
 
-# def test_sklearn_res_model():
-#     # wheat NL
-#     dataset_wheat = Dataset.load("wheat_NL")
-#     all_years = list(range(2001, 2019))
-#     test_years = [2017, 2018]
-#     train_years = [yr for yr in all_years if yr not in test_years]
-#     train_dataset, test_dataset = dataset_wheat.split_on_years(
-#         (train_years, test_years)
-#     )
-#     ridge = SklearnRidge()
-#     ridge_res = RidgeRes()
-#     ridge.fit(train_dataset)
-#     ridge_res.fit(train_dataset)
-#
-#     targets = test_dataset.targets()
-#     ridge_preds, _ = ridge.predict(test_dataset)
-#     ridge_res_preds, _ = ridge_res.predict(test_dataset)
-#
-#     metrics_ridge = evaluate_predictions(targets, ridge_preds)
-#     metrics_ridge_res = evaluate_predictions(targets, ridge_res_preds)
-#     print("wheat, NL")
-#     print("SklearnRidge", metrics_ridge)
-#     print("RidgeRes", metrics_ridge_res)
-#
-#     # maize NL
-#     dataset_maize = Dataset.load("maize_NL")
-#     all_years = list(range(2001, 2019))
-#     test_years = [2017, 2018]
-#     train_years = [yr for yr in all_years if yr not in test_years]
-#     train_dataset, test_dataset = dataset_maize.split_on_years(
-#         (train_years, test_years)
-#     )
-#     ridge = SklearnRidge()
-#     ridge_res = RidgeRes()
-#     ridge.fit(train_dataset)
-#     ridge_res.fit(train_dataset)
-#
-#     targets = test_dataset.targets()
-#     ridge_preds, _ = ridge.predict(test_dataset)
-#     ridge_res_preds, _ = ridge_res.predict(test_dataset)
-#
-#     metrics_ridge = evaluate_predictions(targets, ridge_preds)
-#     metrics_ridge_res = evaluate_predictions(targets, ridge_res_preds)
-#     print("maize, NL")
-#     print("SklearnRidge", metrics_ridge)
-#     print("RidgeRes", metrics_ridge_res)
-#
-#
-# # TODO: Uncomment after TorchDataset is working.
+@pytest.mark.skip(reason="Residual models (RidgeRes) were removed in v2.0 Hydra refactor")
+def test_sklearn_res_model():
+    pass
+
 
 @pytest.fixture
 def cfg_nn():
@@ -289,7 +247,6 @@ def cfg_nn():
                 "dataset.country=NL",
                 "dataset.framework=torch",
                 "dataset.target.filter_samples=null",
-                "dataset.use_cache=false",
                 "model=cnn_lf",
                 "experiment.device=cpu"
             ],
@@ -313,71 +270,20 @@ def test_nn_model(cfg_nn):
 
     fit_info = model.fit(train_dataset, val_dataset=test_dataset)
     test_preds, pred_info = model.predict(test_dataset)
-    evaluation_result = evaluate_predictions(y_true=test_dataset.targets, y_pred=test_preds, cfg=test_cfg.evaluation)
-    print(evaluation_result)
+    assert test_preds.shape[0] == len(test_dataset)
 
-
-
-
-#     train_dataset = Dataset.load("maize_NL")
-#     test_dataset = Dataset.load("maize_NL")
-#     device = "cuda" if torch.cuda.is_available() else "cpu"
-#
-#     # Initialize model, assumes that all features are in np.ndarray format
-#     model = BaselineLSTM(
-#         hidden_size=64,
-#         num_layers=1,
-#         output_size=1,
-#     )
-#     scheduler_fn = torch.optim.lr_scheduler.StepLR
-#
-#     # Train model
-#     model.fit(
-#         train_dataset,
-#         batch_size=16,
-#         epochs=10,
-#         param_space={
-#             "lr": [0.0001, 0.00001],
-#             "weight_decay": [0.0001, 0.00001],
-#         },
-#         device=device,
-#         scheduler_fn=scheduler_fn,
-#         **{
-#             "optimize_hyperparameters": True,
-#             "validation_interval": 5,
-#             "loss_kwargs": {
-#                 "reduction": "mean",
-#             },
-#             "sched_kwargs": {
-#                 "step_size": 2,
-#                 "gamma": 0.5,
-#             },
-#         },
-#     )
-#
-#     # Test predict_items()
-#     num_test_items = len(test_dataset)
-#     test_data = [test_dataset[i] for i in range(min(num_test_items, 16))]
-#     test_preds, _ = model.predict_items(test_data)
-#     assert test_preds.shape[0] == min(num_test_items, 16)
-#
-#     # Check if evaluation results are within expected range
-#     test_preds, _ = model.predict(test_dataset)
-#     targets = test_dataset.targets()
-#     evaluation_result = evaluate_predictions(targets, test_preds)
-#
-#     min_expected_values = {
-#         "normalized_rmse": 0,
-#         "mape": 0.00,
-#     }
-#     for metric, expected_value in min_expected_values.items():
-#         assert (
-#             metric in evaluation_result
-#         ), f"Metric '{metric}' not found in evaluation result"
-#         assert (
-#             evaluation_result[metric] >= expected_value
-#         ), f"Value of metric '{metric}' does not match expected value"
-#         # Check metric is not NaN
-#         assert not np.isnan(
-#             evaluation_result[metric]
-#         ), f"Value of metric '{metric}' is NaN"
+    evaluation_result = evaluate_predictions(
+        y_true=test_dataset.targets,
+        y_pred=test_preds,
+        cfg=test_cfg.evaluation,
+    )
+    min_expected_values = {
+        "normalized_rmse": 0,
+        "mape": 0.00,
+    }
+    for metric, expected_value in min_expected_values.items():
+        assert metric in evaluation_result, f"Metric '{metric}' not found in evaluation result"
+        assert evaluation_result[metric] >= expected_value, (
+            f"Value of metric '{metric}' does not match expected value"
+        )
+        assert not np.isnan(evaluation_result[metric]), f"Value of metric '{metric}' is NaN"

@@ -1,6 +1,10 @@
+from __future__ import annotations
+
 import torch
 import numpy as np
-from typing import List, Tuple, Any, Optional, Union, Dict
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy.typing as npt
 
 from omegaconf import DictConfig
 
@@ -116,9 +120,16 @@ class YearUniformNoise:
         # Get year index from context columns
         year_index = None
         if "context_columns" in kwargs:
-            year_indices = np.where(kwargs["context_columns"] == "year")[0]
-            if len(year_indices) == 0: return batch
-            year_index = year_indices[0]
+            context_columns = kwargs["context_columns"]
+            if isinstance(context_columns, np.ndarray):
+                year_indices = np.where(context_columns == "year")[0]
+                if len(year_indices) == 0:
+                    return batch
+                year_index = int(year_indices[0])
+            else:
+                if "year" not in context_columns:
+                    return batch
+                year_index = context_columns.index("year")
 
             batch_size = x_ctx.shape[0]
 
@@ -152,10 +163,11 @@ class AugmentationComposer:
         else:
             raise TypeError(f"Augmentations must be List or Dict, got {type(augmentations)}")
 
-    def __call__(self,
-                 batch_list: List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]],
-                 context_columns: Optional[np.ndarray] = None) -> Tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __call__(
+        self,
+        batch_list: List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]],
+        context_columns: list[str] | npt.NDArray[Any] | None = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Collate function that stacks samples and applies augmentations.
 
@@ -182,8 +194,10 @@ class AugmentationComposer:
         return batch
 
 
-def create_collate_fn(augmentation: Optional[AugmentationComposer],
-                      context_columns: Optional[np.ndarray] = None):
+def create_collate_fn(
+    augmentation: Optional[AugmentationComposer],
+    context_columns: list[str] | npt.NDArray[Any] | None = None,
+):
     """
     Factory function to create collate_fn with augmentation.
 

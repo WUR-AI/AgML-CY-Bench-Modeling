@@ -1,8 +1,13 @@
+from __future__ import annotations
+
 import pickle
 import logging
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
+import numpy.typing as npt
+import pandas as pd
 
 from cybench.models.model import BaseModel
 from cybench.datasets.dataset import PandasDataset
@@ -30,21 +35,30 @@ class AverageYieldModel(BaseModel):
         averages (e.g. ``admin`` for per-location averages).
     """
 
-    def __init__(self, name: str = "average_yield", group_by: str = KEY_LOC):
+    def __init__(
+        self,
+        name: str = "average_yield",
+        group_by: str = KEY_LOC,
+        **_ignored,
+    ):
+        # Hydra model configs may include metadata keys (e.g. framework).
+        # Accept and ignore unknown kwargs to keep instantiation robust.
         self.name = name
         if group_by == "admin": group_by = KEY_LOC
         self._group_by = group_by
-        self._averages = None
-        self._global_avg = None
-        self._location_columns = None
-        self._location_df = None
-        self._train_loc_coords = None
+        self._averages: pd.Series | None = None
+        self._global_avg: float | None = None
+        self._location_columns: list[str] | None = None
+        self._location_df: pd.DataFrame | None = None
+        self._train_loc_coords: pd.DataFrame | None = None
 
-    def fit(self, dataset: PandasDataset, **fit_params) -> dict:
+    def fit(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, dataset: PandasDataset, **fit_params
+    ) -> tuple[Any, dict[str, Any]]:
         x, y = dataset.xy
         y = y.reset_index()
-        self._averages = y.groupby(self._group_by)[KEY_TARGET].mean()
-        self._global_avg = y[KEY_TARGET].mean()
+        self._averages = cast(pd.Series, y.groupby(self._group_by)[KEY_TARGET].mean())
+        self._global_avg = float(y[KEY_TARGET].mean())
 
         # Build per-location coordinate lookup for nearest-neighbor fallback
         if 'loc_x' in x.columns:
@@ -55,34 +69,44 @@ class AverageYieldModel(BaseModel):
             self._location_columns = None
 
         if self._location_columns is not None:
-            self._location_df = x[self._location_columns]
+            location_df = cast(pd.DataFrame, x[self._location_columns])
+            self._location_df = location_df
             # One coordinate row per training location (deduplicate over years)
-            self._train_loc_coords = (
-                self._location_df
-                .groupby(level=KEY_LOC)
-                .first()
+            self._train_loc_coords = cast(
+                pd.DataFrame,
+                location_df.groupby(level=KEY_LOC).first(),
             )
-        return {}
+        return self, {}
 
-    def predict(self, dataset: PandasDataset, **predict_params):
+    def predict(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, dataset: PandasDataset, **predict_params
+    ) -> tuple[npt.NDArray[Any], dict[str, Any]]:
+        averages = self._averages
+        if averages is None:
+            raise RuntimeError(f"{self.name} must be fitted before predict()")
+
         x, y = dataset.xy
         locs = y.index.get_level_values(KEY_LOC)
         predictions = np.empty(len(locs))
 
         for i, loc in enumerate(locs):
-            if loc in self._averages.index:
-                predictions[i] = self._averages[loc]
+            if loc in averages.index:
+                predictions[i] = averages[loc]
             else:
                 predictions[i] = self._nearest_neighbor_avg(loc, x)
 
         return predictions, {}
 
-    def _nearest_neighbor_avg(self, loc, test_x):
+    def _nearest_neighbor_avg(self, loc, test_x: pd.DataFrame) -> float:
         """Look up the average of the nearest training location by coordinates.
 
         Falls back to the global average when no coordinate columns are available
         or the test location has no coordinate data.
         """
+        averages = self._averages
+        if averages is None or self._global_avg is None:
+            raise RuntimeError(f"{self.name} must be fitted before predict()")
+
         if self._train_loc_coords is None or self._location_columns is None:
             return self._global_avg
 
@@ -100,13 +124,13 @@ class AverageYieldModel(BaseModel):
         nearest_loc = self._train_loc_coords.index[np.argmin(dists)]
 
         log.info("Unseen location %s -> nearest neighbor %s", loc, nearest_loc)
-        return self._averages[nearest_loc]
+        return float(averages[nearest_loc])
 
-    def save(self, path):
-        with open(Path(path) / f"{self.name}.pkl", "wb") as f:
+    def save(self, model_path: str) -> None:
+        with open(Path(model_path) / f"{self.name}.pkl", "wb") as f:
             pickle.dump(self, f)
 
     @classmethod
-    def load(cls, path):
-        with open(path, "rb") as f:
+    def load(cls, model_path: str) -> AverageYieldModel:
+        with open(model_path, "rb") as f:
             return pickle.load(f)

@@ -1,8 +1,12 @@
+from __future__ import annotations
+
+from typing import Any
+
 import pandas as pd
 import numpy as np
 
 
-def data_to_pandas(data_items, data_cols=None):
+def data_to_pandas(data_items, data_cols: list[str] | None = None):
     """Convert data items as dict to pandas DataFrame
 
     Args:
@@ -19,10 +23,14 @@ def data_to_pandas(data_items, data_cols=None):
 
         data.append([item[c] for c in data_cols])
 
-    return pd.DataFrame(data, columns=data_cols)
+    return pd.DataFrame(data, columns=pd.Index(data_cols))
 
 
-def trim_time_series_data(sample: dict, num_time_steps: int, time_series_keys: list):
+def trim_time_series_data(
+    sample: dict[str, Any],
+    num_time_steps: int,
+    time_series_keys: list[str],
+):
     """Trims time series data to provided number of time steps
 
     Args:

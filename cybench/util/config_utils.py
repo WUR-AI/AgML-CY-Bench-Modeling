@@ -1,19 +1,23 @@
-from typing import Dict, List
+from __future__ import annotations
+
 import os
-from cybench.datasets.dataset import Dataset
-from cybench.datasets.torch_dataset import TorchDataset
+import pathlib
 import random
+from pathlib import Path
+from typing import List, cast
+
 import numpy as np
 import torch
-import pathlib
 import yaml
-from omegaconf import DictConfig, OmegaConf, ListConfig
 from hydra import compose, initialize_config_dir
-from pathlib import Path
+from omegaconf import DictConfig, OmegaConf
+
+from cybench.datasets.dataset import BaseDataset
+from cybench.datasets.torch_dataset import TorchDataset
 
 
-def adjust_model_cfg_to_dataset(model_cfg: Dict, dataset: Dataset):
-    if type(dataset) == TorchDataset:
+def adjust_model_cfg_to_dataset(model_cfg: DictConfig, dataset: BaseDataset) -> DictConfig:
+    if isinstance(dataset, TorchDataset):
         # add input-dim to first layers
         _, x_c_sample, x_t_sample, _ = dataset[0]
         model_cfg.torch_model.context_in_dim = len(x_c_sample)
@@ -21,7 +25,7 @@ def adjust_model_cfg_to_dataset(model_cfg: Dict, dataset: Dataset):
     return model_cfg
 
 
-def remove_keys(model_cfg: DictConfig, key="_search_") -> ListConfig:
+def remove_keys(model_cfg: DictConfig, key="_search_") -> DictConfig:
     """Recursively remove _search_ keys from config before instantiation. Only important for hyperparameter search."""
     cfg_dict = OmegaConf.to_container(model_cfg, resolve=True)
 
@@ -33,9 +37,9 @@ def remove_keys(model_cfg: DictConfig, key="_search_") -> ListConfig:
         else:
             return obj
 
-    return OmegaConf.create(_clean(cfg_dict))
+    return cast(DictConfig, OmegaConf.create(_clean(cfg_dict)))
 
-def remove_search_keys(model_cfg: DictConfig) -> ListConfig:
+def remove_search_keys(model_cfg: DictConfig) -> DictConfig:
     return remove_keys(model_cfg, key="_search_")
 
 

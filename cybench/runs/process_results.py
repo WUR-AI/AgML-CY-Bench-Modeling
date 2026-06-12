@@ -1,8 +1,12 @@
-import os
-import pandas as pd
-import argparse
+from __future__ import annotations
 
-from cybench.runs.run_benchmark import (
+import os
+import argparse
+from typing import cast
+
+import pandas as pd
+
+from cybench.runs.run_benchmark import (  # pyright: ignore[reportMissingImports]
     compute_metrics,
     get_prediction_residuals,
 )
@@ -13,7 +17,11 @@ from cybench.config import (
     PATH_OUTPUT_DIR,
     PATH_RESULTS_DIR,
 )
-from cybench.evaluation.eval import get_default_metrics
+from cybench.evaluation.eval import implemented_metrics
+
+
+def get_default_metrics():
+    return implemented_metrics.keys()
 
 def results_to_metrics(residual: bool = False) -> pd.DataFrame:
     """
@@ -52,7 +60,9 @@ def results_to_metrics(residual: bool = False) -> pd.DataFrame:
         return pd.concat(df_all, ignore_index=True)
     else:
         # Empty DataFrame with correct columns
-        return pd.DataFrame(columns=["crop", KEY_COUNTRY, KEY_YEAR, "model"] + default_metrics)
+        return pd.DataFrame(
+            columns=pd.Index(["crop", KEY_COUNTRY, KEY_YEAR, "model"] + default_metrics)
+        )
 
 
 def results_to_residuals(model_names):
@@ -129,7 +139,7 @@ def write_results_to_table(output_file: str):
         tables[crop] = {}
         crop_df = df_metrics[df_metrics.index.get_level_values("crop").isin([crop])]
         for metric in metrics:
-            tables[crop][metric] = crop_df.reset_index().pivot_table(
+            tables[crop][metric] = cast(pd.DataFrame, crop_df).reset_index().pivot_table(
                 index=["crop", KEY_COUNTRY], columns="model", values=metric
             )
     print(f"write to {os.path.join(PATH_OUTPUT_DIR, output_file)}")

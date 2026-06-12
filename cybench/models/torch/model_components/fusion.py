@@ -1,6 +1,9 @@
+from __future__ import annotations
+
+from typing import Optional
+
 import torch
 import torch.nn as nn
-from typing import Optional
 
 
 class ConcatFusion(nn.Module):
@@ -30,7 +33,7 @@ class ConcatFusion(nn.Module):
             self.proj = nn.Identity()
             self.out_dim = in_dim
         else:
-            layers = [nn.Linear(in_dim, out_dim), nn.ReLU()]
+            layers: list[nn.Module] = [nn.Linear(in_dim, out_dim), nn.ReLU()]
             if dropout > 0:
                 layers.append(nn.Dropout(dropout))
             if use_layernorm:
@@ -112,16 +115,17 @@ class GatedFusion(nn.Module):
     ):
         super().__init__()
 
-        self.out_dim = out_dim if out_dim is not None else temporal_dim
+        out_features = out_dim if out_dim is not None else temporal_dim
+        self.out_dim = out_features
 
         # Gate: function of concatenated *original* embeddings
         self.gate_net = nn.Sequential(
-            nn.Linear(temporal_dim + static_dim, out_dim),
+            nn.Linear(temporal_dim + static_dim, out_features),
             nn.Sigmoid(),
         )
 
         self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
-        self.norm = nn.LayerNorm(out_dim) if use_layernorm else nn.Identity()
+        self.norm = nn.LayerNorm(out_features) if use_layernorm else nn.Identity()
 
     def forward(self, temporal_emb: torch.Tensor, static_emb: torch.Tensor) -> torch.Tensor:
         # Gate from original concatenated embeddings

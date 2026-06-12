@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import pickle
 import logging
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, cast
 
 import numpy as np
+import numpy.typing as npt
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 
@@ -26,22 +29,26 @@ class XGBoostModel(BaseModel):
         self.model = XGBRegressor(**kwargs)
         log.info(f"Initialized {self.name}")
 
-    def fit(self, dataset: PandasDataset, **fit_params) -> Dict[str, Any]:
+    def fit(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, dataset: PandasDataset, **fit_params
+    ) -> tuple[Any, dict[str, Any]]:
         X, y = dataset.xy
         self.model.fit(X, y.values.ravel())
-        return {}
+        return self, {}
 
-    def predict(self, dataset: PandasDataset, **predict_params) -> Tuple[np.ndarray, Dict]:
+    def predict(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, dataset: PandasDataset, **predict_params
+    ) -> tuple[npt.NDArray[Any], dict[str, Any]]:
         X, _ = dataset.xy
-        return self.model.predict(X), {}
+        return cast(npt.NDArray[Any], np.asarray(self.model.predict(X))), {}
 
-    def save(self, path):
-        with open(Path(path) / f"{self.name}.pkl", "wb") as f:
+    def save(self, model_path: str) -> None:
+        with open(Path(model_path) / f"{self.name}.pkl", "wb") as f:
             pickle.dump(self, f)
 
     @classmethod
-    def load(cls, path):
-        with open(path, "rb") as f:
+    def load(cls, model_path: str) -> XGBoostModel:
+        with open(model_path, "rb") as f:
             return pickle.load(f)
 
 
@@ -58,20 +65,24 @@ class LGBMModel(BaseModel):
         self.model = LGBMRegressor(**kwargs)
         log.info(f"Initialized {self.name}")
 
-    def fit(self, dataset: PandasDataset, **fit_params) -> Dict[str, Any]:
+    def fit(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, dataset: PandasDataset, **fit_params
+    ) -> tuple[Any, dict[str, Any]]:
         X, y = dataset.xy
         self.model.fit(X, y.values.ravel())
-        return {}
+        return self, {}
 
-    def predict(self, dataset: PandasDataset, **predict_params) -> Tuple[np.ndarray, Dict]:
+    def predict(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, dataset: PandasDataset, **predict_params
+    ) -> tuple[npt.NDArray[Any], dict[str, Any]]:
         X, _ = dataset.xy
-        return self.model.predict(X), {}
+        return cast(npt.NDArray[Any], np.asarray(self.model.predict(X))), {}
 
-    def save(self, path):
-        with open(Path(path) / f"{self.name}.pkl", "wb") as f:
+    def save(self, model_path: str) -> None:
+        with open(Path(model_path) / f"{self.name}.pkl", "wb") as f:
             pickle.dump(self, f)
 
     @classmethod
-    def load(cls, path):
-        with open(path, "rb") as f:
+    def load(cls, model_path: str) -> LGBMModel:
+        with open(model_path, "rb") as f:
             return pickle.load(f)

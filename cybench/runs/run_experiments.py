@@ -1,21 +1,40 @@
+from __future__ import annotations
+
+from typing import cast
+
 import hydra
 import numpy as np
-from hydra.core.config_store import ConfigStore
+from hydra.core.hydra_config import HydraConfig
 from hydra.utils import instantiate
 import logging
 from codecarbon import track_emissions
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 
 from cybench.datasets.data_factory import DataFactory
+from cybench.datasets.torch_dataset import TorchDataset
 from cybench.evaluation.eval import evaluate_predictions
 from cybench.util.config_utils import adjust_model_cfg_to_dataset, set_seed, remove_search_keys
 from cybench.util.optuna_hyper_opt import OptunaOptimizer
 from cybench.util.store_and_cache import make_folder, save_preds, save_meta_dict
 from cybench.util.validation import get_splits
+from cybench.config import KEY_COUNTRY, KEY_LOC, KEY_YEAR, KEY_TARGET
 
 # init logger
 log = logging.getLogger(__name__)
 
+
+def _maybe_drop_temporal_for_average_model(cfg) -> None:
+    """AverageYieldModel only uses targets and static location columns; skip all temporal IO."""
+    target = OmegaConf.select(cfg, "model._target_") or ""
+    if not (isinstance(target, str) and "AverageYieldModel" in target):
+        return
+    if "temporal" not in cfg.dataset or "sources" not in cfg.dataset.temporal:
+        return
+    with open_dict(cfg.dataset.temporal):
+        cfg.dataset.temporal.sources.clear()
+    log.info(
+        "AverageYieldModel: dropped all temporal sources (model does not use time series)."
+    )
 
 
 @track_emissions(log_level="WARNING")
@@ -25,9 +44,13 @@ def main(cfg):
     #print(OmegaConf.to_yaml(cfg))
     set_seed(cfg.experiment.seed)
 
+    _maybe_drop_temporal_for_average_model(cfg)
+
     log.info("=== Create Datasets ===")
     dataset = DataFactory(cfg.dataset).build()
-    if "process" in cfg: dataset.process(cfg.process)
+    log.info(f"Dataset years: {sorted(dataset.years)}")
+    if "process" in cfg and isinstance(dataset, TorchDataset):
+        dataset.process(cfg.process)
     # TODO extra function for testing config compatibility
     if cfg.dataset.framework == "pandas": assert "torch_model" not in cfg.model, "You selected a torch model but no torch dataset. Switch to torch dataset by dataset.framework=torch or select a model that operates on tabular data (PandasDataset)."
     if cfg.dataset.framework == "torch":
@@ -37,6 +60,8 @@ def main(cfg):
 
 
     # split data in train- and test-set based on the validation strategy
+    run_output_dir = HydraConfig.get().runtime.output_dir
+
     for train_test_split in get_splits(cfg=cfg.validation,
                                        which="test",
                                        dataset_years=dataset.years,
@@ -46,7 +71,7 @@ def main(cfg):
         log.info(f"== Split Test: {test_years} ==")
         train_dataset, test_dataset = dataset.split_on_years(years_split=train_test_split)
         # create a folder for each split
-        split_path = make_folder(dir=hydra.core.hydra_config.HydraConfig.get().runtime.output_dir, name=test_years)
+        split_path = make_folder(dir=run_output_dir, name=test_years)
 
         # check whether hyperparameter tuning is equipped:
         if "hp_search" in cfg:
@@ -56,14 +81,14 @@ def main(cfg):
                 path=split_path,
                 study_name=f"{split_path.parent.name}_{split_path.name}"
             )
-            model_cfg = hp_optimizer.optimize()
+            model_cfg = cast(DictConfig, hp_optimizer.optimize())
         else:
             # _search_ keys for hyperparameter tuning have to be removed before model instantiation
             model_cfg = remove_search_keys(cfg.model)
         # save final model config
         OmegaConf.save(config=model_cfg, f=split_path / "model_config.yaml")
 
-        log.info(f"Train final model on {len(train_dataset.y)} datapoints")
+        log.info(f"Train final model on {len(train_dataset)} datapoints")
         metric_ls = []
         for i in range(cfg.experiment.n_repetitions):
             meta_dict = {}
@@ -79,7 +104,32 @@ def main(cfg):
             test_preds, pred_info = model.predict(test_dataset)
 
             # save preds, model, ...
-            save_preds(path=repetition_path, dataset=test_dataset, preds=test_preds, file_name=f'test_preds')
+            year_preds_df = save_preds(path=repetition_path, dataset=test_dataset, preds=test_preds, file_name=f'test_preds')
+
+            # Also export split predictions directly to the run root:
+            # <crop>_<country>_year_<yyyy>.csv for easy downstream consumption.
+            # If running multiple repetitions, append _seed_<seed> to avoid overwrite.
+            test_year_tag = "_".join(str(y) for y in test_years)
+            country_cfg = cfg.dataset.country
+            country_tag = country_cfg if isinstance(country_cfg, str) else "-".join(country_cfg)
+            root_file = f"{cfg.dataset.crop.name}_{country_tag}_year_{test_year_tag}"
+            if cfg.experiment.n_repetitions > 1:
+                root_file = f"{root_file}_seed_{seed}"
+
+            # Format to wide, model-named schema expected by downstream scripts, e.g.
+            # country_code,adm_id,year,yield,AverageYieldModel
+            model_col = cfg.model._target_.split(".")[-1] if "_target_" in cfg.model else str(cfg.model.name)
+            formatted_df = year_preds_df.rename(columns={"targets": KEY_TARGET, "preds": model_col})
+            if KEY_COUNTRY not in formatted_df.columns:
+                if isinstance(country_cfg, str):
+                    formatted_df[KEY_COUNTRY] = country_cfg
+                else:
+                    # Multi-country fallback: infer from adm_id prefix (e.g. US-01-003 -> US)
+                    formatted_df[KEY_COUNTRY] = formatted_df[KEY_LOC].astype(str).str.split("-").str[0]
+
+            output_cols = [KEY_COUNTRY, KEY_LOC, KEY_YEAR, KEY_TARGET, model_col]
+            formatted_df = formatted_df[output_cols]
+            formatted_df.to_csv(f"{run_output_dir}/{root_file}.csv", index=False, float_format="%.6f")
             if cfg.store.model: model.save(path=repetition_path)
             if cfg.store.meta: save_meta_dict(path=repetition_path, dict=meta_dict)
 

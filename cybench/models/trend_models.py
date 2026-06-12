@@ -1,8 +1,13 @@
+from __future__ import annotations
+
 import pickle
 import logging
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
+import numpy.typing as npt
+import pandas as pd
 from statsmodels.regression.linear_model import OLS
 from statsmodels.tools.tools import add_constant
 import pymannkendall as trend_mk
@@ -44,14 +49,21 @@ class TrendModel(BaseModel):
         self.name = name
         self.min_trend_window = min_trend_window
         self.max_trend_window = max_trend_window
-        self._train_df = None
+        self._train_df: pd.DataFrame | None = None
 
-    def fit(self, dataset: PandasDataset, **fit_params) -> dict:
+    def fit(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, dataset: PandasDataset, **fit_params
+    ) -> tuple[Any, dict[str, Any]]:
         y = dataset.y
-        self._train_df = y.reset_index()[[KEY_LOC, KEY_YEAR, KEY_TARGET]]
-        return {}
+        self._train_df = cast(
+            pd.DataFrame,
+            y.reset_index()[[KEY_LOC, KEY_YEAR, KEY_TARGET]],
+        )
+        return self, {}
 
-    def predict(self, dataset: PandasDataset, **predict_params):
+    def predict(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, dataset: PandasDataset, **predict_params
+    ) -> tuple[npt.NDArray[Any], dict[str, Any]]:
         y = dataset.y
         test_df = y.reset_index()
         predictions = np.empty(len(test_df))
@@ -67,22 +79,29 @@ class TrendModel(BaseModel):
     # internals
     # ------------------------------------------------------------------
 
-    def _predict_single(self, loc, test_year):
-        sel = self._train_df[self._train_df[KEY_LOC] == loc]
+    def _require_train_df(self) -> pd.DataFrame:
+        if self._train_df is None:
+            raise RuntimeError(f"{self.name} must be fitted before predict()")
+        return self._train_df
+
+    def _predict_single(self, loc, test_year) -> float:
+        train_df = self._require_train_df()
+        sel = train_df[train_df[KEY_LOC] == loc]
 
         # Case 1: no training data for location
         if sel.empty:
-            return self._train_df[KEY_TARGET].mean()
+            return float(train_df[KEY_TARGET].mean())
 
-        train_labels = sel[[KEY_YEAR, KEY_TARGET]].values
-        train_years = sorted(sel[KEY_YEAR].unique())
+        label_df = cast(pd.DataFrame, sel.loc[:, [KEY_YEAR, KEY_TARGET]])
+        train_labels = cast(npt.NDArray[np.floating[Any]], label_df.to_numpy())
+        train_years = sorted(cast(pd.Series, sel[KEY_YEAR]).unique())
 
         lt = [yr for yr in train_years if yr < test_year]
         gt = [yr for yr in train_years if yr > test_year]
 
         # Case 2: not enough years on either side
         if len(lt) < self.min_trend_window and len(gt) < self.min_trend_window:
-            return sel[KEY_TARGET].mean()
+            return float(sel[KEY_TARGET].mean())
 
         trend = None
 
@@ -102,9 +121,9 @@ class TrendModel(BaseModel):
 
         # Case 5: no significant trend — use location mean
         if trend is None:
-            trend = sel[KEY_TARGET].mean()
+            trend = float(sel[KEY_TARGET].mean())
 
-        return trend
+        return float(trend)
 
     def _estimate_trend(self, trend_x, trend_y, test_x):
         """Fit OLS on (year, yield) and predict at test_x."""
@@ -129,11 +148,11 @@ class TrendModel(BaseModel):
 
         return best
 
-    def save(self, path):
-        with open(Path(path) / f"{self.name}.pkl", "wb") as f:
+    def save(self, model_path: str) -> None:
+        with open(Path(model_path) / f"{self.name}.pkl", "wb") as f:
             pickle.dump(self, f)
 
     @classmethod
-    def load(cls, path):
-        with open(path, "rb") as f:
+    def load(cls, model_path: str) -> TrendModel:
+        with open(model_path, "rb") as f:
             return pickle.load(f)

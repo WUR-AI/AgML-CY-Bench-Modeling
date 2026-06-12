@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Any, cast
 
 import pandas as pd
 import numpy as np
+import numpy.typing as npt
 import torch
 
 from cybench.datasets.normalizer import Normalizer
@@ -14,6 +18,9 @@ from cybench.config import (
     CROP_CALENDAR_DATES,
 )
 
+# NDVI/FPAR etc. are not daily; min/max date bracket vs season window needs slack so sparse
+# observations still count as spanning [start_of_sequence, end_of_sequence] (see align_to_crop_season_window*).
+SPARSE_TS_SEASON_BRACKET_TOLERANCE_DAYS = 30
 
 
 def fortnight_from_date(dt: datetime):
@@ -132,7 +139,9 @@ def compute_crop_season_window(df, min_year, max_year, start_of_sequence, end_of
         df["end_of_sequence_date"] = df["eos_date"]
     else:
         df = add_cutoff_days(df, end_of_sequence)
-        df["end_of_sequence_date"] = df["eos_date"] - pd.to_timedelta(df["cutoff_days"], unit="d")
+        df["end_of_sequence_date"] = df["eos_date"] - pd.to_timedelta(
+            np.asarray(df["cutoff_days"]), unit="d"
+        )
 
     if start_of_sequence == "sos":
         df["start_of_sequence_date"] = df["sos_date"]
@@ -266,14 +275,14 @@ def process_crop_seasons(
 
 
 def align_to_crop_season_window_numpy(
-    locs: np.ndarray,
-    years: np.ndarray,
-    dates: np.ndarray,
-    crop_season_keys: dict,
-    sos_dates: np.ndarray,
-    eos_dates: np.ndarray,
-    start_of_sequence_date: np.ndarray,
-    end_of_sequence_date: np.ndarray,
+    locs: npt.NDArray[Any],
+    years: npt.NDArray[Any],
+    dates: npt.NDArray[Any],
+    crop_season_keys: dict[Any, Any],
+    sos_dates: npt.NDArray[Any],
+    eos_dates: npt.NDArray[Any],
+    start_of_sequence_date: npt.NDArray[Any],
+    end_of_sequence_date: npt.NDArray[Any],
 ):
     """
     Aligns time series data using NumPy arrays and full vectorization, with optimized memory.
@@ -306,8 +315,8 @@ def align_to_crop_season_window_numpy(
     grouped_adm_ids = grouped.index.get_level_values(0)
     grouped_years = grouped.index.get_level_values(1)
     # Convert grouped DataFrame columns to NumPy arrays for fast operations
-    date_min = grouped["date_min"].values.astype("datetime64[D]")
-    date_max = grouped["date_max"].values.astype("datetime64[D]")
+    date_min = np.asarray(grouped["date_min"]).astype("datetime64[D]")
+    date_max = np.asarray(grouped["date_max"]).astype("datetime64[D]")
 
     # Get corresponding indices in the cutoff_dates and season_window_lengths arrays
     crop_indices = np.array(
@@ -324,7 +333,7 @@ def align_to_crop_season_window_numpy(
     valid_start = np.zeros_like(valid_mask, dtype=bool)
     valid_end = np.zeros_like(valid_mask, dtype=bool)
 
-    tolerance = np.timedelta64(10, "D")  # indicators may not come in daily timesteps
+    tolerance = np.timedelta64(SPARSE_TS_SEASON_BRACKET_TOLERANCE_DAYS, "D")
     valid_start[valid_mask] = date_min[valid_mask] - tolerance < (
         start_of_sequence_date[crop_indices[valid_mask]]
     )
@@ -332,7 +341,10 @@ def align_to_crop_season_window_numpy(
         date_max[valid_mask] + tolerance > end_of_sequence_date[crop_indices[valid_mask]]
     )
     invalid_season_mask = (~valid_start) | (~valid_end)
-    invalid_season_pairs = grouped.index[invalid_season_mask]
+    invalid_season_pairs = cast(
+        pd.MultiIndex,
+        grouped.index[invalid_season_mask],
+    )
 
     if not invalid_season_pairs.empty:
         grouped_indices = df_minimal.groupby([KEY_LOC, KEY_YEAR], observed=True).indices
@@ -388,23 +400,34 @@ def align_to_crop_season_window(df_ts: pd.DataFrame, crop_season_df: pd.DataFram
         "max"
     )
 
-    tolerance = pd.Timedelta(days=10)  # Define tolerance as 10 days
+    tolerance = pd.Timedelta(days=SPARSE_TS_SEASON_BRACKET_TOLERANCE_DAYS)
 
-    df_ts = df_ts[
-        (
-            (df_ts["min_date"] - tolerance)
-            < (df_ts["start_of_sequence_date"])
-        )
-        & ((df_ts["max_date"] + tolerance) > df_ts["end_of_sequence_date"])
-    ]
+    df_ts = cast(
+        pd.DataFrame,
+        df_ts[
+            (
+                (df_ts["min_date"] - tolerance)
+                < (df_ts["start_of_sequence_date"])
+            )
+            & ((df_ts["max_date"] + tolerance) > df_ts["end_of_sequence_date"])
+        ],
+    )
 
     # Trim to lead time
-    df_ts = df_ts[(df_ts["date"] <= df_ts["end_of_sequence_date"]) & (df_ts["date"] >= df_ts["start_of_sequence_date"])]
+    df_ts = cast(
+        pd.DataFrame,
+        df_ts[
+            (df_ts["date"] <= df_ts["end_of_sequence_date"])
+            & (df_ts["date"] >= df_ts["start_of_sequence_date"])
+        ],
+    )
 
     return df_ts[select_cols]
 
 
-def align_inputs_and_labels(df_y: pd.DataFrame, dfs_x: dict) -> tuple:
+def align_inputs_and_labels(
+    df_y: pd.DataFrame, dfs_x: dict[str, pd.DataFrame]
+) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     """Align inputs and labels to have common indices (KEY_LOC, KEY_YEAR).
     NOTE: Input data returned may still contain more (KEY_LOC, KEY_YEAR)
     entries than label data. This is fine because the index of label data is
@@ -451,22 +474,25 @@ def align_inputs_and_labels(df_y: pd.DataFrame, dfs_x: dict) -> tuple:
 
     for dataset_name, df_x in dfs_x.items():
         if len(df_x.index.names) == 1:
-            df_x = df_x.loc[list(index_y_locations)]
+            df_x = cast(pd.DataFrame, df_x.loc[list(index_y_locations)])
 
         if len(df_x.index.names) == 2:
-            df_x = df_x.loc[list(index_y_selection)]
+            df_x = cast(pd.DataFrame, df_x.loc[list(index_y_selection)])
 
         if len(df_x.index.names) == 3:
             index_names = df_x.index.names
-            df_x.reset_index(inplace=True)
+            df_x = df_x.reset_index()
             # filter by location
-            df_x = df_x[df_x.adm_id.isin(index_y_locations)]
+            df_x = cast(pd.DataFrame, df_x[df_x.adm_id.isin(index_y_locations)])
             # filter by year
-            df_x = df_x[
-                (df_x[KEY_YEAR] >= min(index_y_years))
-                & (df_x[KEY_YEAR] <= max(index_y_years))
-            ]
-            df_x.set_index(index_names, inplace=True)
+            df_x = cast(
+                pd.DataFrame,
+                df_x[
+                    (df_x[KEY_YEAR] >= min(index_y_years))
+                    & (df_x[KEY_YEAR] <= max(index_y_years))
+                ],
+            )
+            df_x = cast(pd.DataFrame, df_x.set_index(index_names))
 
         dfs_x[dataset_name] = df_x
 
@@ -474,7 +500,7 @@ def align_inputs_and_labels(df_y: pd.DataFrame, dfs_x: dict) -> tuple:
 
 
 def interpolate_time_series_data(
-    dfs: list
+    dfs: dict[str, pd.DataFrame],
 ):
     """Add dates covering season window length and interpolate to fill in NAs.
 
@@ -502,14 +528,21 @@ def make_aligned_tensors(
         df_y: pd.DataFrame,
         df_non_temporal: pd.DataFrame,
         df_ts: pd.DataFrame,
-        normalizer: Normalizer,
+        normalizer: Normalizer | None = None,
 ):
     y = torch.tensor(df_y.values, dtype=torch.float32) # (sample_size)
 
     # align the non-temporal dataset to match the indices
-    expanded_df_non_temporal = df_y.reset_index(KEY_YEAR).merge(df_non_temporal, on=KEY_LOC, how="left").drop(df_y.columns, axis=1)
+    expanded_df_non_temporal = (
+        df_y.reset_index(KEY_YEAR)
+        .merge(df_non_temporal, on=KEY_LOC, how="left")
+        .drop(columns=df_y.columns.tolist())
+    )
     # normalize the year column
-    expanded_df_non_temporal[KEY_YEAR] = normalizer.normalize_sequence(expanded_df_non_temporal[KEY_YEAR])
+    if normalizer is not None:
+        expanded_df_non_temporal[KEY_YEAR] = normalizer.normalize_sequence(
+            cast(pd.Series, expanded_df_non_temporal[KEY_YEAR])
+        )
     x_context = torch.tensor(expanded_df_non_temporal.values, dtype=torch.float32) # (sample_size x non_temp_features)
     assert not x_context.isnan().any()
 
@@ -527,6 +560,11 @@ def make_aligned_tensors(
     assert not x_ts.isnan().any()
     assert not doy_ts.isnan().any()
 
-    return (y, x_context, x_ts), (df_y.columns, expanded_df_non_temporal.columns, df_ts.columns), doy_ts
+    column_names = (
+        df_y.columns.tolist(),
+        expanded_df_non_temporal.columns.tolist(),
+        df_ts.columns.tolist(),
+    )
+    return (y, x_context, x_ts), column_names, doy_ts
 
 

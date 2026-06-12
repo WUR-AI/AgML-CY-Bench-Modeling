@@ -6,14 +6,17 @@ Transformers Trainer (see:
 https://huggingface.co/docs/transformers/main_classes/trainer),
 but is adapted to the CY-Bench codebase and a PyTorch regression setup.
 """
+from __future__ import annotations
+
 import logging
 import os
 import time
 from contextlib import nullcontext
-from functools import partial
-from typing import Any, Dict, Optional, Tuple, List
+from collections.abc import Callable
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import numpy as np
+import numpy.typing as npt
 import torch
 import torch.nn as nn
 from omegaconf import DictConfig
@@ -93,8 +96,8 @@ class TorchTrainer(BaseModel):
         loss_fn: Optional[nn.Module] = None,
         device: Optional[str] = None,
         preload_to_device: Optional[bool] = False,
-        dataloader: Optional[partial] = None,
-        augmentation: AugmentationComposer = None,
+        dataloader: Callable[..., DataLoader[Any]] | None = None,
+        augmentation: AugmentationComposer | None = None,
         epochs: int = 100,
         early_stopping: Optional[EarlyStopping] = None,
         max_grad_norm: Optional[float] = 1,
@@ -105,7 +108,9 @@ class TorchTrainer(BaseModel):
         self.name = name
         self.seed = seed
         self.loss_fn = loss_fn or nn.MSELoss()
-        self.model = torch_model
+        if torch_model is None:
+            raise ValueError("torch_model must be provided")
+        self.model: nn.Module = torch_model
 
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -145,7 +150,9 @@ class TorchTrainer(BaseModel):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _create_dataloader(self, dataset, augment: bool, shuffle: bool) -> DataLoader:
+    def _create_dataloader(
+        self, dataset: TorchDataset, augment: bool, shuffle: bool
+    ) -> DataLoader[Any]:
         """
         Create a DataLoader from a TorchDataset using dataloader.
 
@@ -160,7 +167,10 @@ class TorchTrainer(BaseModel):
         dataloader = self.dataloader
 
         if self.augmentation is not None and augment:
-            collate_fn = create_collate_fn(augmentation=self.augmentation, context_columns=dataset.x_context_columns)
+            collate_fn = create_collate_fn(
+                augmentation=self.augmentation,
+                context_columns=dataset.x_context_columns,
+            )
             return dataloader(dataset=dataset, collate_fn=collate_fn, shuffle=shuffle)
         else:
             return dataloader(dataset=dataset, shuffle=shuffle)
@@ -169,7 +179,9 @@ class TorchTrainer(BaseModel):
     # BaseModel API
     # ------------------------------------------------------------------
 
-    def fit(self, dataset: TorchDataset, **fit_params) -> Dict[str, Any]:
+    def fit(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, dataset: TorchDataset, **fit_params
+    ) -> tuple[Any, Dict[str, Any]]:
         """
         Fit or train the model.
 
@@ -216,7 +228,7 @@ class TorchTrainer(BaseModel):
 
             for batch in train_loader:
                 y, x_ctx, x_ts, doy_ts = batch
-                if (not self.preload_to_device) and (self.device != "cpu"):
+                if (not self.preload_to_device) and (self.device.type != "cpu"):
                     y = y.to(self.device, non_blocking=True)
                     x_ctx = x_ctx.to(self.device, non_blocking=True)
                     x_ts = x_ts.to(self.device, non_blocking=True)
@@ -293,10 +305,10 @@ class TorchTrainer(BaseModel):
         if self.early_stopping is not None and self.early_stopping.best_model_state is not None:
             log.info(f"Restoring best model weights (Loss: {self.early_stopping.best_loss:.3f})")
             self.model.load_state_dict(self.early_stopping.best_model_state)
-        return history
+        return self, history
 
     @torch.no_grad()
-    def _evaluate_loss(self, dataloader: DataLoader) -> float:
+    def _evaluate_loss(self, dataloader: DataLoader[Any]) -> float:
         """
         Evaluate model loss on a dataloader.
 
@@ -312,7 +324,7 @@ class TorchTrainer(BaseModel):
 
         for batch in dataloader:
             y, x_ctx, x_ts, doy_ts = batch
-            if (not self.preload_to_device) and (self.device != "cpu"):
+            if (not self.preload_to_device) and (self.device.type != "cpu"):
                 y = y.to(self.device, non_blocking=True)
                 x_ctx = x_ctx.to(self.device, non_blocking=True)
                 x_ts = x_ts.to(self.device, non_blocking=True)
@@ -342,9 +354,11 @@ class TorchTrainer(BaseModel):
     # Prediction
     # ------------------------------------------------------------------
 
-    def predict(self,
-                dataset: TorchDataset,
-                **kwargs) -> Tuple[np.ndarray, Dict[str, Any]]:
+    def predict(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self,
+        dataset: TorchDataset,
+        **kwargs,
+    ) -> Tuple[npt.NDArray[Any], Dict[str, Any]]:
         """
         Run fitted model on dataset.
 
@@ -381,7 +395,7 @@ class TorchTrainer(BaseModel):
             for batch in dataloader:
                 _, x_ctx, x_ts, doy_ts = batch
 
-                if (not self.preload_to_device) and (self.device != "cpu"):
+                if (not self.preload_to_device) and (self.device.type != "cpu"):
                     x_ctx = x_ctx.to(self.device, non_blocking=True)
                     x_ts = x_ts.to(self.device, non_blocking=True)
                     doy_ts = doy_ts.to(self.device, non_blocking=True)
@@ -393,7 +407,7 @@ class TorchTrainer(BaseModel):
 
                 preds.append(pred.cpu())
 
-        preds = torch.cat(preds).numpy()
+        preds = cast(npt.NDArray[Any], torch.cat(preds).numpy())
 
         if inspector is not None:
             # results() cats all per-batch tensors → one tensor per layer/key
@@ -401,14 +415,16 @@ class TorchTrainer(BaseModel):
 
         return preds, info
 
-    def predict_items(self, X, **kwargs) -> Tuple[np.ndarray, Dict[str, Any]]:
+    def predict_items(self, X, **kwargs) -> Tuple[npt.NDArray[Any], Dict[str, Any]]:
         raise NotImplementedError # TODO: evaluate whether this methode is necessary
 
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
 
-    def save(self, path: str, compress: bool = True, seed: Optional[int] = None):
+    def save(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, path: str, compress: bool = True, seed: Optional[int] = None
+    ) -> None:
         """
         Save model, optimizer, and training state to disk.
 
@@ -436,20 +452,26 @@ class TorchTrainer(BaseModel):
             torch.save(checkpoint, os.path.join(path, self.name + ".pt"))
 
     @classmethod
-    def load(cls, model_path: str, model: nn.Module, optimizer: torch.optim.Optimizer, **kwargs):
+    def load(  # pyright: ignore[reportIncompatibleMethodOverride]
+        cls,
+        model_path: str,
+        model: nn.Module,
+        optimizer: torch.optim.Optimizer,
+        **kwargs: Any,
+    ) -> "TorchTrainer":
         """Load a saved checkpoint into a new Trainer instance."""
-        device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        device = kwargs.get("device", "cuda" if torch.cuda.is_available() else "cpu")
         ckpt = torch.load(model_path, map_location=device)
 
         model.load_state_dict(ckpt["model_state_dict"])
         optimizer.load_state_dict(ckpt["optimizer_state_dict"])
 
-        # Create new trainer instance
         trainer = cls(
-            model=model,
+            name=kwargs.get("name", "loaded"),
+            torch_model=model,
             optimizer=optimizer,
             device=device,
-            dataloader=ckpt.get("dataloader", {}),
+            dataloader=kwargs.get("dataloader"),
             epochs=ckpt.get("epochs", 10),
             max_grad_norm=ckpt.get("max_grad_norm"),
         )

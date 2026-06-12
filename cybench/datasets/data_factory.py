@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 import os
 from functools import reduce
+from typing import Any, cast
+
 import numpy as np
 import pandas as pd
 import torch
@@ -8,7 +12,7 @@ from cybench.config import DATASETS, PATH_DATA_DIR, KEY_LOC, KEY_YEAR, KEY_TARGE
 from cybench.datasets.alignment import compute_crop_season_window, ensure_same_categories_union, \
     align_to_crop_season_window_numpy, restore_category_to_string, align_to_crop_season_window, align_inputs_and_labels, \
     interpolate_time_series_data, make_aligned_tensors
-from cybench.datasets.dataset import Dataset, PandasDataset
+from cybench.datasets.dataset import BaseDataset, PandasDataset
 from cybench.datasets.feature_design import FEATURE_FUNCTIONS
 from cybench.datasets.feature_transformation import feature_transform
 from cybench.datasets.normalizer import Normalizer
@@ -30,27 +34,30 @@ class DataFactory:
             for c in self.cfg.country:
                 assert c in DATASETS[crop_name], f"Country '{self.cfg.country}' is not supported for crop type '{crop_name}'. See DATASETS in config.py"
 
-    def build(self) -> Dataset:
+    def build(self) -> BaseDataset:
         # Caching Strategy: Check existing
         use_cache = getattr(self.cfg, 'use_cache', False)
         use_memory_optimization = getattr(self.cfg, 'use_memory_optimization', True)
         cache_dir = os.path.join(PATH_DATA_DIR, "cache")
 
+        cache_path: str | None = None
         if use_cache:
             os.makedirs(cache_dir, exist_ok=True)
             dataset_hash = cfg_to_hash(self.cfg, add_str=self.cfg.name)
 
             if self.cfg.framework == "torch":
                 cache_path = os.path.join(cache_dir, f"{dataset_hash}.pt")
-                if os.path.exists(cache_path):
-                    return torch.load(cache_path, weights_only=False)
-
             elif self.cfg.framework == "pandas":
                 cache_path = os.path.join(cache_dir, f"{dataset_hash}.pkl")
-                if os.path.exists(cache_path):
-                    return PandasDataset.load(cache_path)
             else:
-                raise NotImplementedError(f"You try to load a cached dataset using an unknown framework: {self.cfg.framework}")
+                raise NotImplementedError(
+                    f"You try to load a cached dataset using an unknown framework: {self.cfg.framework}"
+                )
+
+            if os.path.exists(cache_path):
+                if self.cfg.framework == "torch":
+                    return torch.load(cache_path, weights_only=False)
+                return PandasDataset.load(cache_path)
 
         if isinstance(self.cfg.country, str):
             df_y, dfs_x = self.load_dfs(crop=self.cfg.crop, country_code=self.cfg.country, use_memory_optimization=use_memory_optimization)
@@ -96,40 +103,51 @@ class DataFactory:
                 normalizer=normalizer,
             )
             # Caching Strategy: Save result
-            if use_cache:
+            if cache_path is not None:
                 torch.save(dataset, cache_path)
 
         elif self.cfg.framework == "pandas":
-            united_df_x = pd.concat(
-                [self._tabularize(df_x) for name, df_x in dfs_x.items() if name != "non_temporal"],
-                axis=1,
-            )
-            united_df_x = (
-                united_df_x.reset_index()
-                .merge(dfs_x["non_temporal"].reset_index(), on=KEY_LOC, how="left")
-                .set_index([KEY_LOC, KEY_YEAR])
-            )
+            tabular_parts = [
+                self._tabularize(df_x)
+                for name, df_x in dfs_x.items()
+                if name != "non_temporal"
+            ]
+            non_temporal = dfs_x["non_temporal"]
+            if tabular_parts:
+                united_df_x = pd.concat(tabular_parts, axis=1)
+                united_df_x = (
+                    united_df_x.reset_index()
+                    .merge(non_temporal.reset_index(), on=KEY_LOC, how="left")
+                    .set_index([KEY_LOC, KEY_YEAR])
+                )
+            else:
+                united_df_x = (
+                    df_y.index.to_frame()
+                    .merge(non_temporal.reset_index(), on=KEY_LOC, how="left")
+                    .set_index([KEY_LOC, KEY_YEAR])
+                )
             dataset = PandasDataset(
                 cfg=self.cfg,
                 x=united_df_x,
                 y=df_y,
                 normalizer=normalizer,
             )
-            if use_cache:
+            if cache_path is not None:
                 dataset.save(cache_path)
         else:
-            dataset = Dataset(
-                cfg=self.cfg,
-                df_y=df_y,
-                dfs_x=dfs_x,
+            raise NotImplementedError(
+                f"Unknown dataset framework: {self.cfg.framework!r}. "
+                "Use 'pandas' or 'torch'."
             )
 
         return dataset
 
-    def load_dfs(self,
-                 crop: str,
-                 country_code: str,
-                 use_memory_optimization: bool = True) -> tuple:
+    def load_dfs(
+        self,
+        crop: Any,
+        country_code: str,
+        use_memory_optimization: bool = True,
+    ) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
         """Load data from CSV files for crop and country.
         Expects CSV files in PATH_DATA_DIR/<crop>/<country_code>/.
 
@@ -152,11 +170,14 @@ class DataFactory:
         dfs_x = self.load_temporal(crop=crop, country_code=country_code, use_memory_optimization=use_memory_optimization)
 
         dfs_x["non_temporal"] = df_non_temporal
-        df_y, dfs_temporal = align_inputs_and_labels(df_y, dfs_x)
+        df_y, _dfs_temporal = align_inputs_and_labels(
+            cast(pd.DataFrame, df_y),
+            dfs_x,
+        )
 
-        return df_y, dfs_x
+        return cast(pd.DataFrame, df_y), dfs_x
 
-    def load_target(self, crop: str, country_code: str):
+    def load_target(self, crop: str, country_code: str) -> pd.DataFrame:
         path_data_cn = os.path.join(PATH_DATA_DIR, crop, country_code)
 
         if "filter_samples" in self.cfg.target.keys() and self.cfg.target["filter_samples"]:
@@ -170,15 +191,16 @@ class DataFactory:
                 os.path.join(path_data_cn, "_".join(["yield", crop, country_code]) + ".csv"),
                 header=0,
             )
-        df_y = df_y.rename(columns={"harvest_year": KEY_YEAR})
-        df_y = df_y[[KEY_LOC, KEY_YEAR, KEY_TARGET]]
+        df_y = df_y.rename(columns={"harvest_year": KEY_YEAR})  # pyright: ignore[reportCallIssue]
+        df_y = cast(pd.DataFrame, df_y[[KEY_LOC, KEY_YEAR, KEY_TARGET]])
         df_y = df_y.dropna(axis=0)
         assert not df_y.empty, f"Yield data is empty in ({country_code}, {crop})."
 
-        df_y = df_y[(df_y.year >= self.cfg.min_year) & (df_y.year <= self.cfg.max_year)]
-        df_y.set_index([KEY_LOC, KEY_YEAR], inplace=True)
+        year_mask = (df_y[KEY_YEAR] >= self.cfg.min_year) & (df_y[KEY_YEAR] <= self.cfg.max_year)
+        df_y = cast(pd.DataFrame, df_y.loc[year_mask])
+        df_y = df_y.set_index([KEY_LOC, KEY_YEAR])
 
-        assert not df_y.isnull().values.any(), "Unexpected NaN in df_y"
+        assert not bool(np.any(df_y.isnull().to_numpy())), "Unexpected NaN in df_y"
         return df_y
 
     def load_non_temporal(self, crop: str, country_code: str):
@@ -204,7 +226,10 @@ class DataFactory:
         non_temp_df.fillna(non_temp_df.mean())
         return non_temp_df
 
-    def load_temporal(self, crop: dict, country_code: str, use_memory_optimization=True):
+    def load_temporal(self, crop: Any, country_code: str, use_memory_optimization=True):
+        if not self.cfg.temporal.sources:
+            return {}
+
         path_data_cn = os.path.join(PATH_DATA_DIR, crop.name, country_code)
 
         # crop calendar
@@ -234,14 +259,14 @@ class DataFactory:
                 use_memory_optimization=use_memory_optimization,
             )
 
-            assert not df_ts.isnull().values.any(), f"Unexpected NaN in df_ts ({file_name})"
+            assert not bool(np.any(df_ts.isnull().to_numpy())), f"Unexpected NaN in df_ts ({file_name})"
             dfs_x[file_name] = df_ts
         return dfs_x
 
     def load_and_process_time_series_data(
             self,
-            crop,
-            country_code,
+            crop: Any,
+            country_code: str,
             file_name,
             source_cfg,
             aggregate,
@@ -285,27 +310,39 @@ class DataFactory:
             }
             df_ts, crop_season_df = ensure_same_categories_union(df_ts, crop_season_df)
             keep_mask, years = align_to_crop_season_window_numpy(
-                df_ts[KEY_LOC].values,
-                df_ts[KEY_YEAR].values,
-                df_ts["date"].values,
+                np.asarray(df_ts[KEY_LOC]),
+                np.asarray(df_ts[KEY_YEAR]),
+                np.asarray(df_ts["date"]),
                 crop_season_keys,
-                crop_season_df["sos_date"].values,
-                crop_season_df["eos_date"].values,
-                crop_season_df["start_of_sequence_date"].values,
-                crop_season_df["end_of_sequence_date"].values,
+                np.asarray(crop_season_df["sos_date"]),
+                np.asarray(crop_season_df["eos_date"]),
+                np.asarray(crop_season_df["start_of_sequence_date"]),
+                np.asarray(crop_season_df["end_of_sequence_date"]),
             )
             assert len(keep_mask) == len(df_ts)
             df_ts[KEY_YEAR] = years
-            df_ts = df_ts.loc[keep_mask]
+            df_ts = cast(pd.DataFrame, df_ts.loc[keep_mask])
             df_ts = restore_category_to_string(df_ts)
             crop_season_df = restore_category_to_string(crop_season_df)
         else:
-            df_ts = align_to_crop_season_window(df_ts, crop_season_df)
+            df_ts = align_to_crop_season_window(
+                cast(pd.DataFrame, df_ts),
+                crop_season_df,
+            )
 
         if hasattr(source_cfg, 'create') and source_cfg.create:
-            df_ts = self._create_features(df_ts, source_cfg.create, self.cfg.crop)
+            df_ts = self._create_features(
+                cast(pd.DataFrame, df_ts),
+                source_cfg.create,
+                self.cfg.crop,
+            )
 
         if aggregate is not None:
+            df_ts = df_ts.merge(
+                crop_season_df[[KEY_LOC, KEY_YEAR, "end_of_sequence_date"]],
+                on=[KEY_LOC, KEY_YEAR],
+                how="left",
+            )
             df_ts = self._aggregate_time_series(df_ts, source_cfg.aggregate, aggregate)
         else:
             df_ts.set_index(index_cols, inplace=True)
@@ -315,7 +352,7 @@ class DataFactory:
     @staticmethod
     def _create_features(
             df_ts: pd.DataFrame,
-            create_cfg: list,
+            create_cfg: list[Any],
             crop_params,
     ) -> pd.DataFrame:
         """Derive new columns in config order before aggregation.
@@ -346,17 +383,19 @@ class DataFactory:
     @staticmethod
     def _aggregate_time_series(
             df_ts: pd.DataFrame,
-            agg_function: dict,
+            agg_function: dict[str, str | list[str]],
             aggregate: int,
     ) -> pd.DataFrame:
         """Aggregate a time series into fixed N-day windows per (loc, year).
 
-        Windows are EOS-anchored: the last interval always ends at EOS.
-        Shorter seasons simply produce fewer leading windows,
-        so the late-season signal is always preserved when features are aligned.
+        Windows are anchored to the crop-calendar ``end_of_sequence_date`` (shared
+        across all predictor sources). The last window always ends at that date,
+        so ``feature_0`` columns from different sources refer to the same calendar
+        interval. Sparse sources (e.g. 8-day NDVI) may contribute fewer
+        observations per window.
 
         Args:
-            df_ts: DataFrame.
+            df_ts: DataFrame with ``end_of_sequence_date`` per (loc, year).
             agg_function: dict mapping column -> str | list[str] (OmegaConf-safe).
             aggregate: window size in days.
 
@@ -365,17 +404,20 @@ class DataFactory:
         """
         group_keys = [KEY_LOC, KEY_YEAR]
 
-        season_end = (
-            df_ts.groupby(group_keys, observed=True)["date"]
-            .transform("max")
-        )
-        day_offset = (season_end - df_ts["date"]).dt.days  # 0 at EOS, grows backwards
+        if "end_of_sequence_date" not in df_ts.columns:
+            raise ValueError(
+                "end_of_sequence_date column required for aggregation; "
+                "merge crop_season_df before calling _aggregate_time_series."
+            )
+        season_end = pd.to_datetime(df_ts["end_of_sequence_date"])
+        day_offset = (season_end - df_ts["date"]).dt.days  # 0 at season end, grows backwards
         window_idx = day_offset // aggregate
         df_ts["date"] = season_end - pd.to_timedelta(window_idx * aggregate, unit="D")
+        df_ts = df_ts.drop(columns=["end_of_sequence_date"])
 
         # Split agg_function into single-fn and multi-fn columns
         single_agg: dict[str, str] = {}  # col -> "mean" | "sum" | …
-        multi_agg: dict[str, list] = {}  # col -> ["sum", "max", …]
+        multi_agg: dict[str, list[str]] = {}  # col -> ["sum", "max", …]
 
         for col, fn in agg_function.items():
             if isinstance(fn, str):
@@ -391,12 +433,12 @@ class DataFactory:
             # Returns a DataFrame with MultiIndex = index_cols, cols = feature cols
             agg_result = grouped[list(single_agg.keys())].agg(single_agg)
             agg_result.columns = [f"{col}_{fn}" for col, fn in single_agg.items()]
-            parts.append(agg_result)
+            parts.append(cast(pd.DataFrame, agg_result))
         for col, fns in multi_agg.items():
             # agg on a SeriesGroupBy returns a DataFrame when given a list
             agg_result = grouped[col].agg(fns)
             agg_result.columns = [f"{col}_{fn}" for fn in fns]
-            parts.append(agg_result)
+            parts.append(cast(pd.DataFrame, agg_result))
 
         df_agg = parts[0]
         for part in parts[1:]:
@@ -410,8 +452,8 @@ class DataFactory:
     def _tabularize(df_ts: pd.DataFrame) -> pd.DataFrame:
         """Pivot aggregated time series into one flat row per (adm_id, year).
 
-        Window index is EOS-anchored: 0 = last window (EOS), 1 = one before, …
-        Column names follow the pattern <feature>_0, <feature>_1, …
+        Window index is crop-calendar anchored: 0 = last window (end_of_sequence),
+        1 = one before, … Column names follow the pattern <feature>_0, <feature>_1, …
         adm_ids with shorter seasons produce NaN in their earliest columns.
 
         Args:

@@ -1,9 +1,14 @@
+from __future__ import annotations
+
+from typing import Any
+
 import numpy as np
+import numpy.typing as npt
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error, r2_score
 from scipy.stats import pearsonr
 
 from cybench.models.model import BaseModel
-from cybench.datasets.dataset import Dataset
+from cybench.datasets.dataset import BaseDataset
 from cybench.config import KEY_TARGET, KEY_LOC
 
 implemented_metrics = {}
@@ -18,7 +23,7 @@ def metric(func):
 def evaluate_model(
     cfg,
     model: BaseModel,
-    dataset: Dataset,
+    dataset: BaseDataset,
 ):
     """
     Evaluate the performance of a model using specified metrics.
@@ -31,7 +36,7 @@ def evaluate_model(
     Returns:
       A dictionary containing the calculated metrics.
     """
-    y_true = dataset.targets()
+    y_true = dataset.targets
     y_pred, _ = model.predict(dataset)
     results = evaluate_predictions(y_true, y_pred, cfg)
 
@@ -39,8 +44,8 @@ def evaluate_model(
 
 
 def evaluate_predictions(
-    y_true: np.ndarray,
-    y_pred: np.ndarray,
+    y_true: npt.NDArray[Any],
+    y_pred: npt.NDArray[Any],
     cfg,
 ):
     """
@@ -84,7 +89,7 @@ def prepare_targets_preds(df_yr, model_name, y_loc_mean=None, residual=False):
 
 
 @metric
-def mse(y_true: np.ndarray, y_pred: np.ndarray):
+def mse(y_true: npt.NDArray[Any], y_pred: npt.NDArray[Any]):
     """
     Calculate the mean squared error (MSE) between true and predicted values.
 
@@ -101,7 +106,7 @@ def mse(y_true: np.ndarray, y_pred: np.ndarray):
 
 
 @metric
-def normalized_rmse(y_true: np.ndarray, y_pred: np.ndarray):
+def normalized_rmse(y_true: npt.NDArray[Any], y_pred: npt.NDArray[Any]):
     """
     Calculate the normalized Root Mean Squared Error (RMSE) between true and predicted values.
 
@@ -119,7 +124,7 @@ def normalized_rmse(y_true: np.ndarray, y_pred: np.ndarray):
 
 
 @metric
-def mape(y_true: np.ndarray, y_pred: np.ndarray):
+def mape(y_true: npt.NDArray[Any], y_pred: npt.NDArray[Any]):
     """
     Calculate Mean Absolute Percentage Error (MAPE).
     Note that in the provided implementation using scikit-learn, there is an absence of multiplication by 100
@@ -136,7 +141,7 @@ def mape(y_true: np.ndarray, y_pred: np.ndarray):
 
 
 @metric
-def r2(y_true: np.ndarray, y_pred: np.ndarray):
+def r2(y_true: npt.NDArray[Any], y_pred: npt.NDArray[Any]):
     """
     Calculate coefficient of determination (R2).
 
@@ -152,7 +157,7 @@ def r2(y_true: np.ndarray, y_pred: np.ndarray):
 
 
 @metric
-def r(y_true: np.ndarray, y_pred: np.ndarray):
+def r(y_true: npt.NDArray[Any], y_pred: npt.NDArray[Any]):
     """
     Calculate Pearson correlation coefficient.
 

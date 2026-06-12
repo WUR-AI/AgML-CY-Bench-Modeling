@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 import os
+from pathlib import Path
 
 import pandas as pd
 import argparse
+from hydra import compose, initialize_config_dir
 
 from cybench.config import (
     DATASETS,
@@ -9,12 +13,30 @@ from cybench.config import (
     PATH_OUTPUT_DIR,
 )
 
-from cybench.datasets.dataset import Dataset
+from cybench.datasets.data_factory import DataFactory
+
+_DATASET_CONFIG_DIR = Path(__file__).resolve().parent.parent / "conf" / "dataset"
+
+
+def _load_dataset(dataset_name: str):
+    crop, country = dataset_name.split("_", 1)
+    with initialize_config_dir(config_dir=str(_DATASET_CONFIG_DIR), version_base=None):
+        cfg = compose(
+            config_name="default",
+            overrides=[
+                f"crop={crop}",
+                f"country={country}",
+                "framework=pandas",
+                "target.filter_samples=null",
+                "use_cache=false",
+            ],
+        )
+    return DataFactory(cfg).build()
 
 
 def dataset_summary(
     dataset_name: str = "maize_NL", min_year: int = 2003, max_year: int = 2024
-) -> dict:
+) -> pd.DataFrame:
     """
     Output a summary of dataset.
     Args:
@@ -25,7 +47,7 @@ def dataset_summary(
     Returns:
         pd.DataFrame with a summary for given dataset
     """
-    dataset = Dataset.load(dataset_name)
+    dataset = _load_dataset(dataset_name)
     all_years = sorted(dataset.years)
     # using a list causes strange issues when reading the counts into pandas
     per_year_data_sizes = ""
@@ -66,7 +88,7 @@ def dataset_summary(
         "Labels Count Per Year",
     ]
     summary_df = pd.DataFrame.from_dict(
-        ds_summary, columns=summary_cols, orient="index"
+        ds_summary, columns=pd.Index(summary_cols), orient="index"
     )
     summary_df.reset_index(inplace=True)
     summary_df.rename(columns={"index": "Dataset"}, inplace=True)
@@ -74,7 +96,7 @@ def dataset_summary(
     return summary_df
 
 
-def run_benchmark_summary(output_file: str = None):
+def run_benchmark_summary(output_file: str | None = None):
     if output_file is None:
         output_file = "dataset_summary.csv"
 
