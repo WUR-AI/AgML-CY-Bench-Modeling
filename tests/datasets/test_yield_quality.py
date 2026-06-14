@@ -1,9 +1,11 @@
 """Tests for yield quality flag generation and loading."""
 
+import os
+
 import pandas as pd
 from hydra import compose, initialize
 
-from cybench.config import KEY_LOC, KEY_TARGET, KEY_YEAR
+from cybench.config import KEY_LOC, KEY_TARGET, KEY_YEAR, PATH_DATA_DIR
 from cybench.datasets.data_factory import DataFactory
 from data_preparation.assess_yield_quality import build_yield_quality_file
 
@@ -33,12 +35,18 @@ def test_build_yield_quality_flags_non_positive_yield(tmp_path):
     assert bool(df_q.loc[2, "flag_yield_outlier"])
 
 
-def test_data_factory_applies_yield_quality_filter(caplog):
+def test_data_factory_applies_yield_quality_filter(caplog, monkeypatch):
     import cybench.config as config
     import cybench.datasets.data_factory as data_factory_mod
 
-    config.PATH_DATA_DIR = "cybench/testdata"
-    data_factory_mod.PATH_DATA_DIR = "cybench/testdata"
+    monkeypatch.setattr(config, "PATH_DATA_DIR", PATH_DATA_DIR)
+    monkeypatch.setattr(data_factory_mod, "PATH_DATA_DIR", PATH_DATA_DIR)
+
+    path_data_cn = os.path.join(PATH_DATA_DIR, "maize", "NL")
+    yield_file = os.path.join(path_data_cn, "yield_maize_NL.csv")
+    quality_file = os.path.join(path_data_cn, "yield_quality_maize_NL.csv")
+    if not os.path.exists(quality_file):
+        build_yield_quality_file(yield_file, quality_file)
 
     with initialize(version_base=None, config_path="../../cybench/conf/dataset"):
         cfg = compose(
@@ -50,5 +58,5 @@ def test_data_factory_applies_yield_quality_filter(caplog):
         dataset = DataFactory(cfg).build()
 
     assert len(dataset) > 0
-    assert (dataset.y[KEY_TARGET] > 0).all()
+    assert (dataset.targets > 0).all()
     assert any("Removed" in record.message and "quality flags" in record.message for record in caplog.records)

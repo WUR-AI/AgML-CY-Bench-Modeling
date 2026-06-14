@@ -108,6 +108,7 @@ class TorchTrainer(BaseModel):
     ):
         self.name = name
         self.seed = seed
+        self.verbose = verbose
         self.loss_fn = loss_fn or nn.MSELoss()
         if torch_model is None:
             raise ValueError("torch_model must be provided")
@@ -158,7 +159,6 @@ class TorchTrainer(BaseModel):
         self.early_stopping = early_stopping
         self.early_stopping_monitor = early_stopping_monitor
         self.max_grad_norm = max_grad_norm
-        self.verbose = verbose
 
     # ------------------------------------------------------------------
     # Internal helpers
