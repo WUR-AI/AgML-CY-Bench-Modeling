@@ -22,7 +22,7 @@ class XGBoostModel(BaseModel):
     All constructor kwargs (except `name`) are forwarded directly to xgboost's XGBRegressor.
     """
 
-    def __init__(self, name: str = "xgboost", verbose: bool = False, **kwargs):
+    def __init__(self, name: str = "xgboost", verbose: bool = False, framework: str | None = None, **kwargs):
         self.name = name
         if 'random_state' not in kwargs:
             kwargs['random_state'] = int(np.random.randint(2**31))
@@ -58,7 +58,7 @@ class LGBMModel(BaseModel):
     All constructor kwargs (except `name`) are forwarded directly to lightgbm's LGBMRegressor.
     """
 
-    def __init__(self, name: str = "lightgbm", verbose: bool = False, **kwargs):
+    def __init__(self, name: str = "lightgbm", verbose: bool = False, framework: str | None = None, **kwargs):
         self.name = name
         if 'random_state' not in kwargs:
             kwargs['random_state'] = int(np.random.randint(2**31))

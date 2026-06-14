@@ -26,7 +26,7 @@ class Ridge(BaseModel):
     since Ridge does not accept NaNs and is sensitive to feature scale.
     """
 
-    def __init__(self, name: str = "ridge", verbose: bool = False, **kwargs):
+    def __init__(self, name: str = "ridge", verbose: bool = False, framework: str | None = None, **kwargs):
         self.name = name
         self.model = Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
@@ -66,7 +66,7 @@ class RandomForest(BaseModel):
     RandomForest is scale-invariant so no scaler is added.
     """
 
-    def __init__(self, name: str = "random_forest", verbose: bool = False, **kwargs):
+    def __init__(self, name: str = "random_forest", verbose: bool = False, framework: str | None = None, **kwargs):
         self.name = name
         self.model = Pipeline([
             ("imputer", SimpleImputer(strategy="median")),

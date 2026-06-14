@@ -24,6 +24,9 @@ season:
 
 aggregate: 30  # days per window — EOS-anchored, so the last window always ends at EOS
 
+# Drop tabular columns with more than this NaN rate after pivot (short-season windows).
+max_column_nan_rate: 0.05
+
 sources:
   meteo:
     # 1. select — raw columns to load from CSV

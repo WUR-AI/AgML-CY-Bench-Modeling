@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from functools import reduce
 from typing import Any, cast
@@ -14,10 +15,13 @@ from cybench.datasets.alignment import compute_crop_season_window, ensure_same_c
     interpolate_time_series_data, make_aligned_tensors
 from cybench.datasets.dataset import BaseDataset, PandasDataset
 from cybench.datasets.feature_design import FEATURE_FUNCTIONS
+from omegaconf import OmegaConf
 from cybench.datasets.feature_transformation import feature_transform
 from cybench.datasets.normalizer import Normalizer
 from cybench.datasets.torch_dataset import TorchDataset
 from cybench.util.store_and_cache import cfg_to_hash
+
+log = logging.getLogger(__name__)
 
 
 class DataFactory:
@@ -122,10 +126,22 @@ class DataFactory:
                 )
             else:
                 united_df_x = (
-                    df_y.index.to_frame()
+                    df_y.index.to_frame(index=False)
                     .merge(non_temporal.reset_index(), on=KEY_LOC, how="left")
                     .set_index([KEY_LOC, KEY_YEAR])
                 )
+            max_nan_rate = OmegaConf.select(self.cfg, "temporal.max_column_nan_rate")
+            if max_nan_rate is not None and tabular_parts:
+                united_df_x, dropped_cols = self._drop_sparse_tabular_columns(
+                    united_df_x, float(max_nan_rate)
+                )
+                if dropped_cols:
+                    log.info(
+                        "Dropped %d tabular columns with NaN rate > %.3f (e.g. %s)",
+                        len(dropped_cols),
+                        float(max_nan_rate),
+                        ", ".join(dropped_cols[:5]),
+                    )
             dataset = PandasDataset(
                 cfg=self.cfg,
                 x=united_df_x,
@@ -181,11 +197,24 @@ class DataFactory:
         path_data_cn = os.path.join(PATH_DATA_DIR, crop, country_code)
 
         if "filter_samples" in self.cfg.target.keys() and self.cfg.target["filter_samples"]:
+            quality_flags = list(self.cfg.target["filter_samples"])
             df_y = pd.read_csv(
                 os.path.join(path_data_cn, "_".join(["yield_quality", crop, country_code]) + ".csv"),
                 header=0,
             )
-            df_y = df_y[~df_y[self.cfg.target["filter_samples"]].any(axis=1)]
+            n_before = len(df_y)
+            flagged = df_y[quality_flags].any(axis=1)
+            df_y = df_y[~flagged]
+            n_removed = n_before - len(df_y)
+            if n_removed:
+                log.info(
+                    "Removed %d/%d yield samples for %s/%s due to quality flags (%s).",
+                    n_removed,
+                    n_before,
+                    crop,
+                    country_code,
+                    ", ".join(quality_flags),
+                )
         else:
             df_y = pd.read_csv(
                 os.path.join(path_data_cn, "_".join(["yield", crop, country_code]) + ".csv"),
@@ -223,7 +252,7 @@ class DataFactory:
         non_temp_df.set_index([KEY_LOC], inplace=True)
 
         # fill nan values
-        non_temp_df.fillna(non_temp_df.mean())
+        non_temp_df = non_temp_df.fillna(non_temp_df.mean(numeric_only=True))
         return non_temp_df
 
     def load_temporal(self, crop: Any, country_code: str, use_memory_optimization=True):
@@ -489,3 +518,19 @@ class DataFactory:
         pivoted.columns = [f"{col}_{w}" for col, w in pivoted.columns]
 
         return pivoted
+
+    @staticmethod
+    def _drop_sparse_tabular_columns(
+        x: pd.DataFrame,
+        max_nan_rate: float,
+    ) -> tuple[pd.DataFrame, list[str]]:
+        """Drop columns whose NaN rate exceeds ``max_nan_rate`` (post-tabularize harmonization)."""
+        if max_nan_rate < 0 or max_nan_rate > 1:
+            raise ValueError(f"max_nan_rate must be in [0, 1], got {max_nan_rate}")
+
+        nan_rates = cast(pd.Series, x.isna().mean())
+        dropped = [str(c) for c, rate in nan_rates.items() if rate > max_nan_rate]
+        if not dropped:
+            return x, []
+        keep = [c for c in x.columns if str(c) not in dropped]
+        return x.loc[:, keep], dropped

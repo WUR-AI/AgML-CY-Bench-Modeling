@@ -137,6 +137,18 @@ class PandasDataset(BaseDataset):
     def feature_names(self) -> list[str]:
         return self.x.columns.tolist()
 
+    def select_features(self, columns: list[str]) -> "PandasDataset":
+        """Return a copy with only the given feature columns."""
+        missing = set(columns) - set(self.x.columns)
+        if missing:
+            raise ValueError(f"Unknown feature columns: {sorted(missing)}")
+        return PandasDataset(
+            cfg=self.cfg,
+            y=self.y,
+            x=self.x.loc[:, list(columns)],
+            normalizer=self.normalizer,
+        )
+
     def __len__(self) -> int:
         return len(self.y)
 

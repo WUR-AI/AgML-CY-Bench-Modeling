@@ -1,0 +1,5 @@
+# Validation-loss early stopping for screening HPO (determines E*).
+_target_: cybench.models.torch.utils.early_stopping.EarlyStopping
+patience: 10
+min_delta: 0.0
+verbose: false

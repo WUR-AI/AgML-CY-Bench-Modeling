@@ -1,0 +1,18 @@
+# Walk-forward evaluation: rolling forecast origins with HP / feature selection / E*
+# frozen from a completed screening run. No hyperparameter search and no held-out
+# validation window in this phase — each split trains on all years before the
+# forecast year (including years that were "val" during screening).
+#
+# Usage (after screening):
+#   validation=walk_forward \
+#   validation.frozen_screening_dir=/path/to/screening_run/2019_2020_2021_2022_2023
+
+name: walk_forward
+
+# Directory containing optimal_model.yaml (+ optional optimal_feature_selection.yaml,
+# optimal_epochs.yaml) from the screening phase split folder.
+frozen_screening_dir: null
+
+# Forecast years: one rolling split per year, train = all years strictly before it.
+# Use the same window as screening test (e.g. 5-last → 2019–2023 for maize/US).
+test_years: 5-last

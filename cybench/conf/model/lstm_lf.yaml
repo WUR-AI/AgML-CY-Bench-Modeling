@@ -3,6 +3,7 @@ defaults:
   - optimizer: adamw
   - augmentation: extensive
   - scheduler: cosine_warmup
+  - early_stopping: val
   - _self_
 
 # Root-level trainer configuration

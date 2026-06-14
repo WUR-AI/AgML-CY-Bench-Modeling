@@ -1,0 +1,13 @@
+# Fixed screening split for HPO and architecture selection.
+# Chronology: [train (early years)][val][test (held out)]
+# HPO uses train -> val only; the final model is fit on train + val and evaluated on test.
+# For neural networks, HPO with validation early stopping determines E* (optimal_epochs.yaml).
+
+name: screening
+
+# Options for test_years / val_years:
+#   [y1, y2]  - explicit year list
+#   k-last    - last k years (test) or k years immediately before the test block (val)
+
+test_years: 5-last
+val_years: 2-last

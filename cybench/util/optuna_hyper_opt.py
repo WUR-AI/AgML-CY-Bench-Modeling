@@ -16,10 +16,11 @@ import yaml
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf, ListConfig
 
-from cybench.util.config_utils import set_seed
-from cybench.datasets.dataset import BaseDataset
+from cybench.util.config_utils import set_seed, remove_search_keys
+from cybench.datasets.dataset import BaseDataset, PandasDataset
+from cybench.util.feature_selection import apply_mrmr_at_origin, resolved_feature_selection_cfg
+from cybench.util.screening_artifacts import save_optimal_epochs
 from cybench.util.validation import get_splits
-from cybench.util.config_utils import remove_search_keys
 
 log = logging.getLogger(__name__)
 
@@ -292,14 +293,32 @@ class OptunaOptimizer:
         with open(output_file, "w") as f:
             OmegaConf.save(best_model_config, f)
 
+        if "feature_selection" in best_config:
+            fs_cfg = remove_search_keys(best_config.feature_selection)
+            fs_file = self.path / "optimal_feature_selection.yaml"
+            OmegaConf.save(fs_cfg, fs_file)
+            log.info(f"Optimal feature selection saved to: {fs_file}")
+
         # Save search space metadata for post-hoc boundary analysis
         search_space = _extract_search_space(self.cfg.model)
+        if "feature_selection" in self.cfg:
+            search_space.update(_extract_search_space(self.cfg.feature_selection, "feature_selection"))
         if search_space:
             ss_file = self.path / "search_space.yaml"
             OmegaConf.save(OmegaConf.create(search_space), ss_file)
             log.info(f"Search space metadata saved to: {ss_file}")
 
         log.info(f"Optimal model config saved to: {output_file}")
+
+        E_star = study.best_trial.user_attrs.get("E_star")
+        if E_star is not None:
+            max_budget = study.best_params.get("epochs")
+            save_optimal_epochs(
+                self.path / "optimal_epochs.yaml",
+                int(E_star),
+                max_epochs_budget=int(max_budget) if max_budget is not None else None,
+            )
+            log.info("Optimal early-stopping epoch E*=%s saved to optimal_epochs.yaml", E_star)
 
         return best_model_config
 
@@ -321,6 +340,15 @@ class OptunaOptimizer:
 
         # Instantiate model with specific trial configuration
         trial_model_cfg = remove_search_keys(trial_model_cfg)
+
+        fs_cfg = None
+        if "feature_selection" in cfg_copy:
+            if not isinstance(self.dataset, PandasDataset):
+                raise ValueError(
+                    "feature_selection requires a PandasDataset "
+                    "(dataset.framework=pandas)."
+                )
+            fs_cfg = resolved_feature_selection_cfg(cfg_copy)
 
         if self.multi_gpu:
             device = self._assign_gpu()
@@ -348,16 +376,49 @@ class OptunaOptimizer:
                 for train_years, val_years in splits:
                     train_dataset, val_dataset = self.dataset.split_on_years((train_years, val_years))
 
+                    if fs_cfg is not None:
+                        train_dataset, val_dataset, _ = apply_mrmr_at_origin(
+                            source_dataset=self.dataset,
+                            train_years=list(train_years),
+                            fs_cfg=fs_cfg,
+                            train_dataset=train_dataset,
+                            eval_dataset=val_dataset,
+                        )
+
                     if "pretrained_from" in trial_model_cfg:
                         # append the test-year to the model config, so that it loads the model that only trained on years before the test-year
                         trial_model_cfg["test_years"] = [int(year) for year in val_years]
 
+                    max_epochs = int(trial_model_cfg.get("epochs", 100))
+                    log_interval = 5
+                    if self.hp_config.get("logging") is not None:
+                        log_interval = int(self.hp_config.logging.get("log_interval", 5))
+                    log.info(
+                        "Trial %d: training %s for up to %d epochs (train %s, val %s)",
+                        trial.number,
+                        trial_model_cfg.get("name", "model"),
+                        max_epochs,
+                        train_years,
+                        val_years,
+                    )
+                    fit_kwargs: dict[str, Any] = {"epoch_log_interval": log_interval}
+
                     # Instantiate and fit
                     model = instantiate(trial_model_cfg, verbose=False)
                     if "early_stopping" in trial_model_cfg:
-                        model.fit(train_dataset, val_dataset=val_dataset)
+                        _, history = model.fit(
+                            train_dataset, val_dataset=val_dataset, **fit_kwargs
+                        )
                     else:
-                        model.fit(train_dataset)
+                        _, history = model.fit(train_dataset, **fit_kwargs)
+
+                    best_epoch = None
+                    if getattr(model, "early_stopping", None) is not None:
+                        best_epoch = model.early_stopping.best_epoch
+                    elif isinstance(history, dict):
+                        best_epoch = history.get("best_epoch")
+                    if best_epoch is not None:
+                        trial.set_user_attr("E_star", int(best_epoch))
 
                     # Predict and Evaluate
                     preds, _ = model.predict(val_dataset)
@@ -368,6 +429,12 @@ class OptunaOptimizer:
                     val_metric = np.mean((val_dataset.targets - preds) ** 2)
 
                     val_metrics.append(val_metric)
+                    log.info(
+                        "Trial %d finished | val MSE=%.4f | E*=%s",
+                        trial.number,
+                        float(val_metric),
+                        trial.user_attrs.get("E_star"),
+                    )
                     log.debug(f"Validation metric ({i} / {val_years}): {val_metric}")
 
                     # Optional: Pruning based on intermediate folds

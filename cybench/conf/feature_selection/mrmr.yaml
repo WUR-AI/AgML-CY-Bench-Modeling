@@ -1,0 +1,16 @@
+# mRMR feature selection (optional: +feature_selection=mrmr).
+# During HPO, k is tuned jointly with model hyperparameters on validation.
+# During final evaluation, k is frozen but mRMR is refit at each forecast origin.
+# Backend: feature_engine.selection.MRMR (https://feature-engine.trainindata.com)
+
+name: mrmr
+mrmr_method: FCD  # FCD | FCQ | MID | MIQ | RFCQ
+k: 50
+max_column_nan_rate: 0.05  # per-origin coverage filter during mRMR fit
+
+_search_:
+  k:
+    type: int
+    low: 10
+    high: 150
+    step: 10

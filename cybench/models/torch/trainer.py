@@ -100,6 +100,7 @@ class TorchTrainer(BaseModel):
         augmentation: AugmentationComposer | None = None,
         epochs: int = 100,
         early_stopping: Optional[EarlyStopping] = None,
+        early_stopping_monitor: str = "val",
         max_grad_norm: Optional[float] = 1,
         seed: int = 42,
         verbose: bool = False,
@@ -114,10 +115,22 @@ class TorchTrainer(BaseModel):
 
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
+        elif str(device).startswith("cuda") and not torch.cuda.is_available():
+            log.warning(
+                "CUDA requested (device=%s) but no NVIDIA GPU/driver found; using CPU.",
+                device,
+            )
+            device = "cpu"
         self.device = torch.device(device)
         self.preload_to_device = preload_to_device
         self.model.to(self.device)
-        log.info(f"Loaded {self.name} model | Size: {(sum(p.numel() for p in self.model.parameters()) * 1e-6):.3}M parameters")
+        if self.verbose:
+            log.info(
+                "Initialized %s | %.2fM parameters on %s",
+                self.name,
+                sum(p.numel() for p in self.model.parameters()) * 1e-6,
+                self.device,
+            )
 
         # Handle optimizer (could be None, partial, or instantiated)
         if optimizer is None:
@@ -143,6 +156,7 @@ class TorchTrainer(BaseModel):
         self.augmentation = augmentation
         self.epochs = epochs
         self.early_stopping = early_stopping
+        self.early_stopping_monitor = early_stopping_monitor
         self.max_grad_norm = max_grad_norm
         self.verbose = verbose
 
@@ -190,7 +204,9 @@ class TorchTrainer(BaseModel):
             **fit_params: Additional parameters. Supported:
                 - epochs: int, number of training epochs (overrides self.epochs)
                 - val_dataset: optional TorchDataset for validation
-                - val_every_n_epochs: int, validate every N epochs (default: 5)
+                - val_every_n_epochs: int, validate every N epochs (default: 1)
+                - early_stopping_monitor: "val" or "train" (default: self.early_stopping_monitor)
+                - epoch_log_interval: log train/val loss every N epochs when verbose=False
 
         Returns:
             A tuple containing the fitted model and a dict with training history.
@@ -198,6 +214,13 @@ class TorchTrainer(BaseModel):
         epochs = fit_params.get("epochs", self.epochs)
         val_dataset = fit_params.get("val_dataset", None)
         val_every_n_epochs = fit_params.get("val_every_n_epochs", 1)
+        early_stopping_monitor = fit_params.get(
+            "early_stopping_monitor", self.early_stopping_monitor
+        )
+        epoch_log_interval = fit_params.get("epoch_log_interval")
+
+        if self.early_stopping is not None:
+            self.early_stopping.reset()
 
         if self.preload_to_device:
             dataset = dataset.to(self.device)
@@ -211,7 +234,8 @@ class TorchTrainer(BaseModel):
             else None
         )
 
-        history = {"train_loss": [], "val_loss": []}
+        history = cast(Dict[str, Any], {"train_loss": [], "val_loss": []})
+        epochs_run = 0
 
         if self.verbose:
             log.info(f"Starting training for {epochs} epochs...")
@@ -223,6 +247,7 @@ class TorchTrainer(BaseModel):
         tt = 0
         start_training = time.time()
         for epoch in range(epochs):
+            epochs_run = epoch + 1
             total_loss = 0.0
             num_batches = 0
 
@@ -270,15 +295,22 @@ class TorchTrainer(BaseModel):
             if val_loader is not None and (epoch + 1) % val_every_n_epochs == 0:
                 val_loss = self._evaluate_loss(val_loader)
                 history["val_loss"].append(val_loss)
-                # Check Early Stopping
-                if self.early_stopping is not None:
-                    self.early_stopping(val_loss, self.model)
-                    if self.early_stopping.early_stop:
-                        log.info("Early stopping triggered.")
-                        print(f"Early stopping triggered: after epoch {epoch+1}")
-                        break
             else:
                 history["val_loss"].append(None)
+
+            if self.early_stopping is not None:
+                monitor_loss = None
+                if early_stopping_monitor == "val" and val_loss is not None:
+                    monitor_loss = val_loss
+                elif early_stopping_monitor == "train":
+                    monitor_loss = avg_loss
+                if monitor_loss is not None:
+                    self.early_stopping(monitor_loss, self.model, epoch + 1)
+                    if self.early_stopping.early_stop:
+                        log.info("Early stopping triggered.")
+                        if self.verbose:
+                            print(f"Early stopping triggered: after epoch {epoch + 1}")
+                        break
 
             # Step Scheduler (ReduceLROnPlateau requires val loss)
             if self.scheduler is not None:
@@ -296,6 +328,15 @@ class TorchTrainer(BaseModel):
                     msg += f" | val {val_loss:.4f}"
                 msg += f" | lr {lr:.2e}"
                 tqdm.write(msg)
+            elif epoch_log_interval and (
+                (epoch + 1) % int(epoch_log_interval) == 0
+                or epoch + 1 == epochs
+                or (self.early_stopping is not None and self.early_stopping.early_stop)
+            ):
+                msg = f"Epoch {epoch + 1}/{epochs} | train {avg_loss:.4f}"
+                if val_loss is not None:
+                    msg += f" | val {val_loss:.4f}"
+                log.info(msg)
 
         log.debug("Forward and backward pass took", np.round(tt / (time.time() - start_training) * 100), "% of training time.")
         if pbar is not None:
@@ -305,6 +346,12 @@ class TorchTrainer(BaseModel):
         if self.early_stopping is not None and self.early_stopping.best_model_state is not None:
             log.info(f"Restoring best model weights (Loss: {self.early_stopping.best_loss:.3f})")
             self.model.load_state_dict(self.early_stopping.best_model_state)
+
+        if self.early_stopping is not None and self.early_stopping.best_epoch is not None:
+            history["best_epoch"] = self.early_stopping.best_epoch
+        else:
+            history["best_epoch"] = epochs_run
+        history["epochs_run"] = epochs_run
         return self, history
 
     @torch.no_grad()

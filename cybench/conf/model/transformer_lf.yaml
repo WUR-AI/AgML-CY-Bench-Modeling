@@ -3,6 +3,7 @@ defaults:
   - augmentation: extensive
   - optimizer: adamw
   - scheduler: cosine_warmup
+  - early_stopping: val
   - override torch_model/temporal_encoder/processor: transformer # overriding the default processor to cnn
   - _self_
 
