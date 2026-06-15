@@ -44,7 +44,7 @@ class BaseModel(ABC):
         """Save model, e.g. using pickle.
 
         Args:
-          model_path: File path that will be used to save the model.
+          model_path: Directory (writes ``{name}.pkl`` inside) or a ``.pkl`` file path.
         """
         raise NotImplementedError
 
@@ -54,7 +54,7 @@ class BaseModel(ABC):
         """Deserialize a saved model.
 
         Args:
-          model_path: File path that was used to save the model.
+          model_path: Same convention as :meth:`save` (directory or ``.pkl`` file).
 
         Returns:
           The deserialized model.

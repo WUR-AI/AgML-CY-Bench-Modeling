@@ -1,0 +1,13 @@
+_target_: cybench.models.torch.model_components.linear_encoders.DLinearTemporalEncoder
+
+in_dim: ${model.torch_model.temporal_in_dim}
+embed_dim: ${model.torch_model.embed_dim}
+seq_len: ???
+kernel_size: 25
+
+_search_:
+  kernel_size:
+    type: int
+    low: 15
+    high: 35
+    step: 10

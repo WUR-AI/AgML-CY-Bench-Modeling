@@ -41,6 +41,22 @@ def _filter_columns_by_coverage(x: pd.DataFrame, max_nan_rate: float) -> pd.Data
     return x.loc[:, keep]
 
 
+def _drop_zero_variance_columns(x: pd.DataFrame) -> pd.DataFrame:
+    """Drop columns with zero variance on the given training rows."""
+    std = x.std(ddof=0)
+    dropped = std[std == 0].index.tolist()
+    if dropped:
+        log.info(
+            "Dropped %d zero-variance feature(s) before mRMR (e.g. %s).",
+            len(dropped),
+            ", ".join(str(c) for c in dropped[:5]),
+        )
+        x = x.drop(columns=dropped)
+    if x.empty:
+        raise ValueError("No features left after dropping zero-variance columns.")
+    return x
+
+
 def select_mrmr_features(
     x: pd.DataFrame,
     y: pd.Series | pd.DataFrame,
@@ -62,6 +78,8 @@ def select_mrmr_features(
     y_fit: pd.Series = y.loc[valid]
     if x.empty:
         raise ValueError("No complete cases left for mRMR after dropping NaN rows.")
+
+    x = _drop_zero_variance_columns(x)
 
     k = min(int(k), x.shape[1])
     if k <= 0:

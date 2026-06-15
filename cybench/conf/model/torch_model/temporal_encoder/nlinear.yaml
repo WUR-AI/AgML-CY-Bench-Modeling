@@ -1,0 +1,5 @@
+_target_: cybench.models.torch.model_components.linear_encoders.NLinearTemporalEncoder
+
+in_dim: ${model.torch_model.temporal_in_dim}
+embed_dim: ${model.torch_model.embed_dim}
+seq_len: ???

@@ -22,6 +22,9 @@ def adjust_model_cfg_to_dataset(model_cfg: DictConfig, dataset: BaseDataset) -> 
         _, x_c_sample, x_t_sample, _ = dataset[0]
         model_cfg.torch_model.context_in_dim = len(x_c_sample)
         model_cfg.torch_model.temporal_in_dim = len(x_t_sample.T)
+        temporal_encoder = model_cfg.torch_model.get("temporal_encoder")
+        if temporal_encoder is not None and "seq_len" in temporal_encoder.keys():
+            temporal_encoder.seq_len = x_t_sample.shape[0]
     return model_cfg
 
 

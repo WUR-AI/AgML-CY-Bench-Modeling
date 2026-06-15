@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import pickle
 import logging
-from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
@@ -13,6 +11,7 @@ from statsmodels.tools.tools import add_constant
 import pymannkendall as trend_mk
 
 from cybench.models.model import BaseModel
+from cybench.models.persistence import load_pickle, save_pickle
 from cybench.datasets.dataset import PandasDataset
 from cybench.config import KEY_LOC, KEY_YEAR, KEY_TARGET
 
@@ -149,10 +148,8 @@ class TrendModel(BaseModel):
         return best
 
     def save(self, model_path: str) -> None:
-        with open(Path(model_path) / f"{self.name}.pkl", "wb") as f:
-            pickle.dump(self, f)
+        save_pickle(self, model_path, self.name)
 
     @classmethod
-    def load(cls, model_path: str) -> TrendModel:
-        with open(model_path, "rb") as f:
-            return pickle.load(f)
+    def load(cls, model_path: str, name: str = "trend") -> TrendModel:
+        return load_pickle(model_path, name)

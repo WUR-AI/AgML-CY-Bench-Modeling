@@ -1,0 +1,23 @@
+_target_: cybench.models.torch.model_components.hf_temporal_encoder.PatchTSTTemporalEncoder
+
+in_dim: ${model.torch_model.temporal_in_dim}
+embed_dim: ${model.torch_model.embed_dim}
+seq_len: ???
+patch_length: 16
+patch_stride: 8
+d_model: 64
+num_attention_heads: 4
+ffn_dim: 256
+num_layers: 3
+dropout: 0.1
+
+_search_:
+  d_model:
+    type: int
+    low: 64
+    high: 128
+    step: 64
+  num_layers:
+    type: int
+    low: 2
+    high: 4

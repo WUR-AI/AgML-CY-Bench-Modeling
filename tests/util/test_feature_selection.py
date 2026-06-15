@@ -129,6 +129,17 @@ def test_mrmr_uses_complete_cases_only():
     assert len(selected) == 3
 
 
+def test_mrmr_drops_zero_variance_columns():
+    ds = _make_dataset()
+    x = ds.x.copy()
+    x["dead_feature"] = 0.0
+    x["dead_feature_2"] = 1.0
+    selected = select_mrmr_features(x, ds.y[KEY_TARGET], k=3)
+    assert len(selected) == 3
+    assert "dead_feature" not in selected
+    assert "dead_feature_2" not in selected
+
+
 def test_mrmr_rejects_empty_matrix():
     index = pd.MultiIndex.from_tuples([], names=[KEY_LOC, KEY_YEAR])
     x = pd.DataFrame(index=index)

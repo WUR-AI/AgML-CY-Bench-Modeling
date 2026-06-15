@@ -1,0 +1,33 @@
+defaults:
+  - torch_model: late_fusion_network
+  - optimizer: adamw
+  - scheduler: cosine_warmup
+  - early_stopping: val
+  - override torch_model/temporal_encoder: patchtst
+  - _self_
+
+_target_: cybench.models.torch.trainer.TorchTrainer
+name: patchtst_lf
+framework: torch
+epochs: 100
+seed: ${experiment.seed}
+device: ${experiment.device}
+verbose: true
+_search_:
+  epochs:
+    type: int
+    low: 25
+    high: 100
+    step: 25
+
+dataloader:
+  _target_: torch.utils.data.DataLoader
+  _partial_: true
+  batch_size: 32
+  shuffle: true
+  _search_:
+    batch_size:
+      type: int
+      low: 16
+      high: 64
+      step: 16

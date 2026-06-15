@@ -15,6 +15,7 @@ import torch
 import yaml
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf, ListConfig
+from tqdm import tqdm
 
 from cybench.util.config_utils import set_seed, remove_search_keys
 from cybench.datasets.dataset import BaseDataset, PandasDataset
@@ -359,6 +360,12 @@ class OptunaOptimizer:
             )
             trial_model_cfg["device"] = device
 
+        show_progress = bool(
+            self.hp_config.get("logging", {}).get("show_progress_bar", True)
+        )
+        if show_progress:
+            trial_model_cfg["verbose"] = True
+
         val_metrics = []
         device = "cpu"
         try:
@@ -366,14 +373,28 @@ class OptunaOptimizer:
                 set_seed(self.hp_config.seed + i)
 
                 # Get validation splits (Using the 'val' set of the current dataset)
-                splits = get_splits(
-                    cfg=self.val_cfg,
-                    which="val",
-                    dataset_years=self.dataset.years,
-                    seed=self.hp_config.seed
+                splits = list(
+                    get_splits(
+                        cfg=self.val_cfg,
+                        which="val",
+                        dataset_years=self.dataset.years,
+                        seed=self.hp_config.seed,
+                    )
                 )
 
-                for train_years, val_years in splits:
+                split_iter = tqdm(
+                    splits,
+                    desc=f"Trial {trial.number} splits",
+                    unit="split",
+                    disable=not show_progress or len(splits) <= 1,
+                    leave=False,
+                )
+                for train_years, val_years in split_iter:
+                    if show_progress and len(splits) > 1:
+                        split_iter.set_postfix(
+                            train=f"{min(train_years)}-{max(train_years)}",
+                            val=f"{min(val_years)}-{max(val_years)}",
+                        )
                     train_dataset, val_dataset = self.dataset.split_on_years((train_years, val_years))
 
                     if fs_cfg is not None:
@@ -405,12 +426,28 @@ class OptunaOptimizer:
 
                     # Instantiate and fit
                     model = instantiate(trial_model_cfg, verbose=False)
-                    if "early_stopping" in trial_model_cfg:
-                        _, history = model.fit(
-                            train_dataset, val_dataset=val_dataset, **fit_kwargs
-                        )
-                    else:
-                        _, history = model.fit(train_dataset, **fit_kwargs)
+                    fit_stages = tqdm(
+                        total=2,
+                        desc=f"Trial {trial.number} fit/predict",
+                        unit="stage",
+                        disable=not show_progress,
+                        leave=False,
+                    )
+                    try:
+                        if "early_stopping" in trial_model_cfg:
+                            _, history = model.fit(
+                                train_dataset, val_dataset=val_dataset, **fit_kwargs
+                            )
+                        else:
+                            _, history = model.fit(train_dataset, **fit_kwargs)
+                        fit_stages.update(1)
+                        fit_stages.set_postfix(stage="predict")
+
+                        # Predict and Evaluate
+                        preds, _ = model.predict(val_dataset)
+                        fit_stages.update(1)
+                    finally:
+                        fit_stages.close()
 
                     best_epoch = None
                     if getattr(model, "early_stopping", None) is not None:
@@ -420,8 +457,6 @@ class OptunaOptimizer:
                     if best_epoch is not None:
                         trial.set_user_attr("E_star", int(best_epoch))
 
-                    # Predict and Evaluate
-                    preds, _ = model.predict(val_dataset)
                     assert preds.ndim == val_dataset.targets.ndim, (
                         f"The model output shape {preds.shape} does not match "
                         f"target shape {val_dataset.targets.shape}"

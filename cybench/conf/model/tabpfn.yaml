@@ -1,0 +1,25 @@
+_target_: cybench.models.tabpfn_model.TabPFNModel
+name: tabpfn
+framework: pandas
+
+device: auto
+predict_batch_size: 256
+allow_cpu_fallback: false
+max_train_samples: null
+# none: rely on TabPFN internal preprocessing | sklearn: median impute + StandardScaler
+preprocess: none
+subsample: random  # random | quantile (preserves yield extremes when subsampling)
+subsample_bins: 10
+random_state: ${experiment.seed}
+verbose: false  # auto-enabled during HPO when hp_search.logging.show_progress_bar=true
+
+# forwarded to tabpfn.TabPFNRegressor
+ignore_pretraining_limits: true
+n_estimators: 8
+
+_search_:
+  n_estimators:
+    type: int
+    low: 4
+    high: 16
+    step: 4

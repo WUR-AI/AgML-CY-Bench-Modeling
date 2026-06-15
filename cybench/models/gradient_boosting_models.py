@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import pickle
 import logging
-from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
@@ -11,6 +9,7 @@ from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 
 from cybench.models.model import BaseModel
+from cybench.models.persistence import load_pickle, save_pickle
 from cybench.datasets.dataset import PandasDataset
 
 log = logging.getLogger(__name__)
@@ -43,13 +42,11 @@ class XGBoostModel(BaseModel):
         return cast(npt.NDArray[Any], np.asarray(self.model.predict(X))), {}
 
     def save(self, model_path: str) -> None:
-        with open(Path(model_path) / f"{self.name}.pkl", "wb") as f:
-            pickle.dump(self, f)
+        save_pickle(self, model_path, self.name)
 
     @classmethod
-    def load(cls, model_path: str) -> XGBoostModel:
-        with open(model_path, "rb") as f:
-            return pickle.load(f)
+    def load(cls, model_path: str, name: str = "xgboost") -> XGBoostModel:
+        return load_pickle(model_path, name)
 
 
 class LGBMModel(BaseModel):
@@ -79,10 +76,8 @@ class LGBMModel(BaseModel):
         return cast(npt.NDArray[Any], np.asarray(self.model.predict(X))), {}
 
     def save(self, model_path: str) -> None:
-        with open(Path(model_path) / f"{self.name}.pkl", "wb") as f:
-            pickle.dump(self, f)
+        save_pickle(self, model_path, self.name)
 
     @classmethod
-    def load(cls, model_path: str) -> LGBMModel:
-        with open(model_path, "rb") as f:
-            return pickle.load(f)
+    def load(cls, model_path: str, name: str = "lightgbm") -> LGBMModel:
+        return load_pickle(model_path, name)
