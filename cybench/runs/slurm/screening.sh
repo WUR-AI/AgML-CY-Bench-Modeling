@@ -12,7 +12,7 @@
 #
 # Resource guide:
 #   Tabular (pandas):  --cpus-per-task=8, no GPU, experiment.n_jobs=1 (set in slurm_common.sh)
-#   Neural (torch):    --gres=gpu:1, --cpus-per-task=4, experiment.n_jobs=1
+#   Neural (torch):    GPU via submit_array.sh → -p gpu --gpus=1 (see slurm_common.sh)
 #
 # Split manifests (do not mix CPU and GPU in one array):
 #   awk '$7=="no"'  benchmark_jobs.txt > benchmark_jobs_cpu.txt   # RF, ridge, ...
@@ -25,13 +25,12 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --time=4-00:00:00
+## GPU submits via submit_array.sh override this with --time=2-00:00:00 (partition limit)
 ##SBATCH --mail-user=michiel.kallenberg@wur.nl
 ##SBATCH --mail-type=ALL
 ##SBATCH --array=0-99
 #SBATCH --array=0
-## Torch jobs — enable GPU:
-##SBATCH --gres=gpu:1
-##SBATCH --partition=gpu
+## GPU partition/request are added by submit_array.sh (-p gpu --gpus=1 on WUR lustre)
 
 set -euo pipefail
 
@@ -51,14 +50,14 @@ slurm_setup
 mkdir -p output/screening
 
 read_benchmark_job
-echo "Screening | ${CROP}/${COUNTRY} | model=${MODEL} | framework=${FRAMEWORK} | horizon=${PREDICTION_HORIZON}"
+echo "Screening | ${CROP}/${COUNTRY} | model=${MODEL} | framework=${FRAMEWORK} | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | out=${BASELINES_DIR}"
 
 COMMON=(
   "dataset/crop=${CROP}"
   "dataset.country=${COUNTRY}"
   dataset.use_cache=true
   validation=screening
-  experiment.name=baselines
+  "experiment.name=${CYBENCH_EXPERIMENT_NAME}"
   experiment.n_repetitions=1
   experiment.seed=42
   "model=${MODEL}"

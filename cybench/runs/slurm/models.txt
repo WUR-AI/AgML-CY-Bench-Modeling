@@ -1,0 +1,22 @@
+# Shared model list (one model per row).
+# Columns: model  framework  hp_search  feature_design  needs_gpu
+#   framework:      pandas | torch
+#   hp_search:      yes | no
+#   feature_design: yes (tabular only) | no
+#   needs_gpu:      yes | no  (TabPFN: pandas but requires CUDA)
+average          pandas  no   no   no
+trend            pandas  no   no   no
+random_forest    pandas  yes  yes  no
+ridge            pandas  yes  yes  no
+xgboost          pandas  yes  yes  no
+lightgbm         pandas  yes  yes  no
+tabpfn           pandas  yes  yes  yes
+cnn_lf           torch   yes  no   yes
+lstm_lf          torch   yes  no   yes
+transformer_lf   torch   yes  no   yes
+nlinear_lf       torch   yes  no   yes
+dlinear_lf       torch   yes  no   yes
+patchtst_lf      torch   yes  no   yes
+autoformer_lf    torch   yes  no   yes
+informer_lf      torch   yes  no   yes
+tst_lf           torch   yes  no   yes

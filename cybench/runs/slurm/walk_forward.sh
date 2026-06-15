@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 # Walk-forward: one array task = one (crop, country, model), using frozen screening artifacts.
-# Auto-discovers the latest screening run (Hydra: ../output/baselines/ from repo root):
-#   ../output/baselines/<crop>_<country>_<model>_screening_<horizon>_<timestamp>/<test_years>/optimal_model.yaml
+# Auto-discovers the latest screening run under CYBENCH_EXPERIMENT_NAME (default: baselines):
+#   ../output/<batch>/<crop>_<country>_<model>_screening_<horizon>_<timestamp>/<test_years>/optimal_model.yaml
 #
 # Submit after screening jobs finished:
 #   sbatch cybench/runs/slurm/walk_forward.sh
@@ -16,7 +16,7 @@
 #SBATCH --time=2-00:00:00
 ##SBATCH --array=0-99
 #SBATCH --array=0
-##SBATCH --gres=gpu:1
+## GPU: added by submit_array.sh when using benchmark_jobs_gpu.txt
 
 set -euo pipefail
 
@@ -35,7 +35,7 @@ mkdir -p output/walk_forward
 
 read_benchmark_job
 FROZEN_DIR=$(find_frozen_screening_dir "${CROP}" "${COUNTRY}" "${MODEL}")
-echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | framework=${FRAMEWORK} | horizon=${PREDICTION_HORIZON} | frozen=${FROZEN_DIR}"
+echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | framework=${FRAMEWORK} | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | frozen=${FROZEN_DIR}"
 
 COMMON=(
   "dataset/crop=${CROP}"
@@ -43,7 +43,7 @@ COMMON=(
   dataset.use_cache=true
   validation=walk_forward
   "validation.frozen_screening_dir=${FROZEN_DIR}"
-  experiment.name=baselines
+  "experiment.name=${CYBENCH_EXPERIMENT_NAME}"
   experiment.n_repetitions=1
   experiment.seed=42
   "model=${MODEL}"

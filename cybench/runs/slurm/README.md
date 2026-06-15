@@ -14,7 +14,8 @@ See also [../README.md](../README.md) for the full `cybench/runs/` layout (analy
 | `slurm_common.sh` | Modules, paths, HPO/CPU helpers |
 | `screening.sh` | Phase A: HPO + held-out test |
 | `walk_forward.sh` | Phase B: rolling forecasts (auto-finds screening artifacts) |
-| `submit_array.sh` | Count manifest rows and `sbatch --array=0-(N-1)` for you |
+| `submit_array.sh` | Submit one phase + one manifest (array sizing, GPU auto) |
+| `submit_benchmark.sh` | **Full pipeline**: split manifests → screening → walk-forward |
 
 ## 1. Generate the job list
 
@@ -31,11 +32,11 @@ Subset (e.g. pilot before full benchmark):
 poetry run python cybench/runs/slurm/generate_job_manifest.py --countries US FR NL DE
 ```
 
-With ~10 models and ~40 countries × 2 crops, the full manifest can be **hundreds of jobs**. Use `--array` ranges or split manifests:
+With ~16 models and ~40 countries × 2 crops, the full manifest can be **1000+ jobs**. Use `--array` ranges or split manifests:
 
 ```bash
-# CPU-only manifest (sklearn / boosting on feature_design)
-awk '$7=="no"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/benchmark_jobs_cpu.txt
+# CPU tabular (feature_design, no GPU)
+awk '$7=="no" && $6=="yes"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/benchmark_jobs_cpu.txt
 # Naive baselines (average, trend) — no HPO, no feature_design; submit separately
 awk '$5=="no" && $6=="no" && $7=="no"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/benchmark_jobs_naive.txt
 # GPU manifest (torch + TabPFN — pandas on GPU)
@@ -45,6 +46,34 @@ awk '$7=="yes"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/bench
 **Note:** `benchmark_jobs_cpu.txt` from `$7=="no"` includes only models with `feature_design=yes`
 (ridge, xgboost, …). **`average` and `trend` are in `benchmark_jobs_naive.txt`** — run those
 arrays too if you want the naive baseline in `compare_models.html`.
+
+## One-command pipeline (recommended)
+
+From repo root — splits manifests, submits **cpu + naive + gpu** screening, then walk-forward
+with `afterok` on each matching screening job. GPU partition/time inferred automatically for
+the gpu manifest.
+
+```bash
+# Full eos benchmark (screening → walk-forward)
+cybench/runs/slurm/submit_benchmark.sh all --horizon eos
+
+# Pilot: regenerate manifest for DE/NL only, then submit
+cybench/runs/slurm/submit_benchmark.sh all --horizon eos --regenerate --countries DE NL
+
+# Isolated output batch (avoids flooding ../output/baselines/)
+cybench/runs/slurm/submit_benchmark.sh all --horizon eos --batch baselines_pilot_2026q2
+
+# Mid-season (second pass, after eos completes)
+cybench/runs/slurm/submit_benchmark.sh all --horizon middle-of-season
+
+# Screening only, first GPU job (TabPFN maize NL if first in gpu manifest)
+cybench/runs/slurm/submit_benchmark.sh screening --horizon eos --array 0 --only gpu
+
+# Preview without sbatch
+cybench/runs/slurm/submit_benchmark.sh all --horizon eos --dry-run
+```
+
+Manual per-manifest submits (fine-grained control) are below.
 
 ## 2. Submit screening
 
@@ -66,8 +95,15 @@ JOB_MANIFEST=cybench/runs/slurm/benchmark_jobs_cpu.txt \
   sbatch --array=0-$((N - 1)) cybench/runs/slurm/screening.sh
 ```
 
-GPU jobs: `submit_array.sh` adds `--gres=gpu:1` automatically for GPU-only manifests
-(`benchmark_jobs_gpu.txt`). Uncomment `#SBATCH --partition=gpu` in `screening.sh` if your cluster requires it.
+GPU jobs: `submit_array.sh` requests **gpu** partition, **`--gpus=1`**, and
+**`--time=2-00:00:00`** (overrides screening.sh’s 4-day default; GPU partition
+walltime is shorter). Override:
+
+```bash
+export SLURM_GPU_PARTITION=gpu
+export SLURM_GPU_REQUEST="--gpus=1"
+export SLURM_GPU_TIME_LIMIT=2-00:00:00
+```
 
 ### Parallelism (inside one job)
 
@@ -75,19 +111,52 @@ GPU jobs: `submit_array.sh` adds `--gres=gpu:1` automatically for GPU-only manif
 |---------|---------|
 | `experiment.n_jobs=1` | One Optuna trial at a time (default in `slurm_common.sh`) |
 | `--cpus-per-task=8` | RF/XGB use all 8 cores **per trial** (`n_jobs=-1` in yaml) |
-| `--gres=gpu:1` | One trial at a time on one GPU (torch **and TabPFN**) |
+| `--gpus=1` + `-p gpu` | GPU jobs (via `submit_array.sh` + GPU manifest) |
 
 **TabPFN** uses `dataset.framework=pandas` + `feature_design` but sets `model.device=cuda` (see `tabpfn.yaml`). Schedule it in the **GPU array**, not the CPU one.
 
 Optuna does **not** spawn separate SLURM tasks per trial.
 
+## Output batches
+
+By default Hydra writes to **`../output/baselines/`**. Re-runs add new timestamped folders;
+`latest_only` discovery keeps analysis sane, but the directory still grows.
+
+Use **`--batch NAME`** (maps to Hydra `experiment.name`) to isolate a benchmark run:
+
+```bash
+cybench/runs/slurm/submit_benchmark.sh all --horizon eos --batch baselines_full_eos_v1
+```
+
+Results land in **`../output/baselines_full_eos_v1/`**. Screening and walk-forward in one
+`submit_benchmark.sh all` call share the same batch automatically. For manual submits:
+
+```bash
+cybench/runs/slurm/submit_array.sh screening cybench/runs/slurm/benchmark_jobs_cpu.txt \
+  --batch baselines_full_eos_v1
+# after screening finishes:
+cybench/runs/slurm/submit_array.sh walk_forward cybench/runs/slurm/benchmark_jobs_cpu.txt \
+  --batch baselines_full_eos_v1
+```
+
+Or export **`CYBENCH_EXPERIMENT_NAME`** (same value for screening and walk-forward).
+Override the resolved path with **`CYBENCH_BASELINES_DIR`** if needed.
+
+Point analysis at the batch folder:
+
+```bash
+poetry run python cybench/runs/analysis/collect_walk_forward_results.py \
+  --baselines-dir ../output/baselines_full_eos_v1 \
+  --output-dir ../output/paper_walk_forward_eos_v1
+```
+
 ## 3. Submit walk-forward
 
-After screening finishes for a row, walk-forward finds the latest run under **`../output/baselines/`**
-(one level above the repo — same path Hydra uses).
+After screening finishes for a row, walk-forward finds the latest run under the active
+batch directory (default **`../output/baselines/`**, or `../output/<batch>/` with `--batch`).
 
 ```text
-../output/baselines/<crop>_<country>_<model>_screening_<horizon>_<timestamp>/<test_years>/optimal_model.yaml
+../output/<batch>/<crop>_<country>_<model>_screening_<horizon>_<timestamp>/<test_years>/optimal_model.yaml
 ```
 
 Set the array to match the manifest — or use `submit_array.sh` (same as screening):

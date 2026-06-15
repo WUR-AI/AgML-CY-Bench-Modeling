@@ -1,6 +1,6 @@
 # Experiment runs
 
-Hydra-driven benchmarks and tooling around `../output/baselines/`.
+Hydra-driven benchmarks and tooling around `../output/<experiment.name>/` (default: `baselines`).
 
 ## Layout
 
@@ -34,4 +34,4 @@ poetry run python cybench/runs/analysis/compare_benchmark_runs.py \
 
 Run directories follow  
 `{crop}_{country}_{model}_{phase}_{horizon}_{timestamp}/`  
-under `../output/baselines/`.
+under `../output/<batch>/` (SLURM: `--batch NAME`, default `baselines`).

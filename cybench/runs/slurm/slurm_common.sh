@@ -1,6 +1,48 @@
 # Shared helpers for screening / walk-forward SLURM jobs.
 # Source from screening.sh or walk_forward.sh — do not execute directly.
 
+# GPU jobs (submit_array.sh): WUR lustre uses partition gpu + --gpus=1.
+# Override on other clusters, e.g.:
+#   export SLURM_GPU_PARTITION=gpu_a100
+#   export SLURM_GPU_REQUEST="--gres=gpu:1"
+SLURM_GPU_PARTITION="${SLURM_GPU_PARTITION:-gpu}"
+SLURM_GPU_REQUEST="${SLURM_GPU_REQUEST:---gpus=1}"
+# GPU partition on WUR lustre: max walltime is often 2 days (screening.sh defaults to 4d).
+SLURM_GPU_TIME_LIMIT="${SLURM_GPU_TIME_LIMIT:-2-00:00:00}"
+
+append_gpu_sbatch_args() {
+  local -n _extra=$1
+  if [[ -n "${SLURM_GPU_PARTITION}" ]]; then
+    _extra+=(--partition="${SLURM_GPU_PARTITION}")
+  fi
+  # shellcheck disable=SC2206
+  local gpu_args=(${SLURM_GPU_REQUEST})
+  _extra+=("${gpu_args[@]}")
+  if [[ -n "${SLURM_GPU_TIME_LIMIT}" ]]; then
+    _extra+=(--time="${SLURM_GPU_TIME_LIMIT}")
+  fi
+}
+
+gpu_sbatch_summary() {
+  local parts=()
+  if [[ -n "${SLURM_GPU_PARTITION}" ]]; then
+    parts+=("-p ${SLURM_GPU_PARTITION}")
+  fi
+  parts+=("${SLURM_GPU_REQUEST}")
+  if [[ -n "${SLURM_GPU_TIME_LIMIT}" ]]; then
+    parts+=("--time=${SLURM_GPU_TIME_LIMIT}")
+  fi
+  echo "${parts[*]}"
+}
+
+validate_experiment_name() {
+  local name=$1
+  if [[ ! "${name}" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
+    echo "Invalid batch/experiment name '${name}': use letters, digits, . _ - (no slashes or spaces)" >&2
+    exit 1
+  fi
+}
+
 slurm_setup() {
   module load 2024
   module load Python/3.12.3-GCCcore-13.3.0
@@ -9,8 +51,18 @@ slurm_setup() {
   # SLURM_DIR is set by screening.sh / walk_forward.sh before sourcing this file.
   local _slurm_dir="${SLURM_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
   REPO_ROOT="${REPO_ROOT:-$(cd "${_slurm_dir}/../../.." && pwd)}"
+  CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME:-baselines}"
+  validate_experiment_name "${CYBENCH_EXPERIMENT_NAME}"
+  export CYBENCH_EXPERIMENT_NAME
   # Hydra writes to ../output/<experiment.name> relative to repo root (see conf/config.yaml).
-  BASELINES_DIR="${CYBENCH_BASELINES_DIR:-$(cd "${REPO_ROOT}/../output/baselines" && pwd)}"
+  if [[ -n "${CYBENCH_BASELINES_DIR:-}" ]]; then
+    BASELINES_DIR="${CYBENCH_BASELINES_DIR}"
+  else
+    local output_root="${REPO_ROOT}/../output"
+    mkdir -p "${output_root}/${CYBENCH_EXPERIMENT_NAME}"
+    BASELINES_DIR="$(cd "${output_root}/${CYBENCH_EXPERIMENT_NAME}" && pwd)"
+  fi
+  export BASELINES_DIR
   JOB_MANIFEST="${JOB_MANIFEST:-${REPO_ROOT}/cybench/runs/slurm/benchmark_jobs.txt}"
   PREDICTION_HORIZON="${PREDICTION_HORIZON:-eos}"
   export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"

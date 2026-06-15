@@ -16,6 +16,8 @@ api_keys
 *.shp
 *.shx
 *.txt
+!cybench/runs/slurm/models.txt
+!cybench/runs/slurm/benchmark_jobs.example.txt
 *.xml
 *.zip
 *.pkl
