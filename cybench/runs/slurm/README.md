@@ -193,6 +193,27 @@ Outputs:
 
 Screening runs are only used to freeze HP; the paper table should come from walk-forward.
 
+**Compare run groups** (screening vs walk-forward, eos vs mid_season, etc.):
+
+```bash
+# Screening vs walk-forward (full metric series + deltas)
+poetry run python cybench/runs/compare_benchmark_runs.py \
+  --baselines-dir ../output/baselines \
+  --group wf=walk_forward/eos \
+  --group scr=screening/eos \
+  --output ../output/compare_wf_vs_screen_eos.csv
+
+# End-of-season vs mid-season walk-forward
+poetry run python cybench/runs/compare_benchmark_runs.py \
+  --baselines-dir ../output/baselines \
+  --group eos=walk_forward/eos \
+  --group mid=walk_forward/mid_season \
+  --output ../output/compare_horizons.csv
+```
+
+CSV columns are prefixed per group (`wf__nrmse`, `scr__r2`, …) plus `delta__*` for the first vs second group.
+NRMSE is lower-is-better; correlation and R² are higher-is-better.
+
 **Polygons for maps** (if `--plot` fails on shapefiles):
 
 ```bash
