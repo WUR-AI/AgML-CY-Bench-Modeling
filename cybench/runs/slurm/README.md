@@ -54,7 +54,7 @@ Submit **from the repo root** (so `SLURM_SUBMIT_DIR` resolves `cybench/runs/slur
 
 ```bash
 cybench/runs/slurm/submit_array.sh screening cybench/runs/slurm/benchmark_jobs_cpu.txt
-cybench/runs/slurm/submit_array.sh screening cybench/runs/slurm/benchmark_jobs_gpu.txt --gpu
+cybench/runs/slurm/submit_array.sh screening cybench/runs/slurm/benchmark_jobs_gpu.txt
 ```
 
 **Manual** — override `#SBATCH --array` on the command line (no need to edit the script):
@@ -66,7 +66,8 @@ JOB_MANIFEST=cybench/runs/slurm/benchmark_jobs_cpu.txt \
   sbatch --array=0-$((N - 1)) cybench/runs/slurm/screening.sh
 ```
 
-GPU jobs: add `--gres=gpu:1` (and uncomment `#SBATCH --partition=gpu` in `screening.sh` if your cluster requires it).
+GPU jobs: `submit_array.sh` adds `--gres=gpu:1` automatically for GPU-only manifests
+(`benchmark_jobs_gpu.txt`). Uncomment `#SBATCH --partition=gpu` in `screening.sh` if your cluster requires it.
 
 ### Parallelism (inside one job)
 
@@ -93,7 +94,7 @@ Set the array to match the manifest — or use `submit_array.sh` (same as screen
 
 ```bash
 cybench/runs/slurm/submit_array.sh walk_forward cybench/runs/slurm/benchmark_jobs_cpu.txt
-cybench/runs/slurm/submit_array.sh walk_forward cybench/runs/slurm/benchmark_jobs_gpu.txt --gpu
+cybench/runs/slurm/submit_array.sh walk_forward cybench/runs/slurm/benchmark_jobs_gpu.txt
 ```
 
 Manual:

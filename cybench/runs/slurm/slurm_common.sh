@@ -21,6 +21,21 @@ horizon_tag() {
   poetry run python -c "from cybench.util.prediction_horizon import prediction_horizon_tag; print(prediction_horizon_tag('${PREDICTION_HORIZON}'))"
 }
 
+# Hydra run dirs use model.name from cybench/conf/model/<slug>.yaml (e.g. average -> average_yield).
+model_run_name() {
+  local slug=$1
+  poetry run python -c "
+from pathlib import Path
+from omegaconf import OmegaConf
+slug = '${slug}'
+cfg_path = Path('cybench/conf/model') / f'{slug}.yaml'
+if not cfg_path.exists():
+    print(slug)
+else:
+    print(OmegaConf.select(OmegaConf.load(cfg_path), 'name', default=slug))
+"
+}
+
 # Read manifest line for SLURM_ARRAY_TASK_ID (0-based; skips comments).
 read_benchmark_job() {
   local line
@@ -70,12 +85,13 @@ configure_hpo_extras() {
 
 # Find .../<test_years>/optimal_model.yaml under the latest horizon-tagged screening run.
 find_frozen_screening_dir() {
-  local crop=$1 country=$2 model=$3
-  local htag run_dir frozen
+  local crop=$1 country=$2 model_slug=$3
+  local htag model_name run_dir frozen
   htag=$(horizon_tag)
-  run_dir=$(ls -td "${BASELINES_DIR}/${crop}_${country}_${model}_screening_${htag}_"* 2>/dev/null | head -1 || true)
+  model_name=$(model_run_name "${model_slug}")
+  run_dir=$(ls -td "${BASELINES_DIR}/${crop}_${country}_${model_name}_screening_${htag}_"* 2>/dev/null | head -1 || true)
   if [[ -z "${run_dir}" ]]; then
-    echo "No screening run for ${crop}/${country}/${model} horizon=${PREDICTION_HORIZON} (tag=${htag})" >&2
+    echo "No screening run for ${crop}/${country}/${model_name} (model=${model_slug}) horizon=${PREDICTION_HORIZON} (tag=${htag})" >&2
     return 1
   fi
   frozen=$(find "${run_dir}" -name optimal_model.yaml -printf '%h\n' 2>/dev/null | head -1)

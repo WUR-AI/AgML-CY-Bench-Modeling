@@ -127,6 +127,7 @@ def main(cfg):
         frozen_model_cfg, frozen_fs_cfg, frozen_E_star = load_frozen_screening_artifacts(
             frozen_dir
         )
+        frozen_model_cfg = remove_search_keys(frozen_model_cfg)
         log.info(
             "Walk-forward phase | frozen artifacts from %s | E*=%s",
             frozen_dir,

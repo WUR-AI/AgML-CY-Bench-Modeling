@@ -44,7 +44,9 @@ class TrendModel(BaseModel):
         name: str = "trend",
         min_trend_window: int = 5,
         max_trend_window: int = 10,
+        **_ignored,
     ):
+        # Hydra model configs may include metadata keys (e.g. framework).
         self.name = name
         self.min_trend_window = min_trend_window
         self.max_trend_window = max_trend_window
