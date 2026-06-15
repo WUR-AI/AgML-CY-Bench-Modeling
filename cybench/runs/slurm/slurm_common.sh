@@ -82,7 +82,7 @@ find_frozen_screening_dir() {
     if [[ -z "${run_dir}" ]]; then
       continue
     fi
-    frozen=$(find "${run_dir}" -name optimal_model.yaml -printf '%h\n' 2>/dev/null | head -1)
+    frozen=$(find "${run_dir}" \( -name optimal_model.yaml -o -name model_config.yaml \) -printf '%h\n' 2>/dev/null | head -1)
     if [[ -n "${frozen}" ]]; then
       echo "${frozen}"
       return 0

@@ -212,6 +212,10 @@ def main(cfg):
                 model_cfg = _prepare_screening_final_nn_cfg(model_cfg, E_star)
                 log.info("Screening final NN fit | E*=%d epochs on train+val", E_star)
 
+        if cfg.validation.name == "screening":
+            # Always save for walk-forward chaining (incl. naive models without HPO).
+            OmegaConf.save(config=model_cfg, f=split_path / "optimal_model.yaml")
+
         if not is_walk_forward:
             fs_cfg = resolved_feature_selection_cfg(cfg)
         if fs_cfg is not None:

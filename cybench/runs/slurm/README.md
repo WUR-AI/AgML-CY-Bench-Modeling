@@ -35,9 +35,15 @@ With ~10 models and ~40 countries × 2 crops, the full manifest can be **hundred
 ```bash
 # CPU-only manifest (sklearn / boosting on feature_design)
 awk '$7=="no"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/benchmark_jobs_cpu.txt
+# Naive baselines (average, trend) — no HPO, no feature_design; submit separately
+awk '$5=="no" && $6=="no" && $7=="no"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/benchmark_jobs_naive.txt
 # GPU manifest (torch + TabPFN — pandas on GPU)
 awk '$7=="yes"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/benchmark_jobs_gpu.txt
 ```
+
+**Note:** `benchmark_jobs_cpu.txt` from `$7=="no"` includes only models with `feature_design=yes`
+(ridge, xgboost, …). **`average` and `trend` are in `benchmark_jobs_naive.txt`** — run those
+arrays too if you want the naive baseline in `compare_models.html`.
 
 ## 2. Submit screening
 
@@ -157,22 +163,44 @@ poetry run python cybench/runs/run_experiments.py \
 
 ## Paper reporting (walk-forward)
 
-After walk-forward jobs finish, pool per-year splits into one metrics table and plots:
+After walk-forward jobs finish, pool per-year splits into one metrics table and plots.
+Requires country shapefiles under ``cybench/data/polygons/<CC>/<CC>.shp`` (see below).
 
 ```bash
 poetry run python cybench/runs/collect_walk_forward_results.py \
   --baselines-dir ../output/baselines \
   --output-dir ../output/paper_walk_forward \
-  --plot
+  --plot --dashboard
 ```
+
+**Compare models** (from an existing collect output):
+
+```bash
+poetry run python cybench/runs/collect_walk_forward_results.py \
+  --output-dir ../output/paper_walk_forward_eos \
+  --dashboard-only
+```
+
+Open `compare_models.html` — heatmap of all models × datasets; click a row for scatter/maps.
+Copy `compare_models.html` + `assets/` to your laptop to view offline.
 
 Outputs:
 
 - `walk_forward_summary.csv` — one row per crop/country/model (pooled region-year metrics)
-- `preds/<model>/` — year CSVs for `visualize_results_aggregated.py`
-- `plots/<model>/report.html` — scatter, maps, temporal panels (when `--plot`)
+- `compare_models.html` — **all models side-by-side** (use `--dashboard`)
+- `preds/<model>_<horizon>/` — year CSVs for `visualize_results_aggregated.py`
+- `plots/<model>/report.html` — per-model interactive report (when `--plot`)
 
 Screening runs are only used to freeze HP; the paper table should come from walk-forward.
+
+**Polygons for maps** (if `--plot` fails on shapefiles):
+
+```bash
+poetry run python data_preparation/fetch_zenodo_data.py --geometries
+# creates cybench/data/polygons/DE/DE.shp, NL/NL.shp, ...
+```
+
+Run collect from the same repo clone (paths resolve via ``REPO_DIR``).
 
 ## Outputs
 

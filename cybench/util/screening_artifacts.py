@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from omegaconf import DictConfig, OmegaConf
 
@@ -38,12 +38,19 @@ def load_frozen_screening_artifacts(screening_split_dir: Path | str) -> tuple[Di
     Load optimal model / feature-selection / E* configs from a screening split folder.
     """
     root = Path(screening_split_dir)
-    model_cfg = OmegaConf.load(root / "optimal_model.yaml")
+    model_path = root / "optimal_model.yaml"
+    if not model_path.exists():
+        model_path = root / "model_config.yaml"
+    if not model_path.exists():
+        raise FileNotFoundError(
+            f"No optimal_model.yaml or model_config.yaml in {root}"
+        )
+    model_cfg = cast(DictConfig, OmegaConf.load(model_path))
 
-    fs_cfg = None
+    fs_cfg: DictConfig | None = None
     fs_path = root / "optimal_feature_selection.yaml"
     if fs_path.exists():
-        fs_cfg = OmegaConf.load(fs_path)
+        fs_cfg = cast(DictConfig, OmegaConf.load(fs_path))
 
     E_star = load_optimal_epochs(root / "optimal_epochs.yaml")
     return model_cfg, fs_cfg, E_star
