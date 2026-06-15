@@ -304,7 +304,7 @@ class OptunaOptimizer:
         search_space = _extract_search_space(self.cfg.model)
         if "feature_selection" in self.cfg:
             search_space.update(_extract_search_space(self.cfg.feature_selection, "feature_selection"))
-        if search_space:
+        if search_space and bool(OmegaConf.select(self.cfg, "store.save_hpo_search_space", default=False)):
             ss_file = self.path / "search_space.yaml"
             OmegaConf.save(OmegaConf.create(search_space), ss_file)
             log.info(f"Search space metadata saved to: {ss_file}")

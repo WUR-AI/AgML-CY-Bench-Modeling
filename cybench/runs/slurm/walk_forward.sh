@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 # Walk-forward: one array task = one (crop, country, model), using frozen screening artifacts.
-# Auto-discovers the latest screening run:
-#   output/baselines/<crop>_<country>_<model>_screening_*/<test_years>/optimal_model.yaml
+# Auto-discovers the latest screening run (Hydra: ../output/baselines/ from repo root):
+#   ../output/baselines/<crop>_<country>_<model>_screening_<horizon>_<timestamp>/<test_years>/optimal_model.yaml
 #
 # Submit after screening jobs finished:
 #   sbatch cybench/runs/slurm/walk_forward.sh
@@ -20,13 +20,22 @@
 
 set -euo pipefail
 
-source "$(dirname "${BASH_SOURCE[0]}")/slurm_common.sh"
+if [[ -f "${SLURM_SUBMIT_DIR:-}/cybench/runs/slurm/slurm_common.sh" ]]; then
+  export SLURM_DIR="${SLURM_SUBMIT_DIR}/cybench/runs/slurm"
+elif [[ -f "${SLURM_SUBMIT_DIR:-}/slurm_common.sh" ]]; then
+  export SLURM_DIR="${SLURM_SUBMIT_DIR}"
+elif [[ -n "${REPO_ROOT:-}" && -f "${REPO_ROOT}/cybench/runs/slurm/slurm_common.sh" ]]; then
+  export SLURM_DIR="${REPO_ROOT}/cybench/runs/slurm"
+else
+  export SLURM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+source "${SLURM_DIR}/slurm_common.sh"
 slurm_setup
 mkdir -p output/walk_forward
 
 read_benchmark_job
 FROZEN_DIR=$(find_frozen_screening_dir "${CROP}" "${COUNTRY}" "${MODEL}")
-echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | frozen=${FROZEN_DIR}"
+echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | framework=${FRAMEWORK} | horizon=${PREDICTION_HORIZON} | frozen=${FROZEN_DIR}"
 
 COMMON=(
   "dataset/crop=${CROP}"

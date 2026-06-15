@@ -11,6 +11,10 @@ import logging
 from codecarbon import track_emissions
 from omegaconf import DictConfig, OmegaConf, open_dict
 
+from cybench.util.prediction_horizon import prediction_horizon_tag
+
+OmegaConf.register_new_resolver("prediction_horizon_tag", prediction_horizon_tag)
+
 from cybench.datasets.data_factory import DataFactory
 from cybench.datasets.dataset import PandasDataset
 from cybench.datasets.torch_dataset import TorchDataset
@@ -78,6 +82,10 @@ def _fit_model(model, train_dataset, *, walk_forward_nn: bool = False):
     return model.fit(train_dataset)
 
 
+def _store_enabled(cfg, key: str, *, default: bool = False) -> bool:
+    return bool(OmegaConf.select(cfg, f"store.{key}", default=default))
+
+
 @track_emissions(log_level="WARNING")
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg):
@@ -90,6 +98,8 @@ def main(cfg):
     log.info("=== Create Datasets ===")
     dataset = DataFactory(cfg.dataset).build()
     log.info(f"Dataset years: {sorted(dataset.years)}")
+    horizon = OmegaConf.select(cfg, "dataset.temporal.season.end_of_sequence")
+    log.info("Prediction horizon (end_of_sequence): %s → tag %s", horizon, prediction_horizon_tag(str(horizon or "eos")))
     if "process" in cfg and isinstance(dataset, TorchDataset):
         dataset.process(cfg.process)
     # TODO extra function for testing config compatibility
@@ -147,7 +157,9 @@ def main(cfg):
         # create a folder for each split
         split_path = make_folder(dir=run_output_dir, name=test_years)
 
-        if cfg.validation.name == "screening":
+        if cfg.validation.name == "screening" and _store_enabled(
+            cfg, "save_screening_partitions", default=True
+        ):
             screen_train, screen_val, screen_test = get_screening_partitions(
                 cfg=cfg.validation,
                 dataset_years=dataset.years,
@@ -187,8 +199,8 @@ def main(cfg):
         else:
             # _search_ keys for hyperparameter tuning have to be removed before model instantiation
             model_cfg = remove_search_keys(cfg.model)
-        # save final model config
-        OmegaConf.save(config=model_cfg, f=split_path / "model_config.yaml")
+        if _store_enabled(cfg, "save_split_configs"):
+            OmegaConf.save(config=model_cfg, f=split_path / "model_config.yaml")
 
         if (
             cfg.validation.name == "screening"
@@ -220,12 +232,13 @@ def main(cfg):
                 train_dataset=train_dataset,
                 eval_dataset=cast(PandasDataset, test_dataset),
             )
-            save_selected_features(
-                split_path / "selected_features.yaml",
-                selected=selected,
-                fs_cfg=fs_cfg,
-                train_years=list(train_years),
-            )
+            if _store_enabled(cfg, "save_split_configs"):
+                save_selected_features(
+                    split_path / "selected_features.yaml",
+                    selected=selected,
+                    fs_cfg=fs_cfg,
+                    train_years=list(train_years),
+                )
             log.info(
                 "Final mRMR at origin | k=%d | selected %d features | train years %s",
                 int(fs_cfg.k),
@@ -265,7 +278,10 @@ def main(cfg):
             test_year_tag = "_".join(str(y) for y in test_years)
             country_cfg = cfg.dataset.country
             country_tag = country_cfg if isinstance(country_cfg, str) else "-".join(country_cfg)
-            root_file = f"{cfg.dataset.crop.name}_{country_tag}_year_{test_year_tag}"
+            horizon_tag = prediction_horizon_tag(
+                str(OmegaConf.select(cfg, "dataset.temporal.season.end_of_sequence") or "eos")
+            )
+            root_file = f"{cfg.dataset.crop.name}_{country_tag}_h{horizon_tag}_year_{test_year_tag}"
             if cfg.experiment.n_repetitions > 1:
                 root_file = f"{root_file}_seed_{seed}"
 
@@ -282,9 +298,16 @@ def main(cfg):
 
             output_cols = [KEY_COUNTRY, KEY_LOC, KEY_YEAR, KEY_TARGET, model_col]
             formatted_df = formatted_df[output_cols]
-            formatted_df.to_csv(f"{run_output_dir}/{root_file}.csv", index=False, float_format="%.6f")
-            if cfg.store.model: model.save(path=repetition_path)
-            if cfg.store.meta: save_meta_dict(path=repetition_path, dict=meta_dict)
+            if _store_enabled(cfg, "export_root_csv"):
+                formatted_df.to_csv(
+                    f"{run_output_dir}/{root_file}.csv",
+                    index=False,
+                    float_format="%.6f",
+                )
+            if cfg.store.model:
+                model.save(path=repetition_path)
+            if cfg.store.meta:
+                save_meta_dict(path=repetition_path, dict=meta_dict)
 
             # evaluate
             eval_metric = evaluate_predictions(y_true=test_dataset.targets, y_pred=test_preds, cfg=cfg.evaluation)

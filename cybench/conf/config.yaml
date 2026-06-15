@@ -13,7 +13,7 @@ defaults:
 # All runs within an experiment share the same device, random seed,
 # and global settings. Use this to define high-level properties.
 experiment:
-  name: hello_crop_model
+  name: baselines
   device: cuda
   preload_to_device: true
   seed: 42
@@ -27,9 +27,14 @@ store:
   train_preds: false
   model: false
   meta: false
+  # Paper-oriented defaults: predictions + metrics per split; skip duplicate exports.
+  export_root_csv: false        # wide CSV at Hydra run root (duplicate of test_preds.csv)
+  save_split_configs: false     # per-split model_config.yaml + selected_features.yaml
+  save_screening_partitions: true  # small audit file for screening splits only
+  save_hpo_search_space: false  # Optuna search_space.yaml (optimal_model.yaml is kept)
 
 run:
-  name: ${dataset.name}_${model.name}_${validation.name}_${now:%Y%m%d_%H%M%S}
+  name: ${dataset.name}_${model.name}_${validation.name}_${prediction_horizon_tag:${dataset.temporal.season.end_of_sequence}}_${now:%Y%m%d_%H%M%S}
 
 # -------------------------------
 # Hydra-specific configuration

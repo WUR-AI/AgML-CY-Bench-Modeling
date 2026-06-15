@@ -35,12 +35,23 @@
 
 set -euo pipefail
 
-source "$(dirname "${BASH_SOURCE[0]}")/slurm_common.sh"
+# SLURM copies this script to a spool dir; BASH_SOURCE then points there, not the repo.
+# Resolve cybench/runs/slurm from the directory where sbatch was invoked (repo root).
+if [[ -f "${SLURM_SUBMIT_DIR:-}/cybench/runs/slurm/slurm_common.sh" ]]; then
+  export SLURM_DIR="${SLURM_SUBMIT_DIR}/cybench/runs/slurm"
+elif [[ -f "${SLURM_SUBMIT_DIR:-}/slurm_common.sh" ]]; then
+  export SLURM_DIR="${SLURM_SUBMIT_DIR}"
+elif [[ -n "${REPO_ROOT:-}" && -f "${REPO_ROOT}/cybench/runs/slurm/slurm_common.sh" ]]; then
+  export SLURM_DIR="${REPO_ROOT}/cybench/runs/slurm"
+else
+  export SLURM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+source "${SLURM_DIR}/slurm_common.sh"
 slurm_setup
 mkdir -p output/screening
 
 read_benchmark_job
-echo "Screening | ${CROP}/${COUNTRY} | model=${MODEL} | framework=${FRAMEWORK}"
+echo "Screening | ${CROP}/${COUNTRY} | model=${MODEL} | framework=${FRAMEWORK} | horizon=${PREDICTION_HORIZON}"
 
 COMMON=(
   "dataset/crop=${CROP}"

@@ -78,7 +78,7 @@ def add_cutoff_days(df: pd.DataFrame, end_of_sequence: str):
     if "eos-" in end_of_sequence:
         df["cutoff_days"] = int(end_of_sequence.split("-")[-1])
     else:
-        if end_of_sequence == "middle-of-season":
+        if end_of_sequence == "middle-of-season" or end_of_sequence == "mid-season":
             df["cutoff_days"] = (df["season_length"] // 2).astype(int)
         elif end_of_sequence == "quarter-of-season":
             df["cutoff_days"] = (df["season_length"] // 4).astype(int)

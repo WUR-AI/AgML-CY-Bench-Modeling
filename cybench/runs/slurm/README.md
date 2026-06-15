@@ -13,6 +13,7 @@
 | `slurm_common.sh` | Modules, paths, HPO/CPU helpers |
 | `screening.sh` | Phase A: HPO + held-out test |
 | `walk_forward.sh` | Phase B: rolling forecasts (auto-finds screening artifacts) |
+| `submit_array.sh` | Count manifest rows and `sbatch --array=0-(N-1)` for you |
 
 ## 1. Generate the job list
 
@@ -40,16 +41,25 @@ awk '$7=="yes"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/bench
 
 ## 2. Submit screening
 
+Submit **from the repo root** (so `SLURM_SUBMIT_DIR` resolves `cybench/runs/slurm/`).
+
+**Recommended** — array size is computed from the manifest automatically:
+
+```bash
+cybench/runs/slurm/submit_array.sh screening cybench/runs/slurm/benchmark_jobs_cpu.txt
+cybench/runs/slurm/submit_array.sh screening cybench/runs/slurm/benchmark_jobs_gpu.txt --gpu
+```
+
+**Manual** — override `#SBATCH --array` on the command line (no need to edit the script):
+
 ```bash
 mkdir -p output/screening
-
-# Edit #SBATCH --array=0-N  (N = number of lines in manifest minus 1)
-# Tabular jobs:
-JOB_MANIFEST=cybench/runs/slurm/benchmark_jobs_cpu.txt sbatch cybench/runs/slurm/screening.sh
-
-# Neural jobs (uncomment #SBATCH --gres=gpu:1 in screening.sh):
-JOB_MANIFEST=cybench/runs/slurm/benchmark_jobs_gpu.txt sbatch cybench/runs/slurm/screening.sh
+N=$(awk '!/^#/ && NF>=7' cybench/runs/slurm/benchmark_jobs_cpu.txt | wc -l)
+JOB_MANIFEST=cybench/runs/slurm/benchmark_jobs_cpu.txt \
+  sbatch --array=0-$((N - 1)) cybench/runs/slurm/screening.sh
 ```
+
+GPU jobs: add `--gres=gpu:1` (and uncomment `#SBATCH --partition=gpu` in `screening.sh` if your cluster requires it).
 
 ### Parallelism (inside one job)
 
@@ -65,15 +75,27 @@ Optuna does **not** spawn separate SLURM tasks per trial.
 
 ## 3. Submit walk-forward
 
-After screening finishes for a row, walk-forward finds the latest run automatically:
+After screening finishes for a row, walk-forward finds the latest run under **`../output/baselines/`**
+(one level above the repo — same path Hydra uses).
 
 ```text
-output/baselines/<crop>_<country>_<model>_screening_<timestamp>/<test_years>/optimal_model.yaml
+../output/baselines/<crop>_<country>_<model>_screening_<timestamp>/<test_years>/optimal_model.yaml
 ```
+
+Set the array to match the manifest — or use `submit_array.sh` (same as screening):
+
+```bash
+cybench/runs/slurm/submit_array.sh walk_forward cybench/runs/slurm/benchmark_jobs_cpu.txt
+cybench/runs/slurm/submit_array.sh walk_forward cybench/runs/slurm/benchmark_jobs_gpu.txt --gpu
+```
+
+Manual:
 
 ```bash
 mkdir -p output/walk_forward
-JOB_MANIFEST=cybench/runs/slurm/benchmark_jobs_cpu.txt sbatch cybench/runs/slurm/walk_forward.sh
+N=$(awk '!/^#/ && NF>=7' cybench/runs/slurm/benchmark_jobs_cpu.txt | wc -l)
+JOB_MANIFEST=cybench/runs/slurm/benchmark_jobs_cpu.txt \
+  sbatch --array=0-$((N - 1)) cybench/runs/slurm/walk_forward.sh
 ```
 
 ## Cluster environment
@@ -86,17 +108,92 @@ module load Python/3.12.3-GCCcore-13.3.0
 # Optional: export REPO_ROOT=/path/to/clone  (auto-detected from script location if omitted)
 ```
 
-Submit from anywhere; `screening.sh` / `walk_forward.sh` resolve the repo root from their own path. Ensure Zenodo data is at `cybench/data` and `poetry install` has been run in that clone.
+Submit from anywhere; `screening.sh` / `walk_forward.sh` resolve the repo root from their own path.
+
+Fetch data (once per clone, Python 3.10+, ~6.2 GB):
+
+```bash
+poetry run python data_preparation/fetch_zenodo_data.py
+```
+
+Then `poetry install` if you have not already.
+
+## Prediction horizon (lead time)
+
+Forecast cutoff is `dataset.temporal.season.end_of_sequence`:
+
+| Value | Meaning | Run-name tag |
+|-------|---------|--------------|
+| `eos` | End-of-season (nowcast) | `eos` |
+| `middle-of-season` or `mid-season` | Mid-season forecast | `mid_season` |
+| `eos-60` | 60 days before EOS | `eos_60` |
+
+Hydra run folders and prediction CSVs include the tag, e.g.:
+
+```text
+../output/baselines/maize_NL_ridge_screening_eos_20260615_120738/
+../output/baselines/maize_NL_ridge_walk_forward_mid_season_20260620_093000/
+maize_NL_h_eos_year_2016.csv
+```
+
+On SLURM, set the horizon for both screening and walk-forward (walk-forward matches screening by horizon):
+
+```bash
+PREDICTION_HORIZON=eos cybench/runs/slurm/submit_array.sh screening ...
+PREDICTION_HORIZON=middle-of-season cybench/runs/slurm/submit_array.sh screening ...
+
+# walk-forward must use the same horizon as its screening run:
+PREDICTION_HORIZON=eos cybench/runs/slurm/submit_array.sh walk_forward ...
+```
+
+Local override:
+
+```bash
+poetry run python cybench/runs/run_experiments.py \
+  dataset/crop=maize dataset.country=NL \
+  dataset.temporal.season.end_of_sequence=middle-of-season \
+  validation=screening model=ridge ...
+```
+
+## Paper reporting (walk-forward)
+
+After walk-forward jobs finish, pool per-year splits into one metrics table and plots:
+
+```bash
+poetry run python cybench/runs/collect_walk_forward_results.py \
+  --baselines-dir ../output/baselines \
+  --output-dir ../output/paper_walk_forward \
+  --plot
+```
+
+Outputs:
+
+- `walk_forward_summary.csv` — one row per crop/country/model (pooled region-year metrics)
+- `preds/<model>/` — year CSVs for `visualize_results_aggregated.py`
+- `plots/<model>/report.html` — scatter, maps, temporal panels (when `--plot`)
+
+Screening runs are only used to freeze HP; the paper table should come from walk-forward.
 
 ## Outputs
 
+Hydra experiment artifacts (screening + walk-forward). Default `store.*` flags skip
+duplicate exports; each split keeps `test_preds.csv` and `report_metrics.yaml`.
+
 ```text
-output/baselines/<crop>_<country>_<model>_screening_<timestamp>/<test_years>/
-  optimal_model.yaml
-  optimal_feature_selection.yaml   # tabular + mRMR
-  optimal_epochs.yaml              # neural nets
-  42/report_metrics.yaml
+../output/baselines/<crop>_<country>_<model>_screening_<horizon>_<timestamp>/
+  .hydra/                          # full composed config (kept)
+  <test_years>/
+    optimal_model.yaml             # screening / HPO (needed for walk-forward)
+    optimal_feature_selection.yaml # tabular + mRMR
+    optimal_epochs.yaml            # neural nets
+    screening_partitions.yaml      # train/val/test audit (screening only)
+    42/
+      test_preds.csv
+      report_metrics.yaml
 ```
+
+Re-enable legacy flat CSVs at run root: `store.export_root_csv=true`  
+Re-enable per-split config dumps: `store.save_split_configs=true`
 
 ## Suggested rollout
 
