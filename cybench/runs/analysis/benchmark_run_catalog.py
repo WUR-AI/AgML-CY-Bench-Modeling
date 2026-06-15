@@ -11,10 +11,6 @@ from omegaconf import OmegaConf
 
 from cybench.config import KEY_TARGET
 from cybench.evaluation.aggregated_metrics import compute_report_metrics
-from cybench.runs.collect_walk_forward_results import (
-    flatten_report_metrics,
-    load_pooled_predictions,
-)
 from cybench.util.prediction_horizon import parse_run_name_suffix
 
 PHASES = ("walk_forward", "screening", "rolling")
@@ -37,13 +33,33 @@ HIGHER_IS_BETTER = frozenset({"r", "r2", "r_spatial", "r2_spatial", "r_temporal"
 LOWER_IS_BETTER = frozenset({"nrmse"})
 
 
+def flatten_report_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
+    ry = metrics.get("region_year", {})
+    sp = metrics.get("spatial", {})
+    tm = metrics.get("temporal", {})
+    return {
+        "n_regions": metrics.get("n_regions"),
+        "n_years": metrics.get("n_years"),
+        "n_samples": metrics.get("n_samples"),
+        "r": ry.get("r"),
+        "r2": ry.get("r2"),
+        "nrmse": ry.get("nrmse"),
+        "r_res": ry.get("r_res"),
+        "r2_res": ry.get("r2_res"),
+        "r_spatial": sp.get("r"),
+        "r2_spatial": sp.get("r2"),
+        "r_temporal": tm.get("r"),
+        "r2_temporal": tm.get("r2"),
+    }
+
+
 @dataclass(frozen=True)
 class BenchmarkRun:
     crop: str
     country: str
     model: str
     phase: str
-    horizon: str | None
+    horizon: str
     timestamp: str
     path: Path
 
@@ -52,8 +68,13 @@ class BenchmarkRun:
         return f"{self.crop}_{self.country}"
 
     @property
-    def match_key(self) -> tuple[str, str, str, str | None]:
+    def match_key(self) -> tuple[str, str, str, str]:
         return (self.crop, self.country, self.model, self.horizon)
+
+    @property
+    def dataset_key(self) -> tuple[str, str, str]:
+        """Match key for cross-group comparisons (horizon may differ per group)."""
+        return (self.crop, self.country, self.model)
 
 
 def parse_benchmark_run_dir(name: str, path: Path) -> BenchmarkRun | None:
@@ -66,7 +87,10 @@ def parse_benchmark_run_dir(name: str, path: Path) -> BenchmarkRun | None:
         if len(parts) < 3:
             return None
         crop, country, model = parts
-        horizon, timestamp = parse_run_name_suffix(suffix)
+        try:
+            horizon, timestamp = parse_run_name_suffix(suffix)
+        except ValueError:
+            return None
         return BenchmarkRun(
             crop=crop,
             country=country,
@@ -89,7 +113,7 @@ def discover_benchmark_runs(
     if not baselines_dir.is_dir():
         raise FileNotFoundError(f"Baselines directory not found: {baselines_dir}")
 
-    by_key: dict[tuple[str, str, str, str, str | None], BenchmarkRun] = {}
+    by_key: dict[tuple[str, str, str, str, str], BenchmarkRun] = {}
     for entry in sorted(baselines_dir.iterdir()):
         if not entry.is_dir():
             continue
@@ -119,12 +143,12 @@ def discover_benchmark_runs(
             runs.append(run)
         return sorted(
             runs,
-            key=lambda r: (r.crop, r.country, r.model, r.phase, r.horizon or "", r.timestamp),
+            key=lambda r: (r.crop, r.country, r.model, r.phase, r.horizon, r.timestamp),
         )
 
     return sorted(
         by_key.values(),
-        key=lambda r: (r.crop, r.country, r.model, r.phase, r.horizon or ""),
+        key=lambda r: (r.crop, r.country, r.model, r.phase, r.horizon),
     )
 
 
@@ -156,6 +180,8 @@ def _metrics_from_report_yaml(path: Path) -> dict[str, Any]:
 def load_run_metrics(run: BenchmarkRun, *, seed: int = 42) -> dict[str, Any] | None:
     """Pooled test metrics for a single Hydra run directory."""
     if run.phase == "walk_forward":
+        from cybench.runs.analysis.collect_walk_forward_results import load_pooled_predictions
+
         try:
             df, model_col = load_pooled_predictions(run.path, model_slug=run.model)
         except ValueError:

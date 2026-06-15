@@ -68,26 +68,21 @@ configure_hpo_extras() {
   fi
 }
 
-# Find .../<test_years>/optimal_model.yaml under the latest screening run for crop/country/model.
-# Matches horizon-tagged runs first (e.g. ..._screening_eos_<timestamp>), then legacy names.
+# Find .../<test_years>/optimal_model.yaml under the latest horizon-tagged screening run.
 find_frozen_screening_dir() {
   local crop=$1 country=$2 model=$3
-  local htag run_dir frozen pattern
+  local htag run_dir frozen
   htag=$(horizon_tag)
-  for pattern in \
-    "${BASELINES_DIR}/${crop}_${country}_${model}_screening_${htag}_*" \
-    "${BASELINES_DIR}/${crop}_${country}_${model}_screening_*"
-  do
-    run_dir=$(ls -td ${pattern} 2>/dev/null | head -1 || true)
-    if [[ -z "${run_dir}" ]]; then
-      continue
-    fi
-    frozen=$(find "${run_dir}" \( -name optimal_model.yaml -o -name model_config.yaml \) -printf '%h\n' 2>/dev/null | head -1)
-    if [[ -n "${frozen}" ]]; then
-      echo "${frozen}"
-      return 0
-    fi
-  done
-  echo "No screening run with optimal_model.yaml for ${crop}/${country}/${model} (horizon=${PREDICTION_HORIZON})" >&2
+  run_dir=$(ls -td "${BASELINES_DIR}/${crop}_${country}_${model}_screening_${htag}_"* 2>/dev/null | head -1 || true)
+  if [[ -z "${run_dir}" ]]; then
+    echo "No screening run for ${crop}/${country}/${model} horizon=${PREDICTION_HORIZON} (tag=${htag})" >&2
+    return 1
+  fi
+  frozen=$(find "${run_dir}" -name optimal_model.yaml -printf '%h\n' 2>/dev/null | head -1)
+  if [[ -n "${frozen}" ]]; then
+    echo "${frozen}"
+    return 0
+  fi
+  echo "No optimal_model.yaml in ${run_dir}" >&2
   return 1
 }

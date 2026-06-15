@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """Compare pooled test metrics across arbitrary Hydra baseline run groups.
 
-Match runs on (crop, country, model, horizon) and align metrics side-by-side.
+Match runs on (crop, country, model) and align metrics side-by-side.
 Use for screening vs walk-forward, eos vs mid_season, or any labeled pair.
 
 Examples::
 
     # Screening vs walk-forward (same horizon)
-    poetry run python cybench/runs/compare_benchmark_runs.py \\
+    poetry run python cybench/runs/analysis/compare_benchmark_runs.py \\
         --baselines-dir ../output/baselines \\
         --group wf=walk_forward/eos \\
         --group scr=screening/eos \\
         --output ../output/compare_wf_vs_screen_eos.csv
 
     # End-of-season vs mid-season walk-forward
-    poetry run python cybench/runs/compare_benchmark_runs.py \\
+    poetry run python cybench/runs/analysis/compare_benchmark_runs.py \\
         --baselines-dir ../output/baselines \\
         --group eos=walk_forward/eos \\
         --group mid=walk_forward/mid_season \\
@@ -29,7 +29,7 @@ from typing import Any
 
 import pandas as pd
 
-from cybench.runs.benchmark_run_catalog import (
+from cybench.runs.analysis.benchmark_run_catalog import (
     HIGHER_IS_BETTER,
     LOWER_IS_BETTER,
     METRIC_KEYS,
@@ -46,27 +46,58 @@ def _build_group_index(
     horizon: str | None,
     *,
     seed: int,
-) -> dict[tuple[str, str, str, str | None], dict[str, Any]]:
-    rows: dict[tuple[str, str, str, str | None], dict[str, Any]] = {}
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    rows: dict[tuple[str, str, str], dict[str, Any]] = {}
     for run in discover_benchmark_runs(
         baselines_dir, phase=phase, horizon=horizon, latest_only=True
     ):
         metrics = load_run_metrics(run, seed=seed)
         if metrics is None:
             continue
-        rows[run.match_key] = {
+        rows[run.dataset_key] = {
             "crop": run.crop,
             "country": run.country,
             "model": run.model,
-            "horizon": run.horizon,
             "dataset": run.dataset,
-            "phase": run.phase,
+            f"{label}__horizon": run.horizon,
+            f"{label}__phase": run.phase,
             f"{label}__run_dir": str(run.path),
             **{f"{label}__{k}": metrics.get(k) for k in METRIC_KEYS},
             f"{label}__n_regions": metrics.get("n_regions"),
             f"{label}__n_years": metrics.get("n_years"),
         }
     return rows
+
+
+def _diagnose_empty_comparison(
+    baselines_dir: Path,
+    groups: list[tuple[str, str, str | None]],
+    indexes: list[dict[tuple[str, str, str], dict[str, Any]]],
+) -> None:
+    labels = [g[0] for g in groups]
+    for label, (_, phase, horizon), idx in zip(labels, groups, indexes):
+        n_metrics = len(idx)
+        n_dirs = len(
+            discover_benchmark_runs(
+                baselines_dir, phase=phase, horizon=horizon, latest_only=True
+            )
+        )
+        horizon_s = horizon or "any"
+        print(
+            f"  [{label}] phase={phase} horizon={horizon_s}: "
+            f"{n_dirs} run dirs, {n_metrics} with loadable metrics"
+        )
+    if all(indexes):
+        keys = [set(idx) for idx in indexes]
+        overlap = keys[0].intersection(*keys[1:])
+        if not overlap:
+            print(
+                "[HINT] Groups have runs but no shared (crop, country, model). "
+                "Check model names and that both phases finished."
+            )
+    elif any(not idx for idx in indexes):
+        empty = [labels[i] for i, idx in enumerate(indexes) if not idx]
+        print(f"[HINT] Empty groups: {', '.join(empty)}")
 
 
 def compare_groups(
@@ -86,6 +117,8 @@ def compare_groups(
     for idx in indexes[1:]:
         common_keys &= set(idx)
     if not common_keys:
+        print("[WARN] No matched runs across all groups.")
+        _diagnose_empty_comparison(baselines_dir, groups, indexes)
         return pd.DataFrame()
 
     labels = [g[0] for g in groups]
@@ -98,7 +131,6 @@ def compare_groups(
         merged.setdefault("crop", base["crop"])
         merged.setdefault("country", base["country"])
         merged.setdefault("model", base["model"])
-        merged.setdefault("horizon", base["horizon"])
         merged.setdefault("dataset", base["dataset"])
 
         for metric in METRIC_KEYS:
@@ -119,7 +151,7 @@ def _print_summary(df: pd.DataFrame, labels: list[str]) -> None:
     if len(labels) < 2:
         return
     a, b = labels[0], labels[1]
-    print(f"[INFO] Compared groups '{a}' vs '{b}' on {len(df)} matched (crop, country, model, horizon) rows.")
+    print(f"[INFO] Compared groups '{a}' vs '{b}' on {len(df)} matched (crop, country, model) rows.")
     for metric in METRIC_KEYS:
         delta_col = f"delta__{metric}"
         if delta_col not in df.columns:
@@ -142,7 +174,11 @@ def _print_summary(df: pd.DataFrame, labels: list[str]) -> None:
 def _print_preview(df: pd.DataFrame, labels: list[str]) -> None:
     if df.empty:
         return
-    show = ["dataset", "model", "horizon"]
+    show = ["dataset", "model"]
+    for label in labels:
+        hc = f"{label}__horizon"
+        if hc in df.columns:
+            show.append(hc)
     for label in labels:
         for metric in METRIC_KEYS:
             show.append(f"{label}__{metric}")
@@ -173,7 +209,6 @@ def main() -> None:
 
     df = compare_groups(args.baselines_dir.resolve(), groups, seed=args.seed)
     if df.empty:
-        print("[WARN] No matched runs across all groups.")
         return
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

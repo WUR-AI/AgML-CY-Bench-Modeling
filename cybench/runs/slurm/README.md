@@ -1,6 +1,7 @@
 # SLURM benchmark jobs (WUR lustre)
 
-**screening** + **walk-forward** via `run_experiments.py`.
+**screening** + **walk-forward** via `run_experiments.py`.  
+See also [../README.md](../README.md) for the full `cybench/runs/` layout (analysis, viz).
 
 ## Layout
 
@@ -85,7 +86,7 @@ After screening finishes for a row, walk-forward finds the latest run under **`.
 (one level above the repo — same path Hydra uses).
 
 ```text
-../output/baselines/<crop>_<country>_<model>_screening_<timestamp>/<test_years>/optimal_model.yaml
+../output/baselines/<crop>_<country>_<model>_screening_<horizon>_<timestamp>/<test_years>/optimal_model.yaml
 ```
 
 Set the array to match the manifest — or use `submit_array.sh` (same as screening):
@@ -150,7 +151,12 @@ PREDICTION_HORIZON=middle-of-season cybench/runs/slurm/submit_array.sh screening
 
 # walk-forward must use the same horizon as its screening run:
 PREDICTION_HORIZON=eos cybench/runs/slurm/submit_array.sh walk_forward ...
+PREDICTION_HORIZON=middle-of-season cybench/runs/slurm/submit_array.sh walk_forward ...
 ```
+
+`submit_array.sh` prints `horizon: ...` on submit. In the job log, confirm
+`horizon=middle-of-season` and run dirs named `*_walk_forward_mid_season_*`
+(not `*_eos_*`). `run_experiments.py` also logs `Prediction horizon (end_of_sequence): ...`.
 
 Local override:
 
@@ -167,7 +173,7 @@ After walk-forward jobs finish, pool per-year splits into one metrics table and 
 Requires country shapefiles under ``cybench/data/polygons/<CC>/<CC>.shp`` (see below).
 
 ```bash
-poetry run python cybench/runs/collect_walk_forward_results.py \
+poetry run python cybench/runs/analysis/collect_walk_forward_results.py \
   --baselines-dir ../output/baselines \
   --output-dir ../output/paper_walk_forward \
   --plot --dashboard
@@ -176,7 +182,7 @@ poetry run python cybench/runs/collect_walk_forward_results.py \
 **Compare models** (from an existing collect output):
 
 ```bash
-poetry run python cybench/runs/collect_walk_forward_results.py \
+poetry run python cybench/runs/analysis/collect_walk_forward_results.py \
   --output-dir ../output/paper_walk_forward_eos \
   --dashboard-only
 ```
@@ -197,14 +203,14 @@ Screening runs are only used to freeze HP; the paper table should come from walk
 
 ```bash
 # Screening vs walk-forward (full metric series + deltas)
-poetry run python cybench/runs/compare_benchmark_runs.py \
+poetry run python cybench/runs/analysis/compare_benchmark_runs.py \
   --baselines-dir ../output/baselines \
   --group wf=walk_forward/eos \
   --group scr=screening/eos \
   --output ../output/compare_wf_vs_screen_eos.csv
 
 # End-of-season vs mid-season walk-forward
-poetry run python cybench/runs/compare_benchmark_runs.py \
+poetry run python cybench/runs/analysis/compare_benchmark_runs.py \
   --baselines-dir ../output/baselines \
   --group eos=walk_forward/eos \
   --group mid=walk_forward/mid_season \
@@ -212,6 +218,7 @@ poetry run python cybench/runs/compare_benchmark_runs.py \
 ```
 
 CSV columns are prefixed per group (`wf__nrmse`, `scr__r2`, …) plus `delta__*` for the first vs second group.
+Rows match on `(crop, country, model)`; horizons can differ between groups (`eos__horizon`, `mid__horizon`).
 NRMSE is lower-is-better; correlation and R² are higher-is-better.
 
 **Polygons for maps** (if `--plot` fails on shapefiles):

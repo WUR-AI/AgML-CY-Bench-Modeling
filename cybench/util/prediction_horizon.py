@@ -26,11 +26,11 @@ def prediction_horizon_tag(end_of_sequence: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", key).strip("_") or "unknown"
 
 
-def parse_run_name_suffix(suffix: str) -> tuple[str | None, str]:
-    """Parse ``<horizon>_<timestamp>`` or legacy ``<timestamp>`` after validation phase."""
-    if re.fullmatch(r"\d{8}_\d{6}", suffix):
-        return None, suffix
+def parse_run_name_suffix(suffix: str) -> tuple[str, str]:
+    """Parse ``<horizon>_<timestamp>`` after the validation phase token."""
     match = re.fullmatch(r"(.+)_(\d{8}_\d{6})", suffix)
-    if match:
-        return match.group(1), match.group(2)
-    return None, suffix
+    if not match:
+        raise ValueError(
+            f"Invalid run suffix {suffix!r}; expected <horizon>_YYYYMMDD_HHMMSS"
+        )
+    return match.group(1), match.group(2)

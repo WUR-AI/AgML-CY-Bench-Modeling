@@ -1,10 +1,9 @@
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
-from cybench.runs.collect_walk_forward_results import (
-    _parse_walk_forward_dir,
+from cybench.runs.analysis.benchmark_run_catalog import parse_benchmark_run_dir
+from cybench.runs.analysis.collect_walk_forward_results import (
     load_pooled_predictions,
     resolve_model_column,
     summary_rows_to_dashboard_records,
@@ -17,7 +16,7 @@ def test_resolve_model_column_from_repo_config():
 
 
 def test_load_pooled_predictions_from_test_preds(tmp_path: Path):
-    run = _parse_walk_forward_dir(
+    run = parse_benchmark_run_dir(
         "maize_NL_ridge_walk_forward_eos_20260615_135937",
         tmp_path,
     )
@@ -60,7 +59,9 @@ def test_summary_rows_to_dashboard_records(tmp_path: Path):
             "r2_res": -1.76,
         }
     ]
-    assets = tmp_path / "plots" / "Ridge" / "preds" / "report_assets"
+    assets = (
+        tmp_path / "preds" / "ridge_eos" / "report_assets"
+    )
     assets.mkdir(parents=True)
     (assets / "maize_NL_scatter.png").write_bytes(b"png")
 

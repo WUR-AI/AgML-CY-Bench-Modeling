@@ -15,7 +15,7 @@ from cybench.config import (
 
 from cybench.datasets.data_factory import DataFactory
 
-_DATASET_CONFIG_DIR = Path(__file__).resolve().parent.parent / "conf" / "dataset"
+_DATASET_CONFIG_DIR = Path(__file__).resolve().parent.parent.parent / "conf" / "dataset"
 
 
 def _load_dataset(dataset_name: str):

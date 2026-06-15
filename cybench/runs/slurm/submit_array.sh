@@ -81,13 +81,16 @@ MAX=$((N - 1))
 
 mkdir -p "output/${PHASE}"
 export JOB_MANIFEST="${MANIFEST}"
+PREDICTION_HORIZON="${PREDICTION_HORIZON:-eos}"
+export PREDICTION_HORIZON
 
 echo "Submitting ${PHASE} | jobs=${N} | array=0-${MAX}"
 echo "  manifest: ${MANIFEST}"
 echo "  script:   ${SLURM_DIR}/${JOB_SCRIPT}"
+echo "  horizon:  ${PREDICTION_HORIZON}"
 
 sbatch \
   --array="0-${MAX}" \
-  --export=ALL,JOB_MANIFEST="${JOB_MANIFEST}" \
+  --export=ALL,JOB_MANIFEST="${JOB_MANIFEST}",PREDICTION_HORIZON="${PREDICTION_HORIZON}" \
   "${SBATCH_EXTRA[@]}" \
   "${SLURM_DIR}/${JOB_SCRIPT}"

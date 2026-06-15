@@ -7,7 +7,7 @@ year uses its own refit model (true walk-forward).
 
 Typical workflow::
 
-    poetry run python cybench/runs/collect_walk_forward_results.py \\
+    poetry run python cybench/runs/analysis/collect_walk_forward_results.py \\
         --baselines-dir ../output/baselines \\
         --output-dir ../output/paper_walk_forward \\
         --plot
@@ -20,10 +20,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -36,95 +34,16 @@ from cybench.evaluation.aggregated_metrics import (
     compute_report_metrics,
     format_report_metrics,
 )
-from cybench.util.prediction_horizon import parse_run_name_suffix
+from cybench.runs.analysis.benchmark_run_catalog import (
+    BenchmarkRun,
+    discover_benchmark_runs,
+    flatten_report_metrics,
+)
 
-# Re-use multi-model HTML dashboard from build_results_dashboard.py
-from cybench.runs.build_results_dashboard import (
+from cybench.runs.viz.build_results_dashboard import (
     build_html,
     bundle_referenced_assets,
 )
-
-PHASE_TOKEN = "_walk_forward_"
-YEAR_CSV_RE = re.compile(
-    r"^[a-z]+_[A-Z]{2}(?:_h[a-z0-9_]+)?_year_(?:\d+_)*\d+\.csv$"
-)
-
-
-@dataclass(frozen=True)
-class WalkForwardRun:
-    crop: str
-    country: str
-    model: str
-    horizon: str | None
-    timestamp: str
-    path: Path
-
-    @property
-    def dataset_key(self) -> str:
-        return f"{self.crop}_{self.country}"
-
-
-def _parse_walk_forward_dir(name: str, path: Path) -> WalkForwardRun | None:
-    if PHASE_TOKEN not in name:
-        return None
-    prefix, suffix = name.split(PHASE_TOKEN, 1)
-    parts = prefix.split("_", 2)
-    if len(parts) < 3:
-        return None
-    crop, country, model = parts
-    horizon, timestamp = parse_run_name_suffix(suffix)
-    return WalkForwardRun(
-        crop=crop,
-        country=country,
-        model=model,
-        horizon=horizon,
-        timestamp=timestamp,
-        path=path,
-    )
-
-
-def discover_walk_forward_runs(
-    baselines_dir: Path,
-    *,
-    latest_only: bool = True,
-) -> list[WalkForwardRun]:
-    if not baselines_dir.is_dir():
-        raise FileNotFoundError(f"Baselines directory not found: {baselines_dir}")
-
-    by_key: dict[tuple[str, str, str, str | None], WalkForwardRun] = {}
-    for entry in sorted(baselines_dir.iterdir()):
-        if not entry.is_dir():
-            continue
-        run = _parse_walk_forward_dir(entry.name, entry)
-        if run is None:
-            continue
-        key = (run.crop, run.country, run.model, run.horizon)
-        if key not in by_key or run.timestamp > by_key[key].timestamp:
-            by_key[key] = run
-
-    runs = sorted(by_key.values(), key=lambda r: (r.crop, r.country, r.model, r.horizon or ""))
-    if not latest_only:
-        all_runs: list[WalkForwardRun] = []
-        for entry in sorted(baselines_dir.iterdir()):
-            if not entry.is_dir():
-                continue
-            run = _parse_walk_forward_dir(entry.name, entry)
-            if run is not None:
-                all_runs.append(run)
-        return sorted(
-            all_runs,
-            key=lambda r: (r.crop, r.country, r.model, r.horizon or "", r.timestamp),
-        )
-    return runs
-
-
-def _model_column_from_config(run_dir: Path) -> str | None:
-    for cfg_path in sorted(run_dir.glob("*/model_config.yaml")):
-        cfg = OmegaConf.load(cfg_path)
-        target = OmegaConf.select(cfg, "_target_")
-        if isinstance(target, str) and target:
-            return target.rsplit(".", 1)[-1]
-    return None
 
 
 def _model_column_from_hydra(run_dir: Path) -> str | None:
@@ -150,28 +69,16 @@ def _model_column_from_repo_config(model_slug: str) -> str | None:
 
 
 def resolve_model_column(run_dir: Path, model_slug: str) -> str:
-    """Class name used as prediction column in exported CSVs (e.g. Ridge, XGBoostModel)."""
-    for resolver in (
-        lambda: _model_column_from_config(run_dir),
-        lambda: _model_column_from_hydra(run_dir),
-        lambda: _model_column_from_repo_config(model_slug),
-    ):
-        col = resolver()
-        if col:
-            return col
+    """Class name used as prediction column in test_preds.csv (from Hydra config)."""
+    col = _model_column_from_hydra(run_dir)
+    if col:
+        return col
+    col = _model_column_from_repo_config(model_slug)
+    if col:
+        return col
     raise ValueError(
         f"Could not resolve prediction column for model={model_slug!r} in {run_dir}"
     )
-
-
-def _load_year_csvs(run_dir: Path) -> pd.DataFrame | None:
-    year_files = sorted(
-        p for p in run_dir.glob("*.csv") if YEAR_CSV_RE.match(p.name)
-    )
-    if not year_files:
-        return None
-    frames = [pd.read_csv(p) for p in year_files]
-    return pd.concat(frames, ignore_index=True)
 
 
 def _load_split_preds(run_dir: Path, model_col: str) -> pd.DataFrame | None:
@@ -203,50 +110,10 @@ def _load_split_preds(run_dir: Path, model_col: str) -> pd.DataFrame | None:
 
 def load_pooled_predictions(run_dir: Path, *, model_slug: str) -> tuple[pd.DataFrame, str]:
     model_col = resolve_model_column(run_dir, model_slug)
-    df = _load_year_csvs(run_dir)
-    if df is not None:
-        if KEY_TARGET not in df.columns and "yield" in df.columns:
-            df = df.rename(columns={"yield": KEY_TARGET})
-        if KEY_YEAR not in df.columns and "year" in df.columns:
-            df = df.rename(columns={"year": KEY_YEAR})
-        if KEY_LOC not in df.columns and "adm_id" in df.columns:
-            df = df.rename(columns={"adm_id": KEY_LOC})
-        candidates = [
-            c
-            for c in df.columns
-            if c not in {KEY_COUNTRY, KEY_LOC, KEY_YEAR, KEY_TARGET, "year", "adm_id", "yield"}
-        ]
-        if model_col not in df.columns:
-            if len(candidates) == 1:
-                df = df.rename(columns={candidates[0]: model_col})
-            elif "preds" in df.columns:
-                df = df.rename(columns={"targets": KEY_TARGET, "preds": model_col})
-        return df, model_col
-
     df = _load_split_preds(run_dir, model_col)
     if df is None:
         raise ValueError(f"No walk-forward predictions found in {run_dir}")
     return df, model_col
-
-
-def flatten_report_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
-    ry = metrics.get("region_year", {})
-    sp = metrics.get("spatial", {})
-    tm = metrics.get("temporal", {})
-    return {
-        "n_regions": metrics.get("n_regions"),
-        "n_years": metrics.get("n_years"),
-        "n_samples": metrics.get("n_samples"),
-        "r": ry.get("r"),
-        "r2": ry.get("r2"),
-        "nrmse": ry.get("nrmse"),
-        "r_res": ry.get("r_res"),
-        "r2_res": ry.get("r2_res"),
-        "r_spatial": sp.get("r"),
-        "r2_spatial": sp.get("r2"),
-        "r_temporal": tm.get("r"),
-        "r2_temporal": tm.get("r2"),
-    }
 
 
 def _panel_search_dirs(output_dir: Path, row: dict[str, Any]) -> list[Path]:
@@ -254,16 +121,8 @@ def _panel_search_dirs(output_dir: Path, row: dict[str, Any]) -> list[Path]:
     model = str(row["model"])
     model_col = str(row.get("model_col") or model)
     horizon = row.get("horizon")
-    candidates = []
-    if horizon:
-        candidates.append(output_dir / "preds" / f"{model}_{horizon}")
-    candidates.extend(
-        [
-            output_dir / "preds" / model,
-            output_dir / "plots" / model_col / "preds",
-            output_dir / "plots" / model_col,
-        ]
-    )
+    candidates = [output_dir / "preds" / f"{model}_{horizon}"]
+    candidates.append(output_dir / "plots" / model_col)
     seen: set[Path] = set()
     out: list[Path] = []
     for path in candidates:
@@ -348,12 +207,11 @@ def write_model_comparison_dashboard(
     return html_path
 
 
-def export_year_csvs(df: pd.DataFrame, run: WalkForwardRun, dest_dir: Path) -> None:
+def export_year_csvs(df: pd.DataFrame, run: BenchmarkRun, dest_dir: Path) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
     year_col = KEY_YEAR if KEY_YEAR in df.columns else "year"
-    horizon_part = f"_h{run.horizon}" if run.horizon else ""
     for year, year_df in df.groupby(year_col):
-        out_name = f"{run.dataset_key}{horizon_part}_year_{int(year)}.csv"
+        out_name = f"{run.dataset}_h{run.horizon}_year_{int(year)}.csv"
         year_df.to_csv(dest_dir / out_name, index=False, float_format="%.6f")
 
 
@@ -364,7 +222,7 @@ def run_visualize(
     plot_output_dir: Path,
     min_years: int,
 ) -> None:
-    script = Path(__file__).resolve().parent / "visualize_results_aggregated.py"
+    script = Path(__file__).resolve().parent.parent / "viz" / "visualize_results_aggregated.py"
     plot_output_dir.mkdir(parents=True, exist_ok=True)
     cmd = [
         sys.executable,
@@ -448,7 +306,9 @@ def main() -> None:
     baselines_dir = args.baselines_dir.resolve()
     preds_root = output_dir / "preds"
 
-    runs = discover_walk_forward_runs(baselines_dir, latest_only=not args.all_runs)
+    runs = discover_benchmark_runs(
+        baselines_dir, phase="walk_forward", latest_only=not args.all_runs
+    )
     if not runs:
         print(f"[WARN] No walk_forward runs found in {baselines_dir}")
         return
@@ -471,26 +331,24 @@ def main() -> None:
             "model": run.model,
             "horizon": run.horizon,
             "model_col": model_col,
-            "dataset": run.dataset_key,
+            "dataset": run.dataset,
             "timestamp": run.timestamp,
             "run_dir": str(run.path),
             **flat,
         }
         summary_rows.append(row)
 
-        model_preds_dir = preds_root / (
-            f"{run.model}_{run.horizon}" if run.horizon else run.model
-        )
+        model_preds_dir = preds_root / f"{run.model}_{run.horizon}"
         export_year_csvs(df, run, model_preds_dir)
         models_to_plot[model_col] = model_preds_dir
 
-        metrics_path = output_dir / "metrics" / f"{run.dataset_key}_{run.model}.yaml"
+        metrics_path = output_dir / "metrics" / f"{run.dataset}_{run.model}.yaml"
         metrics_path.parent.mkdir(parents=True, exist_ok=True)
         with metrics_path.open("w") as f:
             yaml.safe_dump(metrics, f, sort_keys=False)
 
         print(
-            f"[OK] {run.dataset_key} | {run.model} | "
+            f"[OK] {run.dataset} | {run.model} | "
             f"{format_report_metrics(metrics)}"
         )
 

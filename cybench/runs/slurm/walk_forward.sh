@@ -49,16 +49,10 @@ COMMON=(
   "model=${MODEL}"
 )
 
-if [[ "${FRAMEWORK}" == "pandas" ]]; then
-  COMMON+=(dataset.framework=pandas dataset/temporal=feature_design +feature_selection=mrmr)
-  COMMON+=(experiment.n_jobs=1)
-  if [[ "${NEEDS_GPU}" == "yes" ]]; then
-    COMMON+=(model.device=cuda model.allow_cpu_fallback=false)
-  else
-    COMMON+=(experiment.device=cpu)
-  fi
-else
-  COMMON+=(dataset.framework=torch experiment.device=cuda experiment.n_jobs=1)
+configure_parallelism COMMON
+EXTRA=()
+if [[ "${FEATURE_DESIGN}" == "yes" && "${FRAMEWORK}" == "pandas" ]]; then
+  EXTRA+=(+feature_selection=mrmr)
 fi
 
-poetry run python cybench/runs/run_experiments.py "${COMMON[@]}"
+poetry run python cybench/runs/run_experiments.py "${COMMON[@]}" "${EXTRA[@]}"

@@ -40,11 +40,7 @@ def load_frozen_screening_artifacts(screening_split_dir: Path | str) -> tuple[Di
     root = Path(screening_split_dir)
     model_path = root / "optimal_model.yaml"
     if not model_path.exists():
-        model_path = root / "model_config.yaml"
-    if not model_path.exists():
-        raise FileNotFoundError(
-            f"No optimal_model.yaml or model_config.yaml in {root}"
-        )
+        raise FileNotFoundError(f"No optimal_model.yaml in {root}")
     model_cfg = cast(DictConfig, OmegaConf.load(model_path))
 
     fs_cfg: DictConfig | None = None

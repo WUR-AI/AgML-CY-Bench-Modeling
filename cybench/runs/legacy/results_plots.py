@@ -13,7 +13,7 @@ from cybench.config import (
 )
 
 from cybench.runs.run_benchmark import BASELINE_MODELS
-from cybench.runs.process_results import (
+from cybench.runs.legacy.process_results import (
     results_to_metrics,
     results_to_residuals,
 )
