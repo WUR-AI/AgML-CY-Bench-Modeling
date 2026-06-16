@@ -10,7 +10,7 @@
 #SBATCH --job-name=cybench_wf
 #SBATCH --output=output/walk_forward/out_%A_%a.txt
 #SBATCH --error=output/walk_forward/err_%A_%a.txt
-#SBATCH --mem-per-cpu=16G
+#SBATCH --mem-per-cpu=4G
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --time=2-00:00:00
@@ -35,7 +35,7 @@ mkdir -p output/walk_forward
 
 read_benchmark_job
 FROZEN_DIR=$(find_frozen_screening_dir "${CROP}" "${COUNTRY}" "${MODEL}")
-echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | framework=${FRAMEWORK} | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | frozen=${FROZEN_DIR}"
+echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_label) | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | frozen=${FROZEN_DIR}"
 
 COMMON=(
   "dataset/crop=${CROP}"

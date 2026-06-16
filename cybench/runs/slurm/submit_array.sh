@@ -17,10 +17,10 @@ Usage: submit_array.sh <screening|walk_forward> [manifest] [--array RANGE] [--ba
   --array      SLURM array range (default: 0-(N-1); use 0 for first job only)
   --batch NAME Hydra experiment.name → ../output/NAME (default: baselines)
   --dependency SLURM dependency, e.g. afterok:12345 or afterok:111:222
-  --gpu     Force GPU request (optional if manifest is GPU-only)
-  --cpu     Force no GPU even for benchmark_jobs_gpu.txt
+  --gpu     Force GPU partition + CUDA (even for mixed manifests)
+  --cpu     Override GPU manifest: main partition, no GPU, CYBENCH_FORCE_CPU=1
 
-GPU is enabled automatically when every manifest row has needs_gpu=yes.
+GPU is enabled automatically when every manifest row has needs_gpu=yes (unless --cpu).
 Default request: partition gpu + --gpus=1 + --time=2-00:00:00 (WUR lustre GPU cap).
 Override with SLURM_GPU_PARTITION / SLURM_GPU_REQUEST / SLURM_GPU_TIME_LIMIT.
 
@@ -28,6 +28,7 @@ Examples:
   cybench/runs/slurm/submit_array.sh screening cybench/runs/slurm/benchmark_jobs_cpu.txt
   cybench/runs/slurm/submit_array.sh walk_forward cybench/runs/slurm/benchmark_jobs_gpu.txt
   cybench/runs/slurm/submit_array.sh screening cybench/runs/slurm/benchmark_jobs_gpu.txt --array 0
+  cybench/runs/slurm/submit_array.sh screening cybench/runs/slurm/benchmark_jobs_gpu.txt --cpu --array 0
 EOF
 }
 
@@ -61,6 +62,7 @@ MANIFEST="${SLURM_DIR}/benchmark_jobs.txt"
 SBATCH_EXTRA=()
 ARRAY_RANGE=""
 GPU_MODE=auto
+FORCE_CPU=false
 DEPENDENCY=""
 CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME:-baselines}"
 
@@ -72,6 +74,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --cpu)
       GPU_MODE=no
+      FORCE_CPU=true
       shift
       ;;
     --array)
@@ -99,6 +102,12 @@ done
 
 # shellcheck source=/dev/null
 source "${SLURM_DIR}/slurm_common.sh"
+
+if is_force_cpu; then
+  FORCE_CPU=true
+  GPU_MODE=no
+fi
+
 validate_experiment_name "${CYBENCH_EXPERIMENT_NAME}"
 export CYBENCH_EXPERIMENT_NAME
 
@@ -114,7 +123,9 @@ if [[ "${N}" -lt 1 ]]; then
 fi
 
 N_GPU=$(awk '!/^#/ && NF >= 7 && $7 == "yes" { n++ } END { print n + 0 }' "${MANIFEST}")
-if [[ "${GPU_MODE}" == auto ]]; then
+if [[ "${FORCE_CPU}" == true ]]; then
+  GPU_MODE=no
+elif [[ "${GPU_MODE}" == auto ]]; then
   if [[ "${N_GPU}" -eq "${N}" ]]; then
     GPU_MODE=yes
   else
@@ -136,17 +147,23 @@ if [[ -z "${ARRAY_RANGE}" ]]; then
 fi
 
 mkdir -p "output/${PHASE}"
-export JOB_MANIFEST="${MANIFEST}"
 PREDICTION_HORIZON="${PREDICTION_HORIZON:-eos}"
 export PREDICTION_HORIZON
 
-FIRST_JOB=$(awk '!/^#/ && NF >= 7 {print; exit}' "${MANIFEST}")
+JOB_MANIFEST=$(snapshot_job_manifest "${MANIFEST}" "${PHASE}" "${CYBENCH_EXPERIMENT_NAME}" "${SLURM_DIR}")
+export JOB_MANIFEST
+
+FIRST_JOB=$(awk '!/^#/ && NF >= 7 {print; exit}' "${JOB_MANIFEST}")
 echo "Submitting ${PHASE} | jobs=${N} | array=${ARRAY_RANGE}"
-echo "  manifest: ${MANIFEST}"
+echo "  manifest: ${MANIFEST} (source)"
+echo "  snapshot: ${JOB_MANIFEST}"
 echo "  script:   ${SLURM_DIR}/${JOB_SCRIPT}"
 echo "  horizon:  ${PREDICTION_HORIZON}"
 echo "  batch:    ${CYBENCH_EXPERIMENT_NAME} (../output/${CYBENCH_EXPERIMENT_NAME})"
 echo "  gpu:      ${GPU_MODE} ($([[ ${#SBATCH_EXTRA[@]} -gt 0 ]] && gpu_sbatch_summary || echo no))"
+if [[ "${FORCE_CPU}" == true ]]; then
+  echo "  device:   CYBENCH_FORCE_CPU=1 (torch + TabPFN on CPU)"
+fi
 if [[ "${ARRAY_RANGE}" == "0" || "${ARRAY_RANGE}" == "0-0" ]]; then
   echo "  job[0]:   ${FIRST_JOB}"
 fi
@@ -154,9 +171,19 @@ if [[ -n "${DEPENDENCY}" ]]; then
   echo "  depends:  ${DEPENDENCY}"
 fi
 
+if [[ "${FORCE_CPU}" == true ]]; then
+  export CYBENCH_FORCE_CPU=1
+fi
+
+SBATCH_EXPORT="ALL,JOB_MANIFEST=${JOB_MANIFEST},PREDICTION_HORIZON=${PREDICTION_HORIZON},CYBENCH_EXPERIMENT_NAME=${CYBENCH_EXPERIMENT_NAME}"
+if [[ "${FORCE_CPU}" == true ]]; then
+  SBATCH_EXPORT+=",CYBENCH_FORCE_CPU=1"
+fi
+
 JOB_ID=$(sbatch \
   --array="${ARRAY_RANGE}" \
-  --export=ALL,JOB_MANIFEST="${JOB_MANIFEST}",PREDICTION_HORIZON="${PREDICTION_HORIZON}",CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME}" \
+  --export="${SBATCH_EXPORT}" \
   "${SBATCH_EXTRA[@]}" \
   "${SLURM_DIR}/${JOB_SCRIPT}" | awk '/Submitted batch job/{print $4}')
+record_manifest_slurm_job "${JOB_MANIFEST}" "${JOB_ID}"
 echo "job_id=${JOB_ID}"

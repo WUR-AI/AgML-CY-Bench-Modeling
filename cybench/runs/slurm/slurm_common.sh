@@ -43,6 +43,47 @@ validate_experiment_name() {
   fi
 }
 
+# Per-batch working manifests (regenerate / split). Not passed to SLURM directly.
+manifest_batch_dir() {
+  local slurm_dir=$1 batch=$2
+  echo "${slurm_dir}/manifests/${batch}"
+}
+
+# Immutable copy at sbatch time — in-flight jobs keep this path even if working manifests change.
+snapshot_job_manifest() {
+  local src=$1 phase=$2 batch=$3 slurm_dir=$4
+  local src_base dest_dir dest stamp
+  src_base=$(basename "${src}" .txt)
+  dest_dir="$(manifest_batch_dir "${slurm_dir}" "${batch}")"
+  mkdir -p "${dest_dir}"
+  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+  dest="${dest_dir}/${phase}_${src_base}_${stamp}_$$.txt"
+  cp "${src}" "${dest}"
+  echo "${dest}"
+}
+
+record_manifest_slurm_job() {
+  local manifest=$1 job_id=$2
+  printf '%s\n' "${job_id}" > "${manifest}.slurm_jobid"
+}
+
+is_force_cpu() {
+  case "${CYBENCH_FORCE_CPU:-}" in
+    1|yes|true|TRUE) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+device_mode_label() {
+  if is_force_cpu; then
+    echo "cpu (CYBENCH_FORCE_CPU)"
+  elif [[ "${NEEDS_GPU:-}" == "yes" ]]; then
+    echo "cuda"
+  else
+    echo "cpu"
+  fi
+}
+
 slurm_setup() {
   module load 2024
   module load Python/3.12.3-GCCcore-13.3.0
@@ -101,8 +142,13 @@ read_benchmark_job() {
 
 # CPU tabular: one Optuna trial at a time, sklearn uses all SLURM CPUs.
 # GPU torch / TabPFN: one trial at a time on a single GPU.
+# Set CYBENCH_FORCE_CPU=1 (submit_array.sh --cpu) to run GPU-manifest jobs on main/CPU.
 configure_parallelism() {
   local -n _common=$1
+  local force_cpu=false
+  if is_force_cpu; then
+    force_cpu=true
+  fi
   if [[ "${FRAMEWORK}" == "pandas" ]]; then
     _common+=(dataset.framework=pandas)
     if [[ "${FEATURE_DESIGN}" == "yes" ]]; then
@@ -111,13 +157,22 @@ configure_parallelism() {
     _common+=("dataset.temporal.season.end_of_sequence=${PREDICTION_HORIZON}")
     _common+=(experiment.n_jobs=1)
     if [[ "${NEEDS_GPU}" == "yes" ]]; then
-      # TabPFN: PandasDataset but inference on CUDA (see model/tabpfn.yaml).
-      _common+=(model.device=cuda model.allow_cpu_fallback=false)
+      if [[ "${force_cpu}" == true ]]; then
+        # TabPFN on CPU (slow; use for queue bypass / pilot runs).
+        _common+=(model.device=cpu model.allow_cpu_fallback=true experiment.device=cpu)
+      else
+        # TabPFN: PandasDataset but inference on CUDA (see model/tabpfn.yaml).
+        _common+=(model.device=cuda model.allow_cpu_fallback=false)
+      fi
     else
       _common+=(experiment.device=cpu)
     fi
   else
-    _common+=(dataset.framework=torch experiment.device=cuda experiment.n_jobs=1)
+    if [[ "${force_cpu}" == true ]]; then
+      _common+=(dataset.framework=torch experiment.device=cpu experiment.n_jobs=1)
+    else
+      _common+=(dataset.framework=torch experiment.device=cuda experiment.n_jobs=1)
+    fi
     _common+=("dataset.temporal.season.end_of_sequence=${PREDICTION_HORIZON}")
   fi
 }

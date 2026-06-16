@@ -21,7 +21,7 @@
 #SBATCH --job-name=cybench_screen
 #SBATCH --output=output/screening/out_%A_%a.txt
 #SBATCH --error=output/screening/err_%A_%a.txt
-#SBATCH --mem-per-cpu=16G
+#SBATCH --mem-per-cpu=4G
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --time=4-00:00:00
@@ -50,7 +50,7 @@ slurm_setup
 mkdir -p output/screening
 
 read_benchmark_job
-echo "Screening | ${CROP}/${COUNTRY} | model=${MODEL} | framework=${FRAMEWORK} | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | out=${BASELINES_DIR}"
+echo "Screening | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_label) | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | out=${BASELINES_DIR}"
 
 COMMON=(
   "dataset/crop=${CROP}"

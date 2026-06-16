@@ -10,6 +10,7 @@
 #   cybench/runs/slurm/submit_benchmark.sh screening --horizon eos
 #   cybench/runs/slurm/submit_benchmark.sh all --horizon middle-of-season --regenerate --countries DE NL
 #   cybench/runs/slurm/submit_benchmark.sh screening --horizon eos --array 0 --only gpu
+#   cybench/runs/slurm/submit_benchmark.sh all --horizon eos --regenerate --countries DE --only gpu --force-cpu
 #
 set -euo pipefail
 
@@ -29,6 +30,8 @@ Options:
   --countries C...  Passed to generate_job_manifest.py (with --regenerate)
   --array RANGE     SLURM array range for every submit (default: full manifest)
   --only GROUP      One group only: cpu | naive | gpu
+  --cpu             GPU group on main partition (torch/TabPFN on CPU; slow)
+  --force-cpu       Alias for --cpu
   --no-dependency   For "all": submit walk-forward without afterok
   --skip-naive      Omit naive (average, trend) manifests
   -n, --dry-run     Print commands without sbatch
@@ -70,16 +73,19 @@ else
 fi
 
 SUBMIT_ARRAY="${SLURM_DIR}/submit_array.sh"
-BASE_MANIFEST="${SLURM_DIR}/benchmark_jobs.txt"
-MANIFEST_CPU="${SLURM_DIR}/benchmark_jobs_cpu.txt"
-MANIFEST_NAIVE="${SLURM_DIR}/benchmark_jobs_naive.txt"
-MANIFEST_GPU="${SLURM_DIR}/benchmark_jobs_gpu.txt"
+SHARED_MANIFEST="${SLURM_DIR}/benchmark_jobs.txt"
+MANIFEST_ROOT=""
+BASE_MANIFEST=""
+MANIFEST_CPU=""
+MANIFEST_NAIVE=""
+MANIFEST_GPU=""
 
 PREDICTION_HORIZON="${PREDICTION_HORIZON:-eos}"
 CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME:-baselines}"
 REGENERATE=false
 ARRAY_ARG=()
 ONLY_GROUP=""
+FORCE_CPU=false
 USE_DEPENDENCY=true
 SKIP_NAIVE=false
 DRY_RUN=false
@@ -114,6 +120,10 @@ while [[ $# -gt 0 ]]; do
       ONLY_GROUP=$2
       shift 2
       ;;
+    --force-cpu|--cpu)
+      FORCE_CPU=true
+      shift
+      ;;
     --no-dependency)
       USE_DEPENDENCY=false
       shift
@@ -140,22 +150,33 @@ validate_experiment_name "${CYBENCH_EXPERIMENT_NAME}"
 export PREDICTION_HORIZON
 export CYBENCH_EXPERIMENT_NAME
 
+init_manifest_paths() {
+  MANIFEST_ROOT="$(manifest_batch_dir "${SLURM_DIR}" "${CYBENCH_EXPERIMENT_NAME}")"
+  BASE_MANIFEST="${MANIFEST_ROOT}/benchmark_jobs.txt"
+  MANIFEST_CPU="${MANIFEST_ROOT}/benchmark_jobs_cpu.txt"
+  MANIFEST_NAIVE="${MANIFEST_ROOT}/benchmark_jobs_naive.txt"
+  MANIFEST_GPU="${MANIFEST_ROOT}/benchmark_jobs_gpu.txt"
+}
+
 split_manifests() {
   if [[ ! -f "${BASE_MANIFEST}" ]]; then
     echo "Missing ${BASE_MANIFEST}. Run with --regenerate or generate_job_manifest.py" >&2
     exit 1
   fi
+  mkdir -p "${MANIFEST_ROOT}"
   awk '$7 == "no" && $6 == "yes"' "${BASE_MANIFEST}" > "${MANIFEST_CPU}"
   awk '$5 == "no" && $6 == "no" && $7 == "no"' "${BASE_MANIFEST}" > "${MANIFEST_NAIVE}"
   awk '$7 == "yes"' "${BASE_MANIFEST}" > "${MANIFEST_GPU}"
-  echo "[INFO] Split manifests (horizon=${PREDICTION_HORIZON}):"
+  echo "[INFO] Split manifests (batch=${CYBENCH_EXPERIMENT_NAME}, horizon=${PREDICTION_HORIZON}):"
+  echo "  root:  ${MANIFEST_ROOT}"
   echo "  cpu:   $(awk '!/^#/ && NF>=7' "${MANIFEST_CPU}" | wc -l) jobs -> ${MANIFEST_CPU}"
   echo "  naive: $(awk '!/^#/ && NF>=7' "${MANIFEST_NAIVE}" | wc -l) jobs -> ${MANIFEST_NAIVE}"
   echo "  gpu:   $(awk '!/^#/ && NF>=7' "${MANIFEST_GPU}" | wc -l) jobs -> ${MANIFEST_GPU}"
 }
 
 regenerate_manifest() {
-  local cmd=(poetry run python "${SLURM_DIR}/generate_job_manifest.py")
+  mkdir -p "${MANIFEST_ROOT}"
+  local cmd=(poetry run python "${SLURM_DIR}/generate_job_manifest.py" -o "${BASE_MANIFEST}")
   if [[ ${#COUNTRIES[@]} -gt 0 ]]; then
     cmd+=(--countries "${COUNTRIES[@]}")
   fi
@@ -167,11 +188,28 @@ regenerate_manifest() {
   split_manifests
 }
 
+ensure_batch_manifests() {
+  if [[ -f "${MANIFEST_CPU}" && -f "${MANIFEST_GPU}" ]]; then
+    return 0
+  fi
+  if [[ -f "${SHARED_MANIFEST}" ]]; then
+    echo "[INFO] Seeding batch manifests from ${SHARED_MANIFEST} -> ${MANIFEST_ROOT}"
+    mkdir -p "${MANIFEST_ROOT}"
+    cp "${SHARED_MANIFEST}" "${BASE_MANIFEST}"
+    split_manifests
+    return 0
+  fi
+  echo "No manifests for batch '${CYBENCH_EXPERIMENT_NAME}' under ${MANIFEST_ROOT}." >&2
+  echo "Run with --regenerate or generate_job_manifest.py -o ${BASE_MANIFEST}" >&2
+  exit 1
+}
+
+init_manifest_paths
+
 if [[ "${REGENERATE}" == true ]]; then
   regenerate_manifest
-elif [[ ! -f "${MANIFEST_CPU}" || ! -f "${MANIFEST_GPU}" ]]; then
-  echo "[INFO] Split manifests missing; creating from ${BASE_MANIFEST}"
-  split_manifests
+else
+  ensure_batch_manifests
 fi
 
 manifest_for_group() {
@@ -203,7 +241,7 @@ count_jobs() {
 }
 
 submit_one() {
-  local phase=$1 manifest=$2 dep=${3:-}
+  local phase=$1 manifest=$2 dep=${3:-} group=${4:-}
   if [[ "$(count_jobs "${manifest}")" -lt 1 ]]; then
     echo "[SKIP] ${phase} ${manifest}: no jobs"
     return 0
@@ -211,6 +249,9 @@ submit_one() {
   local cmd=(env PREDICTION_HORIZON="${PREDICTION_HORIZON}" CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME}" "${SUBMIT_ARRAY}" "${phase}" "${manifest}")
   if [[ ${#ARRAY_ARG[@]} -gt 0 ]]; then
     cmd+=("${ARRAY_ARG[@]}")
+  fi
+  if [[ "${FORCE_CPU}" == true && "${group}" == gpu ]]; then
+    cmd+=(--cpu)
   fi
   if [[ -n "${dep}" ]]; then
     cmd+=(--dependency "${dep}")
@@ -238,7 +279,7 @@ run_screening() {
   while read -r group; do
     manifest=$(manifest_for_group "${group}")
     echo "--- group=${group} ---"
-    job_id=$(submit_one screening "${manifest}")
+    job_id=$(submit_one screening "${manifest}" "" "${group}")
     if [[ -n "${job_id}" ]]; then
       SCREEN_JOB["${group}"]="${job_id}"
     fi
@@ -257,9 +298,9 @@ run_walk_forward() {
     fi
     echo "--- group=${group} ---"
     if [[ "${DRY_RUN}" == true ]]; then
-      submit_one walk_forward "${manifest}" "${dep}"
+      submit_one walk_forward "${manifest}" "${dep}" "${group}"
     else
-      submit_one walk_forward "${manifest}" "${dep}" >/dev/null
+      submit_one walk_forward "${manifest}" "${dep}" "${group}" >/dev/null
     fi
   done < <(groups_to_run)
 }

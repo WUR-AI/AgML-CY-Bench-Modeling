@@ -16,6 +16,19 @@ See also [../README.md](../README.md) for the full `cybench/runs/` layout (analy
 | `walk_forward.sh` | Phase B: rolling forecasts (auto-finds screening artifacts) |
 | `submit_array.sh` | Submit one phase + one manifest (array sizing, GPU auto) |
 | `submit_benchmark.sh` | **Full pipeline**: split manifests → screening → walk-forward |
+| `manifests/<batch>/` | Per-batch working manifests + **frozen snapshots** per sbatch |
+
+### Manifest safety
+
+Each `sbatch` copies the manifest to an **immutable snapshot** under
+`cybench/runs/slurm/manifests/<batch>/` (timestamped filename). SLURM tasks read only that
+snapshot, so `--regenerate` or another country's submit cannot change in-flight jobs.
+
+`submit_benchmark.sh --batch NAME` keeps working manifests in the same folder
+(`manifests/NAME/benchmark_jobs_cpu.txt`, …). Use a **distinct `--batch`** per country/run
+(e.g. `baselines_us_mid_v1` vs `baselines_de_mid_v1`).
+
+A sidecar `*.slurm_jobid` links each snapshot to its SLURM job id for auditing.
 
 ## 1. Generate the job list
 
@@ -69,6 +82,10 @@ cybench/runs/slurm/submit_benchmark.sh all --horizon middle-of-season
 # Screening only, first GPU job (TabPFN maize NL if first in gpu manifest)
 cybench/runs/slurm/submit_benchmark.sh screening --horizon eos --array 0 --only gpu
 
+# GPU manifest on CPU (bypass gpu queue; torch screening is very slow)
+cybench/runs/slurm/submit_benchmark.sh all --horizon eos --regenerate --countries DE \
+  --batch baselines_de_eos_v1 --only gpu --cpu
+
 # Preview without sbatch
 cybench/runs/slurm/submit_benchmark.sh all --horizon eos --dry-run
 ```
@@ -114,6 +131,27 @@ export SLURM_GPU_TIME_LIMIT=2-00:00:00
 | `--gpus=1` + `-p gpu` | GPU jobs (via `submit_array.sh` + GPU manifest) |
 
 **TabPFN** uses `dataset.framework=pandas` + `feature_design` but sets `model.device=cuda` (see `tabpfn.yaml`). Schedule it in the **GPU array**, not the CPU one.
+
+### GPU manifest on CPU (`--cpu`)
+
+When the **gpu** queue is backed up, run torch + TabPFN on the **main** partition instead:
+
+```bash
+# One manifest / phase
+cybench/runs/slurm/submit_array.sh screening \
+  cybench/runs/slurm/manifests/baselines_de_eos_v1/benchmark_jobs_gpu.txt --cpu
+
+# Full pipeline (gpu group only)
+cybench/runs/slurm/submit_benchmark.sh all --horizon eos \
+  --regenerate --countries DE --batch baselines_de_eos_v1 --only gpu --cpu
+```
+
+`--cpu` does two things:
+
+1. **SLURM** — no `-p gpu` / `--gpus=1` (uses `main` + `screening.sh` defaults)
+2. **Hydra** — `CYBENCH_FORCE_CPU=1` → `experiment.device=cpu` (torch), `model.device=cpu` (TabPFN)
+
+Logs show `device=cpu (CYBENCH_FORCE_CPU)` in the `Screening | …` line. Torch screening with HPO is **much slower** on CPU; TabPFN is often acceptable. Optional: `export HP_TRIALS=5` for pilots.
 
 Optuna does **not** spawn separate SLURM tasks per trial.
 
