@@ -120,14 +120,25 @@ slurm_task_job_name() {
   echo "cb_${p}_${MODEL}_${crop_s}${COUNTRY}"
 }
 
+# JobId for scontrol update: must be ArrayJobId_ArrayTaskId, not ArrayJobId alone
+# (updating the parent id renames every array element to the same JobName).
+slurm_task_job_id() {
+  if [[ -n "${SLURM_ARRAY_JOB_ID:-}" && -n "${SLURM_ARRAY_TASK_ID:-}" ]]; then
+    echo "${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+  else
+    echo "${SLURM_JOB_ID:-}"
+  fi
+}
+
 # Rename this array element so squeue shows crop/country/model (batch stays in logs only).
 slurm_update_task_job_name() {
   local phase=$1
-  local name
-  [[ -n "${SLURM_JOB_ID:-}" ]] || return 0
+  local name job_id
+  job_id=$(slurm_task_job_id)
+  [[ -n "${job_id}" ]] || return 0
   name=$(slurm_task_job_name "${phase}")
   name="${name:0:63}"
-  scontrol update "JobId=${SLURM_JOB_ID}" "JobName=${name}" 2>/dev/null || true
+  scontrol update "JobId=${job_id}" "JobName=${name}" 2>/dev/null || true
 }
 
 # Infer cpu | naive | gpu from manifest filename when --group is omitted.

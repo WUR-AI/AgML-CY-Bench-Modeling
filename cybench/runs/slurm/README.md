@@ -41,6 +41,9 @@ e.g. `cb_scr_cpu_eos`, `cb_wf_gpu_mid`, `cb_wf_fcp_eos` (GPU manifest on CPU via
 
 (`mz`/`wh` = maize/wheat.) Batch name is only in the job log line, not in `squeue`.
 
+Rename uses `scontrol update JobId=${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}` — updating
+the array parent id alone would give every task the same name in `squeue`.
+
 ## 1. Generate the job list
 
 All crops/countries that have data under `cybench/data/<crop>/<country>/`:
