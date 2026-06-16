@@ -15,6 +15,11 @@ api_keys
 .Rproj.user
 *.shp
 *.shx
+# Natural Earth admin-0 outlines (map backgrounds in viz)
+!data_preparation/ne_50m_admin_0_countries/
+!data_preparation/ne_50m_admin_0_countries/**
+!data_preparation/ne_110m_admin_0_countries/
+!data_preparation/ne_110m_admin_0_countries/**
 *.txt
 !cybench/runs/slurm/models.txt
 !cybench/runs/slurm/benchmark_jobs.example.txt

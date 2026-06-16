@@ -41,3 +41,32 @@ def get_shapes_from_polygons(region):
     gdf = gdf.to_crs(4326)
 
     return gdf
+
+
+def world_shape_path(scale: str | None = None) -> str:
+    """Natural Earth admin-0 outline for map backgrounds (grey context behind regions).
+
+    Default preference: 50m, then 10m, then 110m. Override with *scale* or
+  CYBENCH_WORLD_MAP_SCALE (50 | 10 | 110).
+    """
+    import os
+
+    from cybench.config import REPO_DIR
+
+    preferred = scale or os.environ.get("CYBENCH_WORLD_MAP_SCALE", "50")
+    order: list[str] = []
+    if preferred in {"10", "50", "110"}:
+        order.append(preferred)
+    for s in ("50", "10", "110"):
+        if s not in order:
+            order.append(s)
+    root = os.path.join(REPO_DIR, "data_preparation")
+    for s in order:
+        path = os.path.join(root, f"ne_{s}m_admin_0_countries", f"ne_{s}m_admin_0_countries.shp")
+        if os.path.isfile(path):
+            return path
+    raise FileNotFoundError(
+        "No Natural Earth country shapefile found under data_preparation/. "
+        "Install ne_50m_admin_0_countries (recommended) or ne_110m_admin_0_countries. "
+        "See cybench/runs/slurm/README.md § Polygons for maps."
+    )

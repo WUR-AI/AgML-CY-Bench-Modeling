@@ -347,6 +347,10 @@ poetry run python data_preparation/fetch_zenodo_data.py --geometries
 # creates cybench/data/polygons/DE/DE.shp, NL/NL.shp, ...
 ```
 
+**World outline** (grey background in map panels): bundled at
+``data_preparation/ne_50m_admin_0_countries/`` (default). Falls back to 110m if missing.
+Override with ``CYBENCH_WORLD_MAP_SCALE=10|50|110``.
+
 Run collect from the same repo clone (paths resolve via ``REPO_DIR``).
 
 ## Outputs

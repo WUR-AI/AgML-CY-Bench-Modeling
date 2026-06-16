@@ -18,8 +18,8 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 
-from cybench.util.geo import get_shapes_from_polygons
-from cybench.config import KEY_LOC, KEY_TARGET, REPO_DIR
+from cybench.util.geo import get_shapes_from_polygons, world_shape_path
+from cybench.config import KEY_LOC, KEY_TARGET
 from cybench.evaluation.aggregated_metrics import calc_r_r2, get_metrics_dict
 
 # -----------------------------
@@ -30,13 +30,6 @@ YEAR_COVERAGE_THRESHOLD = 0.0
 BASELINE_MODEL = "AverageYieldModel"
 NON_MODEL_COLS = {KEY_LOC, "year", KEY_TARGET, "country_code", "crop"}
 MIN_REGIONS_THRESHOLD = 10  # Rows with fewer regions will be greyed out in the table
-
-WORLD_SHP_PATH = os.path.join(
-    REPO_DIR,
-    "data_preparation",
-    "ne_110m_admin_0_countries",
-    "ne_110m_admin_0_countries.shp",
-)
 
 
 def _complete_rows_mask(df: pd.DataFrame, columns: List[str]) -> pd.Series:
@@ -775,7 +768,7 @@ def main():
         pdf_path = os.path.join(args.results_dir, "evaluation_plots.pdf")
 
     print("[INFO] Loading world geometry...")
-    world = gpd.read_file(WORLD_SHP_PATH)
+    world = gpd.read_file(world_shape_path())
 
     print(f"[INFO] Processing {len(datasets_to_run)} dataset(s). Output: {pdf_path}")
     os.makedirs(os.path.dirname(os.path.abspath(pdf_path)), exist_ok=True)
