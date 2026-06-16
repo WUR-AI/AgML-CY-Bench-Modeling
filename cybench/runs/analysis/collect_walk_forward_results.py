@@ -219,6 +219,7 @@ def run_visualize(
     preds_dir: Path,
     model_col: str,
     *,
+    model_label: str,
     plot_output_dir: Path,
     min_years: int,
 ) -> None:
@@ -237,12 +238,12 @@ def run_visualize(
         "--output_pdf",
         str(plot_output_dir / "evaluation_plots.pdf"),
     ]
-    print(f"[INFO] Plotting {model_col} from {preds_dir}")
+    print(f"[INFO] Plotting {model_label} ({model_col}) from {preds_dir}")
     proc = subprocess.run(cmd, cwd=REPO_DIR, capture_output=True, text=True)
     if proc.stdout:
         print(proc.stdout.rstrip())
     if proc.returncode != 0:
-        print(f"[WARN] Plotting failed for {model_col}", file=sys.stderr)
+        print(f"[WARN] Plotting failed for {model_label}", file=sys.stderr)
         if proc.stderr:
             print(proc.stderr.rstrip(), file=sys.stderr)
 
@@ -314,7 +315,8 @@ def main() -> None:
         return
 
     summary_rows: list[dict[str, Any]] = []
-    models_to_plot: dict[str, Path] = {}
+    # Key by model slug — torch models all use prediction column "TorchTrainer".
+    models_to_plot: dict[str, tuple[Path, str]] = {}
 
     for run in runs:
         try:
@@ -340,7 +342,8 @@ def main() -> None:
 
         model_preds_dir = preds_root / f"{run.model}_{run.horizon}"
         export_year_csvs(df, run, model_preds_dir)
-        models_to_plot[model_col] = model_preds_dir
+        plot_key = f"{run.model}_{run.horizon}"
+        models_to_plot[plot_key] = (model_preds_dir, model_col)
 
         metrics_path = output_dir / "metrics" / f"{run.dataset}_{run.model}.yaml"
         metrics_path.parent.mkdir(parents=True, exist_ok=True)
@@ -366,11 +369,12 @@ def main() -> None:
         json.dump(manifest, f, indent=2)
 
     if args.plot:
-        for model_col, preds_dir in sorted(models_to_plot.items()):
+        for plot_key, (preds_dir, model_col) in sorted(models_to_plot.items()):
             run_visualize(
                 preds_dir,
                 model_col,
-                plot_output_dir=output_dir / "plots" / model_col,
+                model_label=plot_key,
+                plot_output_dir=output_dir / "plots" / plot_key,
                 min_years=args.min_years,
             )
 

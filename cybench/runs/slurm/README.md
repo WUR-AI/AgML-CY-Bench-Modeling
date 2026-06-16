@@ -30,6 +30,17 @@ snapshot, so `--regenerate` or another country's submit cannot change in-flight 
 
 A sidecar `*.slurm_jobid` links each snapshot to its SLURM job id for auditing.
 
+### SLURM job names (`squeue`)
+
+**Array header** (pending / just submitted): `cb_{phase}_{group}_{horizon}`  
+e.g. `cb_scr_cpu_eos`, `cb_wf_gpu_mid`, `cb_wf_fcp_eos` (GPU manifest on CPU via `--cpu`).
+
+**Each running array task** is renamed at start to include the model:
+
+`cb_{phase}_{model}_{crop}{country}` → e.g. `cb_scr_tabpfn_mzDE`, `cb_wf_informer_lf_whDE`
+
+(`mz`/`wh` = maize/wheat.) Batch name is only in the job log line, not in `squeue`.
+
 ## 1. Generate the job list
 
 All crops/countries that have data under `cybench/data/<crop>/<country>/`:

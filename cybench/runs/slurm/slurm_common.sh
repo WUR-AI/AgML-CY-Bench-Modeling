@@ -84,6 +84,93 @@ device_mode_label() {
   fi
 }
 
+# Short labels for SLURM --job-name (max 63 chars on most clusters).
+slurm_horizon_short() {
+  case "${PREDICTION_HORIZON:-eos}" in
+    eos) echo "eos" ;;
+    middle-of-season | mid-season | mid_season) echo "mid" ;;
+    quarter-of-season | quarter-season | quarter_season) echo "qtr" ;;
+    eos-*) echo "eos${PREDICTION_HORIZON#eos-}" ;;
+    *)
+      echo "${PREDICTION_HORIZON}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '_' | sed 's/^_*//;s/_*$//' | cut -c1-8
+      ;;
+  esac
+}
+
+slurm_crop_short() {
+  case "$1" in
+    maize) echo "mz" ;;
+    wheat) echo "wh" ;;
+    *)
+      echo "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '' | cut -c1-4
+      ;;
+  esac
+}
+
+# Per-array-task name (model visible in squeue once the task starts).
+slurm_task_job_name() {
+  local phase=$1
+  local p crop_s
+  case "${phase}" in
+    screening) p="scr" ;;
+    walk_forward) p="wf" ;;
+    *) p=$(echo "${phase}" | cut -c1-2) ;;
+  esac
+  crop_s=$(slurm_crop_short "${CROP}")
+  echo "cb_${p}_${MODEL}_${crop_s}${COUNTRY}"
+}
+
+# Rename this array element so squeue shows crop/country/model (batch stays in logs only).
+slurm_update_task_job_name() {
+  local phase=$1
+  local name
+  [[ -n "${SLURM_JOB_ID:-}" ]] || return 0
+  name=$(slurm_task_job_name "${phase}")
+  name="${name:0:63}"
+  scontrol update "JobId=${SLURM_JOB_ID}" "JobName=${name}" 2>/dev/null || true
+}
+
+# Infer cpu | naive | gpu from manifest filename when --group is omitted.
+infer_manifest_group() {
+  local manifest=$1
+  local base
+  base=$(basename "${manifest}" .txt)
+  case "${base}" in
+    *naive*) echo "nav" ;;
+    *cpu*) echo "cpu" ;;
+    *gpu*) echo "gpu" ;;
+    *) echo "mix" ;;
+  esac
+}
+
+# Array-level name (pending / array header). Per-task rename adds model — see slurm_update_task_job_name.
+# Examples: cb_scr_cpu_eos | cb_wf_fcp_mid (gpu manifest + --cpu)
+build_slurm_job_name() {
+  local phase=$1 group=${2:-mix}
+  local p h name
+  case "${phase}" in
+    screening) p="scr" ;;
+    walk_forward) p="wf" ;;
+    *) p=$(echo "${phase}" | cut -c1-3) ;;
+  esac
+  case "${group}" in
+    cpu) group="cpu" ;;
+    naive | nav) group="nav" ;;
+    gpu)
+      if is_force_cpu; then
+        group="fcp"
+      else
+        group="gpu"
+      fi
+      ;;
+    fcp | mix) ;;
+    *) group=$(echo "${group}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '_' | cut -c1-6) ;;
+  esac
+  h=$(slurm_horizon_short)
+  name="cb_${p}_${group}_${h}"
+  echo "${name:0:63}"
+}
+
 slurm_setup() {
   module load 2024
   module load Python/3.12.3-GCCcore-13.3.0

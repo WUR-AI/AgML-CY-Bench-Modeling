@@ -34,6 +34,7 @@ slurm_setup
 mkdir -p output/walk_forward
 
 read_benchmark_job
+slurm_update_task_job_name walk_forward
 FROZEN_DIR=$(find_frozen_screening_dir "${CROP}" "${COUNTRY}" "${MODEL}")
 echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_label) | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | frozen=${FROZEN_DIR}"
 

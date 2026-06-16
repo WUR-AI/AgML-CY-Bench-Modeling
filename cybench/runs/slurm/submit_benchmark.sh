@@ -247,6 +247,9 @@ submit_one() {
     return 0
   fi
   local cmd=(env PREDICTION_HORIZON="${PREDICTION_HORIZON}" CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME}" "${SUBMIT_ARRAY}" "${phase}" "${manifest}")
+  if [[ -n "${group}" ]]; then
+    cmd+=(--group "${group}")
+  fi
   if [[ ${#ARRAY_ARG[@]} -gt 0 ]]; then
     cmd+=("${ARRAY_ARG[@]}")
   fi

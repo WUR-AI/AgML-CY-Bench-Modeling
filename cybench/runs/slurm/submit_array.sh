@@ -11,11 +11,12 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: submit_array.sh <screening|walk_forward> [manifest] [--array RANGE] [--batch NAME] [--gpu|--cpu] [--dependency SPEC]
+Usage: submit_array.sh <screening|walk_forward> [manifest] [--array RANGE] [--batch NAME] [--group GROUP] [--gpu|--cpu] [--dependency SPEC]
 
   manifest     Job list (default: cybench/runs/slurm/benchmark_jobs.txt)
   --array      SLURM array range (default: 0-(N-1); use 0 for first job only)
   --batch NAME Hydra experiment.name → ../output/NAME (default: baselines)
+  --group GROUP  cpu | naive | gpu — used in SLURM job name (default: infer from manifest)
   --dependency SLURM dependency, e.g. afterok:12345 or afterok:111:222
   --gpu     Force GPU partition + CUDA (even for mixed manifests)
   --cpu     Override GPU manifest: main partition, no GPU, CYBENCH_FORCE_CPU=1
@@ -64,6 +65,7 @@ ARRAY_RANGE=""
 GPU_MODE=auto
 FORCE_CPU=false
 DEPENDENCY=""
+JOB_GROUP=""
 CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME:-baselines}"
 
 while [[ $# -gt 0 ]]; do
@@ -83,6 +85,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --batch)
       CYBENCH_EXPERIMENT_NAME=$2
+      shift 2
+      ;;
+    --group)
+      JOB_GROUP=$2
       shift 2
       ;;
     --dependency)
@@ -153,8 +159,13 @@ export PREDICTION_HORIZON
 JOB_MANIFEST=$(snapshot_job_manifest "${MANIFEST}" "${PHASE}" "${CYBENCH_EXPERIMENT_NAME}" "${SLURM_DIR}")
 export JOB_MANIFEST
 
+if [[ -z "${JOB_GROUP}" ]]; then
+  JOB_GROUP=$(infer_manifest_group "${MANIFEST}")
+fi
+SLURM_JOB_NAME=$(build_slurm_job_name "${PHASE}" "${JOB_GROUP}")
+
 FIRST_JOB=$(awk '!/^#/ && NF >= 7 {print; exit}' "${JOB_MANIFEST}")
-echo "Submitting ${PHASE} | jobs=${N} | array=${ARRAY_RANGE}"
+echo "Submitting ${PHASE} | jobs=${N} | array=${ARRAY_RANGE} | job-name=${SLURM_JOB_NAME}"
 echo "  manifest: ${MANIFEST} (source)"
 echo "  snapshot: ${JOB_MANIFEST}"
 echo "  script:   ${SLURM_DIR}/${JOB_SCRIPT}"
@@ -181,6 +192,7 @@ if [[ "${FORCE_CPU}" == true ]]; then
 fi
 
 JOB_ID=$(sbatch \
+  --job-name="${SLURM_JOB_NAME}" \
   --array="${ARRAY_RANGE}" \
   --export="${SBATCH_EXPORT}" \
   "${SBATCH_EXTRA[@]}" \
