@@ -1,0 +1,18 @@
+# Dashboard publish pipeline — paths only (anunna / lustre).
+#
+# Targets are discovered automatically from benchmark batch folders:
+#   {output_root}/baselines_{CC}_{eos|mid}_v{N}/
+#
+# New countries appear when you submit SLURM batches; no edit needed here.
+# Optional: uncomment ``include`` to pin a subset (also used by --mode planned).
+
+defaults:
+  version: 1
+  output_root: /lustre/backup/SHARED/AIN/agml/output
+  repo_root: /lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-AAAI
+  publish_root: /lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard
+  min_run_fraction: 1.0
+
+# include:
+#   - country: DE
+#     horizons: [eos, mid_season]
