@@ -49,6 +49,8 @@ def generate(
         cn_list = countries if countries else DATASETS[crop]
         for country in cn_list:
             if country not in DATASETS[crop]:
+                if countries is not None:
+                    continue
                 raise ValueError(f"Country {country!r} not in DATASETS[{crop!r}]")
             if not _data_exists(crop, country):
                 continue
