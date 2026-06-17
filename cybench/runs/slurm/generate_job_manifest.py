@@ -6,7 +6,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from cybench.config import DATASETS, PATH_DATA_DIR
+import cybench.config as config
+from cybench.config import DATASETS
 
 SLURM_DIR = Path(__file__).resolve().parent
 MODELS_FILE = SLURM_DIR / "models.txt"
@@ -27,7 +28,7 @@ def _read_models(path: Path) -> list[tuple[str, str, str, str, str]]:
 
 
 def _data_exists(crop: str, country: str) -> bool:
-    return (Path(PATH_DATA_DIR) / crop / country).is_dir()
+    return (Path(config.PATH_DATA_DIR) / crop / country).is_dir()
 
 
 def generate(
