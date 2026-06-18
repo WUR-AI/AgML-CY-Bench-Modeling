@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import csv
+import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,7 +14,7 @@ from omegaconf import OmegaConf
 import cybench.config as config
 from cybench.runs.analysis.benchmark_run_catalog import discover_benchmark_runs
 from cybench.runs.analysis.collect_walk_forward_results import load_pooled_predictions
-from cybench.runs.slurm.benchmark_submit_lib import normalize_horizon
+from cybench.runs.slurm.benchmark_submit_lib import batch_name, normalize_horizon
 from cybench.util.prediction_horizon import prediction_horizon_tag
 from cybench.util.validation import get_screening_partitions
 
@@ -20,6 +22,11 @@ SCREENING_TEST_YEARS = "5-last"
 SCREENING_VAL_YEARS = "2-last"
 DEFAULT_MIN_YEAR = 2000
 DEFAULT_MAX_YEAR = 2024
+DEFAULT_LUSTRE_OUTPUT = Path("/lustre/backup/SHARED/AIN/agml/output")
+
+_BATCH_RE = re.compile(
+    r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid)_v(?P<version>\d+)$"
+)
 
 
 @dataclass(frozen=True)
@@ -345,16 +352,134 @@ def split_manifest_groups(jobs: list[JobRow]) -> dict[str, list[JobRow]]:
     return {"cpu": cpu, "naive": naive, "gpu": gpu}
 
 
+def parse_batch_name(name: str) -> tuple[str, str, int] | None:
+    match = _BATCH_RE.match(name)
+    if not match:
+        return None
+    return match.group("country").upper(), match.group("batch_hz"), int(match.group("version"))
+
+
+def default_output_root(repo_root: Path) -> Path:
+    env = os.environ.get("CYBENCH_OUTPUT_ROOT")
+    if env:
+        return Path(env)
+    if DEFAULT_LUSTRE_OUTPUT.is_dir():
+        return DEFAULT_LUSTRE_OUTPUT
+    return repo_root.parent / "output"
+
+
+def filter_jobs_by_country(jobs: list[JobRow], country: str) -> list[JobRow]:
+    cc = country.upper()
+    return [job for job in jobs if job.country.upper() == cc]
+
+
+def expand_target_batches(
+    *,
+    batch: str | None,
+    country: str | None,
+    horizons: list[str],
+    version: int,
+) -> list[tuple[str, str]]:
+    """Return (batch_folder_name, slurm_horizon_value) pairs."""
+    if not horizons:
+        horizons = ["eos"]
+
+    parsed = parse_batch_name(batch) if batch else None
+    cc = (country or (parsed[0] if parsed else None) or "").upper()
+    ver = version if country or not parsed else parsed[2]
+
+    if parsed and len(horizons) > 1:
+        cc = parsed[0]
+        ver = version if country else parsed[2]
+        return [
+            (batch_name(cc, normalize_horizon(h), ver), normalize_horizon(h))
+            for h in horizons
+        ]
+
+    if batch:
+        hz = normalize_horizon(horizons[0])
+        return [(batch, hz)]
+
+    if cc:
+        return [
+            (batch_name(cc, normalize_horizon(h), ver), normalize_horizon(h))
+            for h in horizons
+        ]
+
+    raise ValueError("Provide --batch or --country")
+
+
+def ensure_manifest(
+    *,
+    batch: str,
+    repo_root: Path,
+    manifest_path: Path | None,
+    write_cache: bool = True,
+) -> tuple[Path, list[JobRow], str]:
+    """Resolve or build the expected job list for a batch.
+
+    Returns (manifest_path, jobs, source_description).
+    """
+    slurm_dir = repo_root / "cybench" / "runs" / "slurm"
+    manifest_root = slurm_dir / "manifests" / batch
+    if manifest_path and manifest_path.is_file():
+        jobs = read_manifest(manifest_path)
+        return manifest_path, jobs, f"explicit {manifest_path}"
+
+    default = manifest_root / "benchmark_jobs.txt"
+    if default.is_file():
+        jobs = read_manifest(default)
+        return default, jobs, str(default)
+
+    parsed = parse_batch_name(batch)
+    country = parsed[0] if parsed else None
+
+    shared = slurm_dir / "benchmark_jobs.txt"
+    if shared.is_file() and country:
+        jobs = filter_jobs_by_country(read_manifest(shared), country)
+        if jobs:
+            if write_cache:
+                manifest_root.mkdir(parents=True, exist_ok=True)
+                write_manifest(default, jobs)
+            return default, jobs, f"filtered {shared} for {country}"
+
+    if country:
+        from cybench.runs.slurm.generate_job_manifest import generate
+
+        models = slurm_dir / "models.txt"
+        manifest_root.mkdir(parents=True, exist_ok=True)
+        generate(
+            crops=["maize", "wheat"],
+            countries=[country],
+            models_path=models,
+            output=default,
+        )
+        jobs = read_manifest(default)
+        if jobs:
+            return default, jobs, f"generated for {country} via generate_job_manifest.py"
+
+    raise FileNotFoundError(
+        f"No manifest for batch {batch!r}. Tried {default}, shared {shared}, "
+        f"and generate_job_manifest.py (need batch name baselines_CC_eos_v1 or --manifest)."
+    )
+
+
 def resolve_paths(
     *,
     batch: str,
     repo_root: Path,
     baselines_dir: Path | None,
     manifest_path: Path | None,
-) -> tuple[Path, Path, Path]:
+    output_root: Path | None,
+) -> tuple[Path, Path, Path, Path, list[JobRow], str]:
     slurm_dir = repo_root / "cybench" / "runs" / "slurm"
     manifest_root = slurm_dir / "manifests" / batch
-    manifest = manifest_path or manifest_root / "benchmark_jobs.txt"
+    root = output_root or default_output_root(repo_root)
     if baselines_dir is None:
-        baselines_dir = repo_root.parent / "output" / batch
-    return manifest, baselines_dir, manifest_root
+        baselines_dir = root / batch
+    manifest, jobs, source = ensure_manifest(
+        batch=batch,
+        repo_root=repo_root,
+        manifest_path=manifest_path,
+    )
+    return manifest, baselines_dir, manifest_root, root, jobs, source

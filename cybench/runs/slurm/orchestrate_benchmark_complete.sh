@@ -4,23 +4,30 @@
 #
 # Usage (from repo root on anunna):
 #   cybench/runs/slurm/orchestrate_benchmark_complete.sh --batch baselines_DE_eos_v1 --list
-#   cybench/runs/slurm/orchestrate_benchmark_complete.sh --batch baselines_DE_eos_v1 --submit
-#   cybench/runs/slurm/orchestrate_benchmark_complete.sh --batch baselines_US_eos_v1 --horizon eos --submit --cpu
+#   cybench/runs/slurm/orchestrate_benchmark_complete.sh --country DE --horizons eos mid --list
+#   cybench/runs/slurm/orchestrate_benchmark_complete.sh --batch baselines_DE_eos_v1 --submit --dry-run
 #
 set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: orchestrate_benchmark_complete.sh --batch NAME [options]
+Usage: orchestrate_benchmark_complete.sh (--batch NAME | --country CC) [options]
 
 Inspect Hydra output for incomplete screening / walk-forward jobs, optionally
 submit a partial manifest (does not rerun successful jobs).
 
+If manifests/<batch>/benchmark_jobs.txt is missing, jobs are taken from the
+shared benchmark_jobs.txt (filtered by country) or generated via generate_job_manifest.py.
+
 Options:
-  --batch NAME        Required. Hydra experiment.name (e.g. baselines_DE_eos_v1)
-  --horizon H         Default: eos
-  --manifest PATH     Job list (default: manifests/<batch>/benchmark_jobs.txt)
-  --baselines-dir DIR Override ../output/<batch>
+  --batch NAME        Hydra experiment.name (e.g. baselines_DE_eos_v1)
+  --country CC        Country code (use with --horizons for both eos + mid)
+  --horizon H         Single horizon (default: eos); repeat or use --horizons
+  --horizons H ...    eos, mid, middle-of-season (default: eos)
+  --version N         Batch version when using --country (default: 1)
+  --manifest PATH     Explicit job list
+  --output-root DIR   Parent of baselines_* (default: lustre output or ../output)
+  --baselines-dir DIR Override output dir for one batch
   --data-dir DIR      Override cybench/data for year preflight
   --phase MODE        screening | walk_forward | all (default: all)
   --list              Print status table and exit
@@ -30,8 +37,8 @@ Options:
 
 Examples:
   orchestrate_benchmark_complete.sh --batch baselines_DE_eos_v1 --list
-  orchestrate_benchmark_complete.sh --batch baselines_DE_eos_v1 --submit
-  orchestrate_benchmark_complete.sh --batch baselines_DE_eos_v1 --phase walk_forward --submit
+  orchestrate_benchmark_complete.sh --country DE --horizons eos mid --list
+  orchestrate_benchmark_complete.sh --country DE --horizons eos mid --submit --dry-run
 EOF
 }
 
@@ -45,9 +52,12 @@ fi
 
 COMPLETE_PY="${SLURM_DIR}/orchestrate_benchmark_complete.py"
 BATCH=""
-HORIZON="eos"
+COUNTRY=""
+HORIZONS=(eos)
+VERSION=""
 MANIFEST=""
 BASELINES_DIR=""
+OUTPUT_ROOT=""
 DATA_DIR=""
 PHASE="all"
 LIST=false
@@ -61,12 +71,32 @@ while [[ $# -gt 0 ]]; do
       BATCH=$2
       shift 2
       ;;
+    --country)
+      COUNTRY=$2
+      shift 2
+      ;;
     --horizon)
-      HORIZON=$2
+      HORIZONS=("$2")
+      shift 2
+      ;;
+    --horizons)
+      shift
+      HORIZONS=()
+      while [[ $# -gt 0 && "$1" != --* ]]; do
+        HORIZONS+=("$1")
+        shift
+      done
+      ;;
+    --version)
+      VERSION=$2
       shift 2
       ;;
     --manifest)
       MANIFEST=$2
+      shift 2
+      ;;
+    --output-root)
+      OUTPUT_ROOT=$2
       shift 2
       ;;
     --baselines-dir)
@@ -109,14 +139,19 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "${BATCH}" ]]; then
-  echo "--batch is required" >&2
+if [[ -z "${BATCH}" && -z "${COUNTRY}" ]]; then
+  echo "Provide --batch or --country" >&2
   usage
   exit 1
 fi
 
-cmd=(poetry run python "${COMPLETE_PY}" --batch "${BATCH}" --horizon "${HORIZON}" --phase "${PHASE}")
+cmd=(poetry run python "${COMPLETE_PY}" --phase "${PHASE}")
+[[ -n "${BATCH}" ]] && cmd+=(--batch "${BATCH}")
+[[ -n "${COUNTRY}" ]] && cmd+=(--country "${COUNTRY}")
+cmd+=(--horizons "${HORIZONS[@]}")
+[[ -n "${VERSION}" ]] && cmd+=(--version "${VERSION}")
 [[ -n "${MANIFEST}" ]] && cmd+=(--manifest "${MANIFEST}")
+[[ -n "${OUTPUT_ROOT}" ]] && cmd+=(--output-root "${OUTPUT_ROOT}")
 [[ -n "${BASELINES_DIR}" ]] && cmd+=(--baselines-dir "${BASELINES_DIR}")
 [[ -n "${DATA_DIR}" ]] && cmd+=(--data-dir "${DATA_DIR}")
 [[ "${LIST}" == true ]] && cmd+=(--list)

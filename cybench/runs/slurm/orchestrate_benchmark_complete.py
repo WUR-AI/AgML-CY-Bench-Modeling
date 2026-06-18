@@ -5,23 +5,23 @@ Unlike ``orchestrate_benchmark_submit.sh`` (new country batches), this inspects
 Hydra output under ``../output/<batch>/`` and builds a **partial manifest** so
 SLURM only reruns screening and/or walk-forward jobs that are missing or failed.
 
-Preflight checks flag crop/country/model rows that cannot succeed (e.g. too few
-yield years for the fixed screening split).
+If ``manifests/<batch>/benchmark_jobs.txt`` is missing, the manifest is built by
+filtering the shared ``benchmark_jobs.txt`` for the batch country, or by calling
+``generate_job_manifest.py`` for that country.
 
 Examples (from repo root on anunna)::
 
-    # Status table for one batch
-    poetry run python cybench/runs/slurm/orchestrate_benchmark_complete.py \\
+    # One horizon (manifest auto-resolved)
+    cybench/runs/slurm/orchestrate_benchmark_complete.sh \\
         --batch baselines_DE_eos_v1 --horizon eos --list
 
-    # Write retry manifest only
-    poetry run python cybench/runs/slurm/orchestrate_benchmark_complete.py \\
-        --batch baselines_DE_eos_v1 --horizon eos --phase all \\
-        -o cybench/runs/slurm/manifests/baselines_DE_eos_v1/benchmark_jobs_retry.txt
-
-    # Submit incomplete jobs (screening + walk-forward with afterok)
+    # Both horizons for Germany (expands to baselines_DE_eos_v1 + baselines_DE_mid_v1)
     cybench/runs/slurm/orchestrate_benchmark_complete.sh \\
-        --batch baselines_DE_eos_v1 --horizon eos --submit
+        --country DE --horizons eos mid --list
+
+    # Submit retries
+    cybench/runs/slurm/orchestrate_benchmark_complete.sh \\
+        --country DE --horizons eos mid --submit --dry-run
 """
 
 from __future__ import annotations
@@ -33,8 +33,8 @@ from pathlib import Path
 
 from cybench.runs.slurm.benchmark_completion_lib import (
     assess_manifest,
+    expand_target_batches,
     jobs_for_phase,
-    read_manifest,
     resolve_paths,
     split_manifest_groups,
     write_manifest,
@@ -44,14 +44,21 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SLURM_DIR = _REPO_ROOT / "cybench" / "runs" / "slurm"
 
 
-def _print_report(assessments: list, *, phase: str) -> None:
+def _print_report(
+    assessments: list,
+    *,
+    batch: str,
+    horizon: str,
+    manifest_source: str,
+    phase: str,
+) -> None:
     blocked = [a for a in assessments if a.blocked]
-    scr_done = [a for a in assessments if a.screening_ok and not a.blocked]
     wf_done = [a for a in assessments if a.walk_forward_ok]
     need_scr = [a for a in assessments if a.needs_screening]
     need_wf = [a for a in assessments if a.needs_walk_forward]
     retry = jobs_for_phase(assessments, phase)
 
+    print(f"\n=== {batch} | horizon={horizon} | manifest: {manifest_source} ===")
     print(
         f"{'crop':<6} {'cc':<4} {'model':<16} {'yrs':>4}  "
         f"{'screen':<8} {'wf':<8}  note"
@@ -123,34 +130,126 @@ def _submit_retry(
     if phase == "walk_forward":
         return _write_and_submit(need_wf, "walk_forward", "walk_forward")
 
-    # phase == all: screening retries first, then walk-forward-only rows.
     code = _write_and_submit(need_scr, "screening", "screening")
     if code != 0:
         return code
     return _write_and_submit(need_wf, "walk_forward", "walk_forward")
 
 
+def _process_batch(
+    *,
+    batch: str,
+    horizon: str,
+    args: argparse.Namespace,
+) -> int:
+    try:
+        manifest_path, baselines_dir, manifest_root, _, jobs, manifest_source = resolve_paths(
+            batch=batch,
+            repo_root=_REPO_ROOT,
+            baselines_dir=args.baselines_dir,
+            manifest_path=args.manifest,
+            output_root=args.output_root,
+        )
+    except FileNotFoundError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+    if not baselines_dir.is_dir():
+        print(
+            f"[WARN] Baselines dir missing (all jobs treated as incomplete): {baselines_dir}",
+            file=sys.stderr,
+        )
+
+    assessments = assess_manifest(
+        jobs,
+        baselines_dir=baselines_dir,
+        horizon=horizon,
+        repo_root=_REPO_ROOT,
+        data_dir=args.data_dir,
+    )
+    retry_jobs = jobs_for_phase(assessments, args.phase)
+
+    if args.list or (not args.output and not args.submit):
+        _print_report(
+            assessments,
+            batch=batch,
+            horizon=horizon,
+            manifest_source=manifest_source,
+            phase=args.phase,
+        )
+
+    if args.output:
+        out = args.output
+        if len(args._targets) > 1:
+            out = args.output.parent / f"{args.output.stem}_{batch}{args.output.suffix}"
+        write_manifest(out, retry_jobs)
+        groups = split_manifest_groups(retry_jobs)
+        print(f"Wrote {len(retry_jobs)} retry jobs to {out}")
+        for name, rows in groups.items():
+            if rows:
+                print(f"  {name}: {len(rows)}")
+
+    if not retry_jobs:
+        if args.submit:
+            print(f"[DONE] {batch}: nothing to retry")
+        return 0
+
+    if args.submit:
+        return _submit_retry(
+            batch=batch,
+            horizon=horizon,
+            phase=args.phase,
+            manifest_root=manifest_root,
+            assessments=assessments,
+            dry_run=args.dry_run,
+            force_cpu=args.cpu,
+        )
+
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--batch",
-        required=True,
         help="Hydra experiment.name / output folder (e.g. baselines_DE_eos_v1)",
     )
     parser.add_argument(
+        "--country",
+        help="Country code (alternative to --batch; use with --horizons)",
+    )
+    parser.add_argument(
         "--horizon",
-        default="eos",
-        help="Prediction horizon passed to SLURM (default: eos)",
+        action="append",
+        dest="horizons",
+        help="Prediction horizon (repeatable; default: eos). Alias: use --horizons.",
+    )
+    parser.add_argument(
+        "--horizons",
+        nargs="+",
+        metavar="H",
+        help="One or more horizons: eos, mid, middle-of-season (default: eos)",
+    )
+    parser.add_argument(
+        "--version",
+        type=int,
+        default=1,
+        help="Batch version when expanding from --country (default: 1)",
     )
     parser.add_argument(
         "--manifest",
         type=Path,
-        help="Expected job list (default: cybench/runs/slurm/manifests/<batch>/benchmark_jobs.txt)",
+        help="Explicit job list (skips auto-resolve)",
     )
     parser.add_argument(
         "--baselines-dir",
         type=Path,
-        help="Hydra output dir (default: ../output/<batch> relative to repo root)",
+        help="Hydra output dir (default: $CYBENCH_OUTPUT_ROOT/<batch> or lustre output)",
+    )
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        help="Parent of baselines_* folders (default: lustre output or ../output)",
     )
     parser.add_argument(
         "--data-dir",
@@ -191,60 +290,28 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    manifest_path, baselines_dir, manifest_root = resolve_paths(
-        batch=args.batch,
-        repo_root=_REPO_ROOT,
-        baselines_dir=args.baselines_dir,
-        manifest_path=args.manifest,
-    )
-    if not manifest_path.is_file():
-        print(f"Manifest not found: {manifest_path}", file=sys.stderr)
-        return 1
-    if not baselines_dir.is_dir():
-        print(
-            f"[WARN] Baselines dir missing (all jobs treated as incomplete): {baselines_dir}",
-            file=sys.stderr,
-        )
+    horizons = args.horizons or ["eos"]
+    if not args.batch and not args.country:
+        parser.error("Provide --batch or --country")
 
-    jobs = read_manifest(manifest_path)
-    assessments = assess_manifest(
-        jobs,
-        baselines_dir=baselines_dir,
-        horizon=args.horizon,
-        repo_root=_REPO_ROOT,
-        data_dir=args.data_dir,
-    )
-    retry_jobs = jobs_for_phase(assessments, args.phase)
-
-    if args.list or (not args.output and not args.submit):
-        _print_report(assessments, phase=args.phase)
-
-    if not retry_jobs and not args.submit:
-        return 0
-    if not retry_jobs and args.submit:
-        print("[DONE] Nothing to retry")
-        return 0
-
-    if args.output:
-        write_manifest(args.output, retry_jobs)
-        groups = split_manifest_groups(retry_jobs)
-        print(f"Wrote {len(retry_jobs)} retry jobs to {args.output}")
-        for name, rows in groups.items():
-            if rows:
-                print(f"  {name}: {len(rows)}")
-
-    if args.submit:
-        return _submit_retry(
+    try:
+        targets = expand_target_batches(
             batch=args.batch,
-            horizon=args.horizon,
-            phase=args.phase,
-            manifest_root=manifest_root,
-            assessments=assessments,
-            dry_run=args.dry_run,
-            force_cpu=args.cpu,
+            country=args.country,
+            horizons=horizons,
+            version=args.version,
         )
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 1
 
-    return 0
+    args._targets = targets  # type: ignore[attr-defined]
+    exit_code = 0
+    for batch, horizon in targets:
+        code = _process_batch(batch=batch, horizon=horizon, args=args)
+        if code != 0:
+            exit_code = code
+    return exit_code
 
 
 if __name__ == "__main__":

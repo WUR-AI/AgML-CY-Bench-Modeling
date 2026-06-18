@@ -61,7 +61,7 @@ def test_screening_complete_detects_optimal_model(tmp_path: Path):
     (run_dir / "optimal_model.yaml").write_text("model: x\n", encoding="utf-8")
     job = JobRow("maize", "BE", "ridge", "pandas", "yes", "yes", "no")
     ok, reason = screening_complete(
-        baselines, job, horizon_tag_value="eos", repo_root=Path(__file__).resolve().parents[3]
+        baselines, job, horizon_tag_value="eos", repo_root=Path(__file__).resolve().parents[2]
     )
     assert ok
     assert "screening_eos" in reason
@@ -101,3 +101,52 @@ def test_read_write_manifest_roundtrip(tmp_path: Path):
     job = JobRow("maize", "US", "ridge", "pandas", "yes", "yes", "no")
     write_manifest(path, [job])
     assert read_manifest(path) == [job]
+
+
+def test_parse_batch_name_and_expand():
+    from cybench.runs.slurm.benchmark_completion_lib import (
+        expand_target_batches,
+        parse_batch_name,
+    )
+
+    assert parse_batch_name("baselines_DE_eos_v1") == ("DE", "eos", 1)
+    assert parse_batch_name("baselines") is None
+
+    one = expand_target_batches(
+        batch="baselines_DE_eos_v1", country=None, horizons=["eos"], version=1
+    )
+    assert one == [("baselines_DE_eos_v1", "eos")]
+
+    both = expand_target_batches(
+        batch="baselines_DE_eos_v1", country=None, horizons=["eos", "mid"], version=1
+    )
+    assert [b for b, _ in both] == ["baselines_DE_eos_v1", "baselines_DE_mid_v1"]
+
+    by_cc = expand_target_batches(
+        batch=None, country="DE", horizons=["eos", "mid"], version=1
+    )
+    assert [b for b, _ in by_cc] == ["baselines_DE_eos_v1", "baselines_DE_mid_v1"]
+
+
+def test_ensure_manifest_filters_shared(tmp_path: Path, monkeypatch):
+    from cybench.runs.slurm.benchmark_completion_lib import ensure_manifest
+
+    repo = tmp_path / "repo"
+    slurm = repo / "cybench" / "runs" / "slurm"
+    slurm.mkdir(parents=True)
+    shared = slurm / "benchmark_jobs.txt"
+    shared.write_text(
+        "# header\n"
+        "maize DE ridge pandas yes yes no\n"
+        "maize FR ridge pandas yes yes no\n",
+        encoding="utf-8",
+    )
+    path, jobs, source = ensure_manifest(
+        batch="baselines_DE_eos_v1",
+        repo_root=repo,
+        manifest_path=None,
+    )
+    assert len(jobs) == 1
+    assert jobs[0].country == "DE"
+    assert "filtered" in source
+    assert path.is_file()

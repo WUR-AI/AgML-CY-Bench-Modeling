@@ -119,6 +119,13 @@ cybench/runs/slurm/orchestrate_benchmark_complete.sh \
 cybench/runs/slurm/orchestrate_benchmark_complete.sh \
   --batch baselines_DE_eos_v1 --horizon eos --submit
 
+# Both horizons (auto-resolves manifest; uses lustre output if present)
+cybench/runs/slurm/orchestrate_benchmark_complete.sh \
+  --country DE --horizons eos mid --list
+
+cybench/runs/slurm/orchestrate_benchmark_complete.sh \
+  --country DE --horizons eos mid --submit --dry-run
+
 # Walk-forward only (screening already ok everywhere)
 cybench/runs/slurm/orchestrate_benchmark_complete.sh \
   --batch baselines_DE_eos_v1 --phase walk_forward --submit
