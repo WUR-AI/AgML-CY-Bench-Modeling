@@ -104,6 +104,30 @@ cybench/runs/slurm/submit_benchmark.sh all --horizon eos --regenerate --countrie
 cybench/runs/slurm/submit_benchmark.sh all --horizon eos --dry-run
 ```
 
+## Complete missing jobs (partial rerun)
+
+After a batch finishes, some array tasks may fail (OOM, timeout, missing screening
+artifact for walk-forward). SLURM jobs **do not** skip work that already succeeded —
+build a **partial manifest** and submit only incomplete rows:
+
+```bash
+# Per-job status: ok / MISS / BLOCK (too few yield years for screening split)
+cybench/runs/slurm/orchestrate_benchmark_complete.sh \
+  --batch baselines_DE_eos_v1 --horizon eos --list
+
+# Submit retries (screening + walk-forward with afterok; skips complete jobs)
+cybench/runs/slurm/orchestrate_benchmark_complete.sh \
+  --batch baselines_DE_eos_v1 --horizon eos --submit
+
+# Walk-forward only (screening already ok everywhere)
+cybench/runs/slurm/orchestrate_benchmark_complete.sh \
+  --batch baselines_DE_eos_v1 --phase walk_forward --submit
+```
+
+Preflight marks rows **BLOCK** when yield years cannot satisfy the fixed screening
+split (`5-last` test + `2-last` val + train). Those are excluded from the retry
+manifest. Use `--cpu` on large GPU batches if the queue is backed up.
+
 Manual per-manifest submits (fine-grained control) are below.
 
 ## 2. Submit screening
