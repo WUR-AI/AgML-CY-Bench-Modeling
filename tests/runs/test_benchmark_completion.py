@@ -150,6 +150,46 @@ def test_ensure_manifest_filters_shared(tmp_path: Path, monkeypatch):
     assert path.is_file()
 
 
+def test_gpu_partition_for_batch_small_country(tmp_path: Path, monkeypatch):
+    from cybench.runs.slurm.benchmark_submit_lib import gpu_partition_for_batch
+
+    data = tmp_path / "data"
+    _write_yield(data / "maize" / "AT" / "yield_maize_AT.csv", "maize", "AT", list(range(2000, 2012)))
+    import cybench.config as cfg
+
+    monkeypatch.setattr(cfg, "PATH_DATA_DIR", str(data))
+
+    use_gpu, n_regions, country = gpu_partition_for_batch(
+        "baselines_AT_eos_v1",
+        region_threshold=100,
+        data_dir=data,
+    )
+    assert country == "AT"
+    assert n_regions == 1
+    assert use_gpu is False
+
+
+def test_resolve_force_cpu_auto_routes_small_country(tmp_path: Path, monkeypatch):
+    from cybench.runs.slurm.orchestrate_benchmark_complete import _resolve_force_cpu
+
+    data = tmp_path / "data"
+    _write_yield(data / "maize" / "AT" / "yield_maize_AT.csv", "maize", "AT", list(range(2000, 2012)))
+    import cybench.config as cfg
+
+    monkeypatch.setattr(cfg, "PATH_DATA_DIR", str(data))
+
+    force_cpu, reason = _resolve_force_cpu(
+        batch="baselines_AT_eos_v1",
+        explicit_cpu=False,
+        force_gpu=False,
+        region_threshold=100,
+        data_dir=data,
+    )
+    assert force_cpu is True
+    assert reason is not None
+    assert "AT" in reason
+
+
 def test_resolve_batch_dir_case_insensitive(tmp_path: Path):
     from cybench.runs.slurm.benchmark_submit_lib import resolve_batch_dir
 

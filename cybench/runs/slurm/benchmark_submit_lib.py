@@ -92,6 +92,36 @@ def resolve_batch_dir(parent: Path, batch: str) -> tuple[Path, str | None]:
     return parent / batch, None
 
 
+def gpu_partition_for_country(
+    country: str,
+    *,
+    region_threshold: int = 100,
+    data_dir: Path | None = None,
+) -> tuple[bool, int]:
+    """Return whether the torch/TabPFN group should use the gpu partition."""
+    n_regions = count_regions(country, data_dir)
+    return n_regions >= region_threshold, n_regions
+
+
+def gpu_partition_for_batch(
+    batch: str,
+    *,
+    region_threshold: int = 100,
+    data_dir: Path | None = None,
+) -> tuple[bool | None, int, str | None]:
+    """Return (use_gpu_partition, n_regions, country) for a baselines_* batch name."""
+    parsed = parse_batch_name(batch)
+    if parsed is None:
+        return None, 0, None
+    country, _, _ = parsed
+    use_gpu, n_regions = gpu_partition_for_country(
+        country,
+        region_threshold=region_threshold,
+        data_dir=data_dir,
+    )
+    return use_gpu, n_regions, country
+
+
 def count_regions(country: str, data_dir: Path | None = None) -> int:
     """Max unique ``adm_id`` across maize/wheat yield files for a country."""
     data_dir = Path(data_dir or PATH_DATA_DIR)

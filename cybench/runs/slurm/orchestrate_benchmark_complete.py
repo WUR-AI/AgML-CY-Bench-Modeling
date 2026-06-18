@@ -46,6 +46,7 @@ from cybench.runs.slurm.benchmark_completion_lib import (
     split_manifest_groups,
     write_manifest,
 )
+from cybench.runs.slurm.benchmark_submit_lib import gpu_partition_for_batch
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SLURM_DIR = _REPO_ROOT / "cybench" / "runs" / "slurm"
@@ -93,6 +94,33 @@ def _print_report(
     )
 
 
+def _resolve_force_cpu(
+    *,
+    batch: str,
+    explicit_cpu: bool,
+    force_gpu: bool,
+    region_threshold: int,
+    data_dir,
+) -> tuple[bool, str | None]:
+    if explicit_cpu:
+        return True, "explicit --cpu"
+    if force_gpu:
+        return False, None
+    use_gpu, n_regions, country = gpu_partition_for_batch(
+        batch,
+        region_threshold=region_threshold,
+        data_dir=data_dir,
+    )
+    if use_gpu is None or country is None:
+        return False, None
+    if not use_gpu:
+        return (
+            True,
+            f"{country}: {n_regions} regions < threshold {region_threshold}",
+        )
+    return False, None
+
+
 def _submit_retry(
     *,
     batch: str,
@@ -102,6 +130,7 @@ def _submit_retry(
     assessments: list,
     dry_run: bool,
     force_cpu: bool,
+    force_cpu_reason: str | None = None,
 ) -> int:
     submit = _SLURM_DIR / "submit_benchmark.sh"
     if not submit.is_file():
@@ -122,6 +151,8 @@ def _submit_retry(
         cmd = [str(submit), submit_phase, "--horizon", horizon, "--batch", batch]
         if force_cpu:
             cmd.append("--cpu")
+            if force_cpu_reason:
+                print(f"[INFO] torch/TabPFN group → CPU ({force_cpu_reason})")
         if dry_run:
             cmd.append("--dry-run")
         print(f"[INFO] {' '.join(cmd)}  ({len(jobs)} jobs)")
@@ -214,6 +245,13 @@ def _process_batch(
         return 0
 
     if args.submit:
+        force_cpu, force_cpu_reason = _resolve_force_cpu(
+            batch=effective_batch,
+            explicit_cpu=args.cpu,
+            force_gpu=args.force_gpu,
+            region_threshold=args.region_threshold,
+            data_dir=args.data_dir,
+        )
         return _submit_retry(
             batch=effective_batch,
             horizon=horizon,
@@ -221,7 +259,8 @@ def _process_batch(
             manifest_root=manifest_root,
             assessments=assessments,
             dry_run=args.dry_run,
-            force_cpu=args.cpu,
+            force_cpu=force_cpu,
+            force_cpu_reason=force_cpu_reason,
         )
 
     return 0
@@ -322,7 +361,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--cpu",
         action="store_true",
-        help="Route GPU manifest group to CPU (--cpu on submit_benchmark.sh)",
+        help="Force GPU manifest group to CPU (--cpu on submit_benchmark.sh)",
+    )
+    parser.add_argument(
+        "--force-gpu",
+        action="store_true",
+        help="Force gpu partition even when region count is below --region-threshold",
+    )
+    parser.add_argument(
+        "--region-threshold",
+        type=int,
+        default=100,
+        help="Use gpu partition for torch/TabPFN when country has >= N regions (default: 100)",
     )
     args = parser.parse_args(argv)
 

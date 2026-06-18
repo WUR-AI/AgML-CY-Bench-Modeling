@@ -33,7 +33,9 @@ Options:
   --list              Print status table and exit
   --submit            Write retry manifest and call submit_benchmark.sh
   --dry-run           With --submit: no sbatch
-  --cpu               GPU manifest group on CPU partition
+  --cpu               Force torch/TabPFN group to CPU partition
+  --force-gpu         Use gpu partition even when regions < threshold
+  --region-threshold N  gpu when country has >= N regions (default: 100)
 
 Examples:
   orchestrate_benchmark_complete.sh --country DE --horizons eos mid --list
@@ -68,6 +70,8 @@ LIST=false
 SUBMIT=false
 DRY_RUN=false
 FORCE_CPU=false
+FORCE_GPU=false
+REGION_THRESHOLD=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -147,6 +151,14 @@ while [[ $# -gt 0 ]]; do
       FORCE_CPU=true
       shift
       ;;
+    --force-gpu)
+      FORCE_GPU=true
+      shift
+      ;;
+    --region-threshold)
+      REGION_THRESHOLD=$2
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -181,5 +193,7 @@ cmd+=(--horizons "${HORIZONS[@]}")
 [[ "${SUBMIT}" == true ]] && cmd+=(--submit)
 [[ "${DRY_RUN}" == true ]] && cmd+=(--dry-run)
 [[ "${FORCE_CPU}" == true ]] && cmd+=(--cpu)
+[[ "${FORCE_GPU}" == true ]] && cmd+=(--force-gpu)
+[[ -n "${REGION_THRESHOLD}" ]] && cmd+=(--region-threshold "${REGION_THRESHOLD}")
 
 "${cmd[@]}"

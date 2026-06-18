@@ -124,7 +124,10 @@ cybench/runs/slurm/orchestrate_benchmark_complete.sh \
   --country DE --horizons eos mid --list
 
 cybench/runs/slurm/orchestrate_benchmark_complete.sh \
-  --country DE --horizons eos mid --submit --dry-run
+  --all-countries --horizons eos mid --list
+
+cybench/runs/slurm/orchestrate_benchmark_complete.sh \
+  --all-countries --horizons eos mid --submit --dry-run
 
 # Walk-forward only (screening already ok everywhere)
 cybench/runs/slurm/orchestrate_benchmark_complete.sh \
