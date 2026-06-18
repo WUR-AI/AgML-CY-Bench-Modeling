@@ -182,7 +182,7 @@ def discover_index_entries(publish_root: Path) -> list[IndexEntry]:
     return entries
 
 
-def build_index_html(entries: list[IndexEntry]) -> str:
+def build_index_html(entries: list[IndexEntry], *, publish_root: Path | None = None) -> str:
     """Landing page matching the multi-model dashboard visual style."""
     sections: dict[str, list[IndexEntry]] = {"walk_forward": [], "screening": []}
     for entry in entries:
@@ -209,6 +209,19 @@ def build_index_html(entries: list[IndexEntry]) -> str:
 
     walk_forward_html = render_cards(sections.get("walk_forward", []))
     screening_html = render_cards(sections.get("screening", []))
+    insights_card = ""
+    if publish_root and (publish_root / "insights.html").is_file():
+        insights_card = """
+  <section class="block">
+    <h2>Global insights</h2>
+    <div class="grid">
+      <a class="link-card" href="insights.html">
+        <div class="link-card-top"><span class="badge badge-neutral">ALL</span><span class="arrow" aria-hidden="true">→</span></div>
+        <h3>Cross-country model ranking</h3>
+        <p class="muted">NRMSE leaderboard and end-of-season vs mid-season comparison</p>
+      </a>
+    </div>
+  </section>"""
     screening_section = ""
     if sections.get("screening"):
         screening_section = f"""
@@ -302,7 +315,7 @@ def build_index_html(entries: list[IndexEntry]) -> str:
     <header>
       <h1>CY-Bench dashboards</h1>
       <p class="lead">Published walk-forward evaluation dashboards (interactive metrics + maps).</p>
-    </header>
+    </header>{insights_card}
     <section class="block">
       <h2>Walk-forward</h2>
       {walk_forward_html}
@@ -315,7 +328,9 @@ def build_index_html(entries: list[IndexEntry]) -> str:
 
 def update_index(publish_root: Path, entries: list[IndexEntry]) -> Path:
     index_path = publish_root / "index.html"
-    index_path.write_text(build_index_html(entries), encoding="utf-8")
+    index_path.write_text(
+        build_index_html(entries, publish_root=publish_root), encoding="utf-8"
+    )
     return index_path
 
 

@@ -502,7 +502,18 @@ def run_index_stage(
         return StageStatus("index", False, "would rebuild index.html")
     entries = discover_index_entries(target.publish_root)
     index_path = update_index(target.publish_root, entries)
-    return StageStatus("index", False, f"updated {index_path}")
+    try:
+        from cybench.runs.analysis.build_global_insights_dashboard import write_insights_dashboard
+
+        insights_path = write_insights_dashboard(
+            output_root=target.output_root,
+            dest=target.publish_root / "insights.html",
+            version=target.version,
+        )
+        msg = f"updated {index_path} and {insights_path.name}"
+    except RuntimeError as exc:
+        msg = f"updated {index_path} (insights skipped: {exc})"
+    return StageStatus("index", False, msg)
 
 
 def run_commit_stage(
@@ -516,6 +527,9 @@ def run_commit_stage(
         return StageStatus("commit", True, f"not a git repo: {publish_root}")
 
     rel_paths = [target.publish_slug, "index.html"]
+    insights = publish_root / "insights.html"
+    if insights.is_file():
+        rel_paths.append("insights.html")
     status = subprocess.run(
         ["git", "-C", str(publish_root), "status", "--porcelain", "--", *rel_paths],
         capture_output=True,

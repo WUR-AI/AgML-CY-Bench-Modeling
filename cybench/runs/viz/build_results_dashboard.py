@@ -145,6 +145,7 @@ def load_records_from_runs_root(
                 "dataset": dataset,
                 "n_regions": s.get("n_regions"),
                 "n_years": s.get("n_years"),
+                "n_samples": s.get("n_samples"),
                 "images": images,
             }
             view_metric_values = [
@@ -215,6 +216,7 @@ def load_records_from_runs_root(
             "dataset": dataset,
             "n_regions": int(clean["adm_id"].nunique()),
             "n_years": int(clean["year"].nunique()),
+            "n_samples": int(len(clean)),
             "images": images,
         }
         view_metric_values = [
@@ -329,6 +331,7 @@ def load_records(sources: List[SourceConfig], output_dir: str) -> List[Dict]:
                 "dataset": dataset,
                 "n_regions": s.get("n_regions"),
                 "n_years": s.get("n_years"),
+                "n_samples": s.get("n_samples"),
                 "images": panel_paths_rel,
             }
 

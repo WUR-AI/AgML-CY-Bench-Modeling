@@ -186,8 +186,15 @@
           <input type="checkbox" id="group-datasets" checked />
           Group by dataset
         </label>
+        <label>
+          Colors
+          <select id="color-mode">
+            <option value="fixed" selected>Fixed scale (absolute)</option>
+            <option value="column">Relative to filtered rows</option>
+          </select>
+        </label>
       </div>
-      <div class="muted" style="margin-bottom: 0.5rem;">Click a column header to sort. Lower NRMSE and higher R² are better.</div>
+      <div class="muted" style="margin-bottom: 0.5rem;">Click a column header to sort. Lower NRMSE and higher R² are better. Fixed colors use absolute thresholds (NRMSE 0–0.5, r/R² 0–1).</div>
       <div class="table-scroll" id="heatmap-wrap"></div>
     </div>
 
@@ -214,6 +221,7 @@
     const datasetFilter = document.getElementById("dataset-filter");
     const modelFilter = document.getElementById("model-filter");
     const groupDatasets = document.getElementById("group-datasets");
+    const colorModeSelect = document.getElementById("color-mode");
     const selectionLabel = document.getElementById("selection-label");
     const missingNote = document.getElementById("missing-note");
     const imgGrid = document.getElementById("img-grid");
@@ -233,11 +241,25 @@
       { key: "anomaly_r2", label: "R²", group: "Anomaly", higherBetter: true },
     ];
 
+    // Absolute color scales — comparable across rows and dashboards.
+    const FIXED_SCALES = {
+      region_year_r: { min: 0, max: 1, higherBetter: true },
+      region_year_r2: { min: 0, max: 1, higherBetter: true },
+      region_year_nrmse: { min: 0, max: 0.5, higherBetter: false },
+      spatial_r: { min: 0, max: 1, higherBetter: true },
+      spatial_r2: { min: 0, max: 1, higherBetter: true },
+      temporal_r: { min: 0, max: 1, higherBetter: true },
+      temporal_r2: { min: 0, max: 1, higherBetter: true },
+      anomaly_r: { min: 0, max: 1, higherBetter: true },
+      anomaly_r2: { min: 0, max: 1, higherBetter: true },
+    };
+
     let selectedCell = null;
     let activePanel = "maps";
     let allRows = [];
     let sortKey = "region_year_nrmse";
     let sortDir = "asc";
+    let colorMode = "fixed";
 
     function parseDataset(dataset) {
       const idx = dataset.lastIndexOf("_");
@@ -261,6 +283,7 @@
         if (sortKey === "model") return row.model;
         if (sortKey === "n_regions") return row.n_regions;
         if (sortKey === "n_years") return row.n_years;
+        if (sortKey === "n_samples") return row.n_samples;
         return metricValue(row, sortKey);
       };
       const av = getSortVal(a);
@@ -291,6 +314,19 @@
       return { min: Math.min(...vals), max: Math.max(...vals) };
     }
 
+    function scaleForColumn(key, rows) {
+      if (colorMode === "fixed" && FIXED_SCALES[key]) {
+        return FIXED_SCALES[key];
+      }
+      const col = METRIC_COLUMNS.find(c => c.key === key);
+      const stats = columnStats(rows, key);
+      return {
+        min: stats.min,
+        max: stats.max,
+        higherBetter: col ? col.higherBetter : true,
+      };
+    }
+
     function buildRows() {
       const grouped = new Map();
       for (const rec of DATA) {
@@ -301,6 +337,7 @@
             model: rec.model,
             n_regions: rec.n_regions,
             n_years: rec.n_years,
+            n_samples: rec.n_samples,
             images: rec.images || {},
             metrics: {},
           });
@@ -354,7 +391,9 @@
         `Showing ${rows.length} of ${allRows.length} rows (datasets=${datasets.length}, models=${models.length})`;
 
       const stats = {};
-      for (const col of METRIC_COLUMNS) stats[col.key] = columnStats(rows, col.key);
+      for (const col of METRIC_COLUMNS) {
+        stats[col.key] = scaleForColumn(col.key, rows);
+      }
 
       const sortMark = (key) => sortKey === key
         ? `<span class="sort-mark">${sortDir === "asc" ? "▲" : "▼"}</span>`
@@ -368,6 +407,7 @@
       <th rowspan="2" class="sortable" data-sort="model">Model ${sortMark("model")}</th>
       <th rowspan="2" class="sortable" data-sort="n_regions">Regions ${sortMark("n_regions")}</th>
       <th rowspan="2" class="sortable" data-sort="n_years">Years ${sortMark("n_years")}</th>
+      <th rowspan="2" class="sortable" data-sort="n_samples">Samples ${sortMark("n_samples")}</th>
       <th colspan="3" class="group-head">Region-Year</th>
       <th colspan="2" class="group-head">Spatial</th>
       <th colspan="2" class="group-head">Temporal</th>
@@ -387,10 +427,11 @@
         const payload = encodeURIComponent(JSON.stringify(row));
         html += `<tr class="metric-row ${groupClass}" data-row="${payload}">`;
         html += renderDatasetCell(row, showDataset);
-        html += `<td>${row.model}</td><td>${row.n_regions}</td><td>${row.n_years}</td>`;
+        html += `<td>${row.model}</td><td>${row.n_regions ?? "—"}</td><td>${row.n_years ?? "—"}</td><td>${row.n_samples ?? "—"}</td>`;
         for (const col of METRIC_COLUMNS) {
           const v = metricValue(row, col.key);
-          const bg = heatColor(v, stats[col.key].min, stats[col.key].max, col.higherBetter);
+          const scale = stats[col.key];
+          const bg = heatColor(v, scale.min, scale.max, scale.higherBetter);
           const style = bg ? ` style="background-color:${bg}"` : "";
           const cls = v === null ? "metric-cell missing" : "metric-cell";
           html += `<td class="${cls}"${style}>${formatValue(v)}</td>`;
@@ -494,6 +535,10 @@
     datasetFilter.addEventListener("change", () => renderHeatmap({ preserveSelection: true }));
     modelFilter.addEventListener("input", () => renderHeatmap({ preserveSelection: true }));
     groupDatasets.addEventListener("change", () => renderHeatmap({ preserveSelection: true }));
+    colorModeSelect.addEventListener("change", () => {
+      colorMode = colorModeSelect.value;
+      renderHeatmap({ preserveSelection: true });
+    });
 
     panelButtons.forEach(btn => {
       btn.addEventListener("click", () => {

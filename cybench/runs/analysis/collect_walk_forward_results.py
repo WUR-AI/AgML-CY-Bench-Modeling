@@ -173,6 +173,7 @@ def summary_rows_to_dashboard_records(
             "dataset": dataset,
             "n_regions": row.get("n_regions"),
             "n_years": row.get("n_years"),
+            "n_samples": row.get("n_samples"),
             "images": images,
         }
         for view, metric, key in metric_map:
