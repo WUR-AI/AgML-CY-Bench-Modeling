@@ -52,6 +52,12 @@ def _parse_stages(raw: str | None) -> set[StageName]:
     return stages
 
 
+def _parse_force_stages(raw: str | None) -> set[StageName]:
+    if not raw:
+        return set()
+    return _parse_stages(raw)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -183,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
     stages = _parse_stages(args.stages)
     if args.commit:
         stages.add("commit")
-    force = _parse_stages(args.force)
+    force = _parse_force_stages(args.force)
     exit_code = 0
 
     for target in targets:
