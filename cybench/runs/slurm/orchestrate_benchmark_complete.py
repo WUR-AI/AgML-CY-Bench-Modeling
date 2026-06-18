@@ -143,7 +143,15 @@ def _process_batch(
     args: argparse.Namespace,
 ) -> int:
     try:
-        manifest_path, baselines_dir, manifest_root, _, jobs, manifest_source = resolve_paths(
+        (
+            manifest_path,
+            baselines_dir,
+            manifest_root,
+            _,
+            jobs,
+            manifest_source,
+            alias_note,
+        ) = resolve_paths(
             batch=batch,
             repo_root=_REPO_ROOT,
             baselines_dir=args.baselines_dir,
@@ -153,6 +161,10 @@ def _process_batch(
     except FileNotFoundError as exc:
         print(exc, file=sys.stderr)
         return 1
+
+    effective_batch = baselines_dir.name if baselines_dir.is_dir() else batch
+    if alias_note:
+        print(f"[INFO] {alias_note}")
 
     if not baselines_dir.is_dir():
         print(
@@ -172,7 +184,7 @@ def _process_batch(
     if args.list or (not args.output and not args.submit):
         _print_report(
             assessments,
-            batch=batch,
+            batch=f"{batch} -> {baselines_dir}" if alias_note else batch,
             horizon=horizon,
             manifest_source=manifest_source,
             phase=args.phase,
@@ -196,7 +208,7 @@ def _process_batch(
 
     if args.submit:
         return _submit_retry(
-            batch=batch,
+            batch=effective_batch,
             horizon=horizon,
             phase=args.phase,
             manifest_root=manifest_root,

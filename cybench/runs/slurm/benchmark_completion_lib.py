@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import os
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,7 +13,13 @@ from omegaconf import OmegaConf
 import cybench.config as config
 from cybench.runs.analysis.benchmark_run_catalog import discover_benchmark_runs
 from cybench.runs.analysis.collect_walk_forward_results import load_pooled_predictions
-from cybench.runs.slurm.benchmark_submit_lib import batch_name, normalize_horizon
+from cybench.runs.slurm.benchmark_submit_lib import (
+    batch_name,
+    normalize_horizon,
+    parse_batch_name,
+    resolve_batch_dir,
+    resolve_case_insensitive_child,
+)
 from cybench.util.prediction_horizon import prediction_horizon_tag
 from cybench.util.validation import get_screening_partitions
 
@@ -24,9 +29,7 @@ DEFAULT_MIN_YEAR = 2000
 DEFAULT_MAX_YEAR = 2024
 DEFAULT_LUSTRE_OUTPUT = Path("/lustre/backup/SHARED/AIN/agml/output")
 
-_BATCH_RE = re.compile(
-    r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid)_v(?P<version>\d+)$"
-)
+# Keep in sync with benchmark_submit_lib._BATCH_RE (re-exported via parse_batch_name).
 
 
 @dataclass(frozen=True)
@@ -174,10 +177,15 @@ def _latest_run(
         phase=phase,
         horizon=horizon_tag_value,
         latest_only=True,
+        allow_missing=True,
     )
     expected_name = model_run_name(model_slug, repo_root=repo_root)
+    crop_key = crop.casefold()
+    country_key = country.casefold()
     for run in runs:
-        if run.crop != crop or run.country != country:
+        if run.crop.casefold() != crop_key:
+            continue
+        if run.country.casefold() != country_key:
             continue
         if run.model in {model_slug, expected_name}:
             return run.path
@@ -352,13 +360,6 @@ def split_manifest_groups(jobs: list[JobRow]) -> dict[str, list[JobRow]]:
     return {"cpu": cpu, "naive": naive, "gpu": gpu}
 
 
-def parse_batch_name(name: str) -> tuple[str, str, int] | None:
-    match = _BATCH_RE.match(name)
-    if not match:
-        return None
-    return match.group("country").upper(), match.group("batch_hz"), int(match.group("version"))
-
-
 def default_output_root(repo_root: Path) -> Path:
     env = os.environ.get("CYBENCH_OUTPUT_ROOT")
     if env:
@@ -421,7 +422,10 @@ def ensure_manifest(
     Returns (manifest_path, jobs, source_description).
     """
     slurm_dir = repo_root / "cybench" / "runs" / "slurm"
-    manifest_root = slurm_dir / "manifests" / batch
+    manifests_parent = slurm_dir / "manifests"
+    manifest_root = resolve_case_insensitive_child(manifests_parent, batch)
+    if manifest_root is None:
+        manifest_root = manifests_parent / batch
     if manifest_path and manifest_path.is_file():
         jobs = read_manifest(manifest_path)
         return manifest_path, jobs, f"explicit {manifest_path}"
@@ -471,15 +475,19 @@ def resolve_paths(
     baselines_dir: Path | None,
     manifest_path: Path | None,
     output_root: Path | None,
-) -> tuple[Path, Path, Path, Path, list[JobRow], str]:
+) -> tuple[Path, Path, Path, Path, list[JobRow], str, str | None]:
     slurm_dir = repo_root / "cybench" / "runs" / "slurm"
-    manifest_root = slurm_dir / "manifests" / batch
+    manifests_parent = slurm_dir / "manifests"
+    manifest_root = resolve_case_insensitive_child(manifests_parent, batch)
+    if manifest_root is None:
+        manifest_root = manifests_parent / batch
     root = output_root or default_output_root(repo_root)
+    alias_note: str | None = None
     if baselines_dir is None:
-        baselines_dir = root / batch
+        baselines_dir, alias_note = resolve_batch_dir(root, batch)
     manifest, jobs, source = ensure_manifest(
         batch=batch,
         repo_root=repo_root,
         manifest_path=manifest_path,
     )
-    return manifest, baselines_dir, manifest_root, root, jobs, source
+    return manifest, baselines_dir, manifest_root, root, jobs, source, alias_note

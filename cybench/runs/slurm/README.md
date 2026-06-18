@@ -135,6 +135,10 @@ Preflight marks rows **BLOCK** when yield years cannot satisfy the fixed screeni
 split (`5-last` test + `2-last` val + train). Those are excluded from the retry
 manifest. Use `--cpu` on large GPU batches if the queue is backed up.
 
+**Country code case:** batch folders may be `baselines_de_eos_v1` (manual) or
+`baselines_DE_eos_v1` (orchestrated). Completion resolves output/manifest paths
+case-insensitively and submits using the on-disk folder name.
+
 Manual per-manifest submits (fine-grained control) are below.
 
 ## 2. Submit screening

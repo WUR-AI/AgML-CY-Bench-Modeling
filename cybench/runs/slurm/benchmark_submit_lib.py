@@ -46,6 +46,52 @@ def batch_name(country: str, horizon: str, version: int = 1) -> str:
     return f"baselines_{cc}_{hz}_v{version}"
 
 
+def parse_batch_name(name: str) -> tuple[str, str, int] | None:
+    match = _BATCH_RE.match(name)
+    if not match:
+        return None
+    return match.group("country").upper(), match.group("batch_hz"), int(match.group("version"))
+
+
+def resolve_case_insensitive_child(parent: Path, name: str) -> Path | None:
+    """Return an existing child of ``parent`` whose name matches ``name`` case-insensitively."""
+    direct = parent / name
+    if direct.exists():
+        return direct
+    if not parent.is_dir():
+        return None
+    key = name.casefold()
+    for entry in parent.iterdir():
+        if entry.name.casefold() == key:
+            return entry
+    return None
+
+
+def resolve_batch_dir(parent: Path, batch: str) -> tuple[Path, str | None]:
+    """Resolve a baselines/manifest batch folder; tolerate upper/lower country codes."""
+    resolved = resolve_case_insensitive_child(parent, batch)
+    if resolved is not None:
+        if resolved.name == batch:
+            return resolved, None
+        return resolved, f"using {resolved.name} (case alias for {batch})"
+
+    parsed = parse_batch_name(batch)
+    if parsed and parent.is_dir():
+        cc, hz, ver = parsed
+        for cc_variant in (cc.upper(), cc.lower()):
+            candidate = f"baselines_{cc_variant}_{hz}_v{ver}"
+            resolved = resolve_case_insensitive_child(parent, candidate)
+            if resolved is not None:
+                note = (
+                    None
+                    if resolved.name == batch
+                    else f"using {resolved.name} (case alias for {batch})"
+                )
+                return resolved, note
+
+    return parent / batch, None
+
+
 def count_regions(country: str, data_dir: Path | None = None) -> int:
     """Max unique ``adm_id`` across maize/wheat yield files for a country."""
     data_dir = Path(data_dir or PATH_DATA_DIR)

@@ -109,8 +109,11 @@ def discover_benchmark_runs(
     phase: str | None = None,
     horizon: str | None = None,
     latest_only: bool = True,
+    allow_missing: bool = False,
 ) -> list[BenchmarkRun]:
     if not baselines_dir.is_dir():
+        if allow_missing:
+            return []
         raise FileNotFoundError(f"Baselines directory not found: {baselines_dir}")
 
     by_key: dict[tuple[str, str, str, str, str], BenchmarkRun] = {}

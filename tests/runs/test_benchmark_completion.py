@@ -104,10 +104,8 @@ def test_read_write_manifest_roundtrip(tmp_path: Path):
 
 
 def test_parse_batch_name_and_expand():
-    from cybench.runs.slurm.benchmark_completion_lib import (
-        expand_target_batches,
-        parse_batch_name,
-    )
+    from cybench.runs.slurm.benchmark_completion_lib import expand_target_batches
+    from cybench.runs.slurm.benchmark_submit_lib import parse_batch_name
 
     assert parse_batch_name("baselines_DE_eos_v1") == ("DE", "eos", 1)
     assert parse_batch_name("baselines") is None
@@ -150,3 +148,13 @@ def test_ensure_manifest_filters_shared(tmp_path: Path, monkeypatch):
     assert jobs[0].country == "DE"
     assert "filtered" in source
     assert path.is_file()
+
+
+def test_resolve_batch_dir_case_insensitive(tmp_path: Path):
+    from cybench.runs.slurm.benchmark_submit_lib import resolve_batch_dir
+
+    output = tmp_path / "output"
+    (output / "baselines_de_eos_v1").mkdir(parents=True)
+    resolved, note = resolve_batch_dir(output, "baselines_DE_eos_v1")
+    assert resolved.name == "baselines_de_eos_v1"
+    assert note is not None

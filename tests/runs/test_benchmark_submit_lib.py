@@ -63,3 +63,14 @@ def test_build_submit_plans_skip_filed(tmp_path: Path, monkeypatch):
     assert by_cc["AT"].skip is True
     assert by_cc["BE"].skip is False
     assert by_cc["BE"].gpu_partition is False  # 2 regions < 100
+
+
+def test_resolve_batch_dir_and_parse_batch_name(tmp_path: Path):
+    from cybench.runs.slurm.benchmark_submit_lib import parse_batch_name, resolve_batch_dir
+
+    assert parse_batch_name("baselines_de_eos_v1") == ("DE", "eos", 1)
+    output = tmp_path / "out"
+    (output / "baselines_fr_mid_v1").mkdir(parents=True)
+    path, note = resolve_batch_dir(output, "baselines_FR_mid_v1")
+    assert path.name == "baselines_fr_mid_v1"
+    assert note is not None

@@ -18,6 +18,7 @@ from cybench.runs.analysis.publish_dashboard_bundle import (
     publish_bundle,
     update_index,
 )
+from cybench.runs.slurm.benchmark_submit_lib import resolve_batch_dir
 
 Mode = Literal["planned", "ready", "all-available"]
 StageName = Literal["collect", "publish", "index", "commit"]
@@ -67,7 +68,8 @@ class PublishTarget:
 
     @property
     def baselines_dir(self) -> Path:
-        return self.output_root / self.batch_name
+        resolved, _ = resolve_batch_dir(self.output_root, self.batch_name)
+        return resolved
 
     @property
     def collect_dir(self) -> Path:
@@ -138,7 +140,7 @@ def discover_baselines_batches(
         country, batch_hz, version = parsed
         targets.append(
             PublishTarget(
-                country=country,
+                country=country.upper(),
                 batch_horizon=batch_hz,
                 version=version,
                 output_root=output_root,
