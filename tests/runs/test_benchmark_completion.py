@@ -51,13 +51,15 @@ def test_assess_job_blocked_when_too_few_years(tmp_path: Path, monkeypatch):
         data_dir=data,
     )
     assert assessment.blocked
-    assert assessment.needs_screening
+    assert not assessment.needs_screening
     assert not assessment.needs_walk_forward
+    assert assessment.block_reason
 
 
 def test_screening_complete_detects_optimal_model(tmp_path: Path):
     baselines = tmp_path / "baselines"
     run_dir = baselines / "maize_BE_ridge_screening_eos_20260101_120000" / "2019_2020"
+    run_dir.mkdir(parents=True)
     (run_dir / "optimal_model.yaml").write_text("model: x\n", encoding="utf-8")
     job = JobRow("maize", "BE", "ridge", "pandas", "yes", "yes", "no")
     ok, reason = screening_complete(
@@ -77,6 +79,7 @@ def test_jobs_for_phase_walk_forward_only(tmp_path: Path, monkeypatch):
 
     baselines = tmp_path / "baselines"
     scr_dir = baselines / "maize_BE_ridge_screening_eos_20260101_120000" / "2019_2020"
+    scr_dir.mkdir(parents=True)
     (scr_dir / "optimal_model.yaml").write_text("x: 1\n", encoding="utf-8")
 
     job = JobRow("maize", "BE", "ridge", "pandas", "yes", "yes", "no")
