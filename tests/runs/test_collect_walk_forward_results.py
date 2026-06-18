@@ -4,10 +4,27 @@ import pandas as pd
 
 from cybench.runs.analysis.benchmark_run_catalog import parse_benchmark_run_dir
 from cybench.runs.analysis.collect_walk_forward_results import (
+    _filter_runs,
     load_pooled_predictions,
     resolve_model_column,
     summary_rows_to_dashboard_records,
 )
+
+
+def test_filter_runs_by_country_and_horizon():
+    runs = []
+    for name in (
+        "maize_AO_ridge_walk_forward_eos_20260101_120000",
+        "maize_DE_ridge_walk_forward_eos_20260101_120000",
+        "maize_AO_ridge_walk_forward_mid_season_20260101_120000",
+    ):
+        run = parse_benchmark_run_dir(name, Path("/tmp"))
+        assert run is not None
+        runs.append(run)
+    filtered = _filter_runs(runs, country="AO", horizon="eos")
+    assert len(filtered) == 1
+    assert filtered[0].country == "AO"
+    assert filtered[0].horizon == "eos"
 
 
 def test_resolve_model_column_from_repo_config():

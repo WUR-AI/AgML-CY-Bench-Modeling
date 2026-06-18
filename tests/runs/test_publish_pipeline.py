@@ -105,3 +105,37 @@ def test_discover_baselines_batches(tmp_path: Path):
     targets = discover_baselines_batches(tmp_path)
     assert len(targets) == 1
     assert targets[0].country_upper == "AR"
+
+
+def test_discover_baselines_batches_from_monolithic(tmp_path: Path):
+    import pandas as pd
+
+    from cybench.runs.analysis.publish_pipeline_lib import (
+        PublishTarget,
+        resolve_collect_baselines_dir,
+    )
+
+    mono = tmp_path / "baselines"
+    run_dir = mono / "maize_AO_ridge_walk_forward_eos_20260101_120000" / "2016" / "42"
+    run_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "adm_id": ["AO-1"],
+            "year": [2016],
+            "targets": [10.0],
+            "preds": [9.5],
+        }
+    ).to_csv(run_dir / "test_preds.csv", index=False)
+
+    targets = discover_baselines_batches(tmp_path)
+    assert any(t.country_upper == "AO" and t.batch_horizon == "eos" for t in targets)
+
+    target = PublishTarget(
+        country="AO",
+        batch_horizon="eos",
+        version=1,
+        output_root=tmp_path,
+    )
+    baselines_dir, note = resolve_collect_baselines_dir(target)
+    assert baselines_dir == mono
+    assert note is not None

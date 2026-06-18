@@ -18,10 +18,12 @@ from cybench.runs.analysis.publish_dashboard_bundle import (
     publish_bundle,
     update_index,
 )
-from cybench.runs.slurm.benchmark_submit_lib import resolve_batch_dir
+from cybench.runs.slurm.benchmark_submit_lib import resolve_batch_dir, resolve_case_insensitive_child
 
 Mode = Literal["planned", "ready", "all-available"]
 StageName = Literal["collect", "publish", "index", "commit"]
+
+MONOLITHIC_BASELINES_DIR = "baselines"
 
 _BATCH_RE = re.compile(
     r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid)_v(?P<version>\d+)$"
@@ -122,6 +124,74 @@ def parse_batch_dir_name(name: str) -> tuple[str, str, int] | None:
     return match.group("country"), match.group("batch_hz"), int(match.group("version"))
 
 
+def _complete_walk_forward_runs(
+    baselines_dir: Path,
+    *,
+    country: str | None,
+    horizon_tags: tuple[str, ...],
+) -> list:
+    if not baselines_dir.is_dir():
+        return []
+    cc = country.upper() if country else None
+    seen: set[tuple[str, str, str]] = set()
+    complete: list = []
+    for horizon_tag in horizon_tags:
+        for run in discover_benchmark_runs(
+            baselines_dir,
+            phase="walk_forward",
+            horizon=horizon_tag,
+            latest_only=True,
+            allow_missing=True,
+        ):
+            if cc and run.country.upper() != cc:
+                continue
+            key = (run.crop, run.country, run.model)
+            if key in seen:
+                continue
+            try:
+                load_pooled_predictions(run.path, model_slug=run.model)
+            except ValueError:
+                continue
+            seen.add(key)
+            complete.append(run)
+    complete.sort(key=lambda r: (r.crop, r.country, r.model))
+    return complete
+
+
+def resolve_collect_baselines_dir(target: PublishTarget) -> tuple[Path, str | None]:
+    """Prefer per-country batch output; fall back to monolithic ``output/baselines/``."""
+    per_country, alias = resolve_batch_dir(target.output_root, target.batch_name)
+    if alias:
+        note_prefix = alias
+    else:
+        note_prefix = None
+
+    if _complete_walk_forward_runs(
+        per_country,
+        country=target.country_upper,
+        horizon_tags=target.horizon_tags,
+    ):
+        return per_country, note_prefix
+
+    if per_country.is_dir():
+        # Batch folder exists (e.g. baselines_AO_mid_v1) — never redirect to monolithic.
+        return per_country, note_prefix
+
+    monolithic = target.output_root / MONOLITHIC_BASELINES_DIR
+    if _complete_walk_forward_runs(
+        monolithic,
+        country=target.country_upper,
+        horizon_tags=target.horizon_tags,
+    ):
+        note = (
+            f"collecting from {monolithic} "
+            f"(no complete runs under {per_country.name})"
+        )
+        return monolithic, note
+
+    return per_country, note_prefix
+
+
 def discover_baselines_batches(
     output_root: Path,
     *,
@@ -129,6 +199,7 @@ def discover_baselines_batches(
 ) -> list[PublishTarget]:
     defaults = defaults or PipelineDefaults()
     targets: list[PublishTarget] = []
+    seen: set[tuple[str, str, int]] = set()
     if not output_root.is_dir():
         return targets
     for entry in sorted(output_root.iterdir()):
@@ -138,6 +209,10 @@ def discover_baselines_batches(
         if parsed is None:
             continue
         country, batch_hz, version = parsed
+        key = (country.upper(), batch_hz, version)
+        if key in seen:
+            continue
+        seen.add(key)
         targets.append(
             PublishTarget(
                 country=country.upper(),
@@ -149,6 +224,31 @@ def discover_baselines_batches(
                 min_run_fraction=defaults.min_run_fraction,
             )
         )
+
+    mono = output_root / MONOLITHIC_BASELINES_DIR
+    if mono.is_dir():
+        for batch_hz, horizon_tags in HORIZON_TAGS_BY_BATCH_SUFFIX.items():
+            by_country: set[str] = set()
+            for run in _complete_walk_forward_runs(
+                mono, country=None, horizon_tags=horizon_tags
+            ):
+                by_country.add(run.country.upper())
+            for cc in sorted(by_country):
+                key = (cc, batch_hz, defaults.version)
+                if key in seen:
+                    continue
+                seen.add(key)
+                targets.append(
+                    PublishTarget(
+                        country=cc,
+                        batch_horizon=batch_hz,
+                        version=defaults.version,
+                        output_root=output_root,
+                        repo_root=defaults.repo_root,
+                        publish_root=defaults.publish_root,
+                        min_run_fraction=defaults.min_run_fraction,
+                    )
+                )
     return targets
 
 
@@ -232,13 +332,18 @@ def horizon_to_batch_suffix(horizon: str) -> str:
 
 
 def expected_job_count(target: PublishTarget) -> int:
-    manifest = (
-        target.repo_root
-        / "cybench/runs/slurm/manifests"
-        / target.batch_name
-        / "benchmark_jobs.txt"
-    )
+    manifests_root = target.repo_root / "cybench/runs/slurm/manifests"
+    manifest_root = resolve_case_insensitive_child(manifests_root, target.batch_name)
+    if manifest_root is None:
+        manifest_root = manifests_root / target.batch_name
+    manifest = manifest_root / "benchmark_jobs.txt"
     if not manifest.is_file():
+        shared = target.repo_root / "cybench/runs/slurm/benchmark_jobs.txt"
+        if shared.is_file():
+            from cybench.runs.slurm.benchmark_completion_lib import filter_jobs_by_country, read_manifest
+
+            jobs = filter_jobs_by_country(read_manifest(shared), target.country_upper)
+            return len(jobs)
         return 0
     count = 0
     for line in manifest.read_text(encoding="utf-8").splitlines():
@@ -249,38 +354,30 @@ def expected_job_count(target: PublishTarget) -> int:
 
 
 def count_complete_walk_forward_runs(target: PublishTarget) -> int:
-    if not target.baselines_dir.is_dir():
-        return 0
-    seen: set[tuple[str, str, str]] = set()
-    for horizon_tag in target.horizon_tags:
-        runs = discover_benchmark_runs(
-            target.baselines_dir,
-            phase="walk_forward",
-            horizon=horizon_tag,
-            latest_only=True,
+    baselines_dir, _ = resolve_collect_baselines_dir(target)
+    return len(
+        _complete_walk_forward_runs(
+            baselines_dir,
+            country=target.country_upper,
+            horizon_tags=target.horizon_tags,
         )
-        for run in runs:
-            key = (run.crop, run.country, run.model)
-            if key in seen:
-                continue
-            try:
-                load_pooled_predictions(run.path, model_slug=run.model)
-            except ValueError:
-                continue
-            seen.add(key)
-    return len(seen)
+    )
 
 
 def assess_readiness(target: PublishTarget) -> ReadinessReport:
     expected = expected_job_count(target)
     complete = count_complete_walk_forward_runs(target)
-    if not target.baselines_dir.is_dir():
+    baselines_dir, source_note = resolve_collect_baselines_dir(target)
+    if complete <= 0 and not baselines_dir.is_dir():
+        reason = f"missing baselines dir {target.baselines_dir}"
+        if source_note:
+            reason = f"{reason}; {source_note}"
         return ReadinessReport(
             target=target,
             expected_runs=expected,
             complete_runs=complete,
             ready=False,
-            reason=f"missing baselines dir {target.baselines_dir}",
+            reason=reason,
         )
     if expected <= 0:
         return ReadinessReport(
@@ -297,6 +394,8 @@ def assess_readiness(target: PublishTarget) -> ReadinessReport:
         if ready
         else f"only {complete}/{expected} walk-forward runs (need >={threshold})"
     )
+    if source_note:
+        reason = f"{reason}; {source_note}"
     return ReadinessReport(
         target=target,
         expected_runs=expected,
@@ -307,37 +406,29 @@ def assess_readiness(target: PublishTarget) -> ReadinessReport:
 
 
 def baselines_fingerprint(target: PublishTarget) -> dict[str, Any]:
-    runs: list[dict[str, str]] = []
-    seen: set[tuple[str, str, str]] = set()
-    for horizon_tag in target.horizon_tags:
-        for run in discover_benchmark_runs(
-            target.baselines_dir,
-            phase="walk_forward",
-            horizon=horizon_tag,
-            latest_only=True,
-        ):
-            key = (run.crop, run.country, run.model)
-            if key in seen:
-                continue
-            try:
-                load_pooled_predictions(run.path, model_slug=run.model)
-            except ValueError:
-                continue
-            seen.add(key)
-            runs.append(
-                {
-                    "dataset": run.dataset,
-                    "model": run.model,
-                    "horizon": run.horizon,
-                    "timestamp": run.timestamp,
-                }
-            )
-    runs.sort(key=lambda r: (r["dataset"], r["model"], r["horizon"]))
-    return {
-        "baselines_dir": str(target.baselines_dir.resolve()),
-        "n_runs": len(runs),
-        "runs": runs,
+    baselines_dir, source_note = resolve_collect_baselines_dir(target)
+    runs_meta: list[dict[str, str]] = []
+    for run in _complete_walk_forward_runs(
+        baselines_dir,
+        country=target.country_upper,
+        horizon_tags=target.horizon_tags,
+    ):
+        runs_meta.append(
+            {
+                "dataset": run.dataset,
+                "model": run.model,
+                "horizon": run.horizon,
+                "timestamp": run.timestamp,
+            }
+        )
+    payload: dict[str, Any] = {
+        "baselines_dir": str(baselines_dir.resolve()),
+        "n_runs": len(runs_meta),
+        "runs": runs_meta,
     }
+    if source_note:
+        payload["source_note"] = source_note
+    return payload
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -410,22 +501,31 @@ def run_collect_subprocess(
     dry_run: bool = False,
 ) -> None:
     script = target.repo_root / "cybench/runs/analysis/collect_walk_forward_results.py"
+    baselines_dir, source_note = resolve_collect_baselines_dir(target)
     cmd = [
         "poetry",
         "run",
         "python",
         str(script),
         "--baselines-dir",
-        str(target.baselines_dir),
+        str(baselines_dir),
         "--output-dir",
         str(target.collect_dir),
+        "--country",
+        target.country_upper,
+        "--horizon",
+        target.batch_horizon,
         "--dashboard",
     ]
     if plot:
         cmd.append("--plot")
     if dry_run:
+        if source_note:
+            print(f"[DRY-RUN] {source_note}")
         print(f"[DRY-RUN] collect: {' '.join(cmd)}")
         return
+    if source_note:
+        print(f"[INFO] {source_note}")
     proc = subprocess.run(cmd, cwd=target.repo_root, check=False)
     if proc.returncode != 0:
         raise RuntimeError(f"collect failed for {target.batch_name} (exit {proc.returncode})")

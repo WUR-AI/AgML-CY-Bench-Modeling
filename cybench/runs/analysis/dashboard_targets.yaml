@@ -1,7 +1,9 @@
 # Dashboard publish pipeline — paths only (anunna / lustre).
 #
-# Targets are discovered automatically from benchmark batch folders:
-#   {output_root}/baselines_{CC}_{eos|mid}_v{N}/
+# Targets are discovered from:
+#   {output_root}/baselines_{CC}_{eos|mid}_v{N}/   (per-country SLURM batches)
+# and, when present, walk-forward runs under:
+#   {output_root}/baselines/   (legacy/default Hydra experiment.name)
 #
 # New countries appear when you submit SLURM batches; no edit needed here.
 # Optional: uncomment ``include`` to pin a subset (also used by --mode planned).

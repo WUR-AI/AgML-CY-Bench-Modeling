@@ -39,7 +39,6 @@ from cybench.runs.analysis.benchmark_run_catalog import (
     discover_benchmark_runs,
     flatten_report_metrics,
 )
-
 from cybench.runs.viz.build_results_dashboard import (
     build_html,
     bundle_referenced_assets,
@@ -216,6 +215,34 @@ def export_year_csvs(df: pd.DataFrame, run: BenchmarkRun, dest_dir: Path) -> Non
         year_df.to_csv(dest_dir / out_name, index=False, float_format="%.6f")
 
 
+def _run_matches_horizon(run: BenchmarkRun, horizon: str | None) -> bool:
+    if not horizon:
+        return True
+    key = horizon.strip().lower().replace("-", "_")
+    if key == "eos":
+        return run.horizon == "eos"
+    if key in {"mid", "mid_season", "middle_of_season"}:
+        return run.horizon in {"mid_season", "mid"}
+    return run.horizon == horizon
+
+
+def _filter_runs(
+    runs: list[BenchmarkRun],
+    *,
+    country: str | None,
+    horizon: str | None,
+) -> list[BenchmarkRun]:
+    out: list[BenchmarkRun] = []
+    cc = country.upper() if country else None
+    for run in runs:
+        if cc and run.country.upper() != cc:
+            continue
+        if not _run_matches_horizon(run, horizon):
+            continue
+        out.append(run)
+    return out
+
+
 def run_visualize(
     preds_dir: Path,
     model_col: str,
@@ -289,6 +316,15 @@ def main() -> None:
         default=3,
         help="Minimum years required for plotting (passed to visualize script)",
     )
+    parser.add_argument(
+        "--country",
+        help="Optional ISO-2 filter when baselines-dir contains many countries",
+    )
+    parser.add_argument(
+        "--horizon",
+        choices=["eos", "mid"],
+        help="Optional horizon filter (eos or mid / mid_season runs)",
+    )
     args = parser.parse_args()
 
     output_dir = args.output_dir.resolve()
@@ -311,8 +347,11 @@ def main() -> None:
     runs = discover_benchmark_runs(
         baselines_dir, phase="walk_forward", latest_only=not args.all_runs
     )
+    runs = _filter_runs(runs, country=args.country, horizon=args.horizon)
     if not runs:
         print(f"[WARN] No walk_forward runs found in {baselines_dir}")
+        if args.country or args.horizon:
+            print(f"[WARN] After filters country={args.country!r} horizon={args.horizon!r}")
         return
 
     summary_rows: list[dict[str, Any]] = []
