@@ -15,6 +15,8 @@ from cybench.runs.analysis.benchmark_run_catalog import discover_benchmark_runs
 from cybench.runs.analysis.collect_walk_forward_results import load_pooled_predictions
 from cybench.runs.slurm.benchmark_submit_lib import (
     batch_name,
+    countries_with_data,
+    horizon_batch_suffix,
     normalize_horizon,
     parse_batch_name,
     resolve_batch_dir,
@@ -408,6 +410,93 @@ def expand_target_batches(
         ]
 
     raise ValueError("Provide --batch or --country")
+
+
+def discover_batches_on_disk(
+    output_root: Path,
+    *,
+    horizons: list[str] | None = None,
+    version: int | None = None,
+) -> list[tuple[str, str]]:
+    """Return ``(batch_folder_name, slurm_horizon)`` for existing output directories."""
+    if not output_root.is_dir():
+        return []
+    wanted_hz: set[str] | None = None
+    if horizons is not None:
+        wanted_hz = {horizon_batch_suffix(normalize_horizon(h)) for h in horizons}
+
+    found: list[tuple[str, str]] = []
+    for entry in sorted(output_root.iterdir()):
+        if not entry.is_dir():
+            continue
+        parsed = parse_batch_name(entry.name)
+        if parsed is None:
+            continue
+        _cc, batch_hz, ver = parsed
+        if version is not None and ver != version:
+            continue
+        if wanted_hz is not None and batch_hz not in wanted_hz:
+            continue
+        slurm_hz = "eos" if batch_hz == "eos" else "middle-of-season"
+        found.append((entry.name, slurm_hz))
+    return found
+
+
+def countries_from_shared_manifest(repo_root: Path) -> list[str]:
+    shared = repo_root / "cybench" / "runs" / "slurm" / "benchmark_jobs.txt"
+    if not shared.is_file():
+        return []
+    return sorted({job.country.upper() for job in read_manifest(shared)})
+
+
+def resolve_country_list(
+    *,
+    all_countries: bool,
+    countries: list[str] | None,
+    country: str | None,
+    repo_root: Path,
+    data_dir: Path | None,
+    prefer_output: bool = True,
+    output_root: Path | None = None,
+) -> list[str]:
+    if countries:
+        return sorted({c.upper() for c in countries})
+    if country:
+        return [country.upper()]
+    if not all_countries:
+        return []
+
+    found: set[str] = set()
+    root = output_root or default_output_root(repo_root)
+    if prefer_output and root.is_dir():
+        for entry in root.iterdir():
+            parsed = parse_batch_name(entry.name)
+            if parsed:
+                found.add(parsed[0])
+    found.update(countries_from_shared_manifest(repo_root))
+    if not found:
+        found.update(countries_with_data(data_dir))
+    return sorted(found)
+
+
+def expand_all_country_targets(
+    *,
+    countries: list[str],
+    horizons: list[str],
+    version: int,
+) -> list[tuple[str, str]]:
+    """Expand many countries × horizons into batch targets."""
+    targets: list[tuple[str, str]] = []
+    for cc in countries:
+        targets.extend(
+            expand_target_batches(
+                batch=None,
+                country=cc,
+                horizons=horizons,
+                version=version,
+            )
+        )
+    return targets
 
 
 def ensure_manifest(

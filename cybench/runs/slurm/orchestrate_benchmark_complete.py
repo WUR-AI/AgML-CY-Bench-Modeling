@@ -19,6 +19,10 @@ Examples (from repo root on anunna)::
     cybench/runs/slurm/orchestrate_benchmark_complete.sh \\
         --country DE --horizons eos mid --list
 
+    # All countries with batch dirs / manifest entries (both horizons)
+    cybench/runs/slurm/orchestrate_benchmark_complete.sh \\
+        --all-countries --horizons eos mid --list
+
     # Submit retries
     cybench/runs/slurm/orchestrate_benchmark_complete.sh \\
         --country DE --horizons eos mid --submit --dry-run
@@ -33,8 +37,11 @@ from pathlib import Path
 
 from cybench.runs.slurm.benchmark_completion_lib import (
     assess_manifest,
+    default_output_root,
+    expand_all_country_targets,
     expand_target_batches,
     jobs_for_phase,
+    resolve_country_list,
     resolve_paths,
     split_manifest_groups,
     write_manifest,
@@ -228,7 +235,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--country",
-        help="Country code (alternative to --batch; use with --horizons)",
+        help="Single country code (alternative to --batch; use with --horizons)",
+    )
+    parser.add_argument(
+        "--countries",
+        nargs="+",
+        metavar="CC",
+        help="Multiple country codes (e.g. DE FR NL)",
+    )
+    parser.add_argument(
+        "--all-countries",
+        action="store_true",
+        help="All countries with batch output, shared manifest entries, or yield data",
+    )
+    parser.add_argument(
+        "--max",
+        type=int,
+        default=0,
+        help="Process at most N batch×horizon targets (0 = no limit)",
     )
     parser.add_argument(
         "--horizon",
@@ -303,19 +327,53 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     horizons = args.horizons or ["eos"]
-    if not args.batch and not args.country:
-        parser.error("Provide --batch or --country")
+    if args.batch and (args.country or args.countries or args.all_countries):
+        parser.error("Use --batch alone, or --country/--countries/--all-countries (not both)")
+    if not args.batch and not args.country and not args.countries and not args.all_countries:
+        parser.error("Provide --batch, --country, --countries, or --all-countries")
+
+    output_root = args.output_root or default_output_root(_REPO_ROOT)
 
     try:
-        targets = expand_target_batches(
-            batch=args.batch,
-            country=args.country,
-            horizons=horizons,
-            version=args.version,
-        )
+        if args.batch:
+            targets = expand_target_batches(
+                batch=args.batch,
+                country=args.country,
+                horizons=horizons,
+                version=args.version,
+            )
+        elif args.country and not args.countries and not args.all_countries:
+            targets = expand_target_batches(
+                batch=None,
+                country=args.country,
+                horizons=horizons,
+                version=args.version,
+            )
+        else:
+            countries = resolve_country_list(
+                all_countries=args.all_countries,
+                countries=args.countries,
+                country=None,
+                repo_root=_REPO_ROOT,
+                data_dir=args.data_dir,
+                output_root=output_root,
+            )
+            if not countries:
+                print("[DONE] No countries to process", file=sys.stderr)
+                return 0
+            print(f"[INFO] {len(countries)} countries: {', '.join(countries)}")
+            targets = expand_all_country_targets(
+                countries=countries,
+                horizons=horizons,
+                version=args.version,
+            )
     except ValueError as exc:
         print(exc, file=sys.stderr)
         return 1
+
+    if args.max > 0:
+        targets = targets[: args.max]
+        print(f"[INFO] Limited to {len(targets)} target(s) (--max {args.max})")
 
     args._targets = targets  # type: ignore[attr-defined]
     exit_code = 0

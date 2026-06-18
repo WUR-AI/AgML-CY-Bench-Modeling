@@ -74,3 +74,17 @@ def test_resolve_batch_dir_and_parse_batch_name(tmp_path: Path):
     path, note = resolve_batch_dir(output, "baselines_FR_mid_v1")
     assert path.name == "baselines_fr_mid_v1"
     assert note is not None
+
+
+def test_expand_all_country_targets():
+    from cybench.runs.slurm.benchmark_completion_lib import expand_all_country_targets
+
+    targets = expand_all_country_targets(
+        countries=["DE", "FR"],
+        horizons=["eos", "mid"],
+        version=1,
+    )
+    names = [b for b, _ in targets]
+    assert "baselines_DE_eos_v1" in names
+    assert "baselines_FR_mid_v1" in names
+    assert len(targets) == 4

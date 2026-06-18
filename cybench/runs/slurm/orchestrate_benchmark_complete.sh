@@ -3,28 +3,28 @@
 # Complete missing/failed benchmark jobs for an existing batch (partial rerun).
 #
 # Usage (from repo root on anunna):
-#   cybench/runs/slurm/orchestrate_benchmark_complete.sh --batch baselines_DE_eos_v1 --list
 #   cybench/runs/slurm/orchestrate_benchmark_complete.sh --country DE --horizons eos mid --list
-#   cybench/runs/slurm/orchestrate_benchmark_complete.sh --batch baselines_DE_eos_v1 --submit --dry-run
+#   cybench/runs/slurm/orchestrate_benchmark_complete.sh --all-countries --horizons eos mid --list
+#   cybench/runs/slurm/orchestrate_benchmark_complete.sh --all-countries --horizons eos mid --submit --dry-run
 #
 set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: orchestrate_benchmark_complete.sh (--batch NAME | --country CC) [options]
+Usage: orchestrate_benchmark_complete.sh (--batch NAME | --country CC | --countries ... | --all-countries) [options]
 
 Inspect Hydra output for incomplete screening / walk-forward jobs, optionally
 submit a partial manifest (does not rerun successful jobs).
 
-If manifests/<batch>/benchmark_jobs.txt is missing, jobs are taken from the
-shared benchmark_jobs.txt (filtered by country) or generated via generate_job_manifest.py.
-
 Options:
-  --batch NAME        Hydra experiment.name (e.g. baselines_DE_eos_v1)
-  --country CC        Country code (use with --horizons for both eos + mid)
+  --batch NAME        Single Hydra experiment.name (e.g. baselines_DE_eos_v1)
+  --country CC        Single country code
+  --countries CC ...  Multiple countries (e.g. DE FR NL)
+  --all-countries     All countries with output dirs, manifest rows, or yield data
   --horizon H         Single horizon (default: eos); repeat or use --horizons
   --horizons H ...    eos, mid, middle-of-season (default: eos)
-  --version N         Batch version when using --country (default: 1)
+  --version N         Batch version suffix (default: 1)
+  --max N             Process at most N batch×horizon targets (0 = unlimited)
   --manifest PATH     Explicit job list
   --output-root DIR   Parent of baselines_* (default: lustre output or ../output)
   --baselines-dir DIR Override output dir for one batch
@@ -36,9 +36,10 @@ Options:
   --cpu               GPU manifest group on CPU partition
 
 Examples:
-  orchestrate_benchmark_complete.sh --batch baselines_DE_eos_v1 --list
   orchestrate_benchmark_complete.sh --country DE --horizons eos mid --list
-  orchestrate_benchmark_complete.sh --country DE --horizons eos mid --submit --dry-run
+  orchestrate_benchmark_complete.sh --all-countries --horizons eos mid --list
+  orchestrate_benchmark_complete.sh --countries DE FR NL --horizon eos --submit --dry-run
+  orchestrate_benchmark_complete.sh --all-countries --horizons eos mid --max 5 --submit
 EOF
 }
 
@@ -53,8 +54,11 @@ fi
 COMPLETE_PY="${SLURM_DIR}/orchestrate_benchmark_complete.py"
 BATCH=""
 COUNTRY=""
+COUNTRIES=()
+ALL_COUNTRIES=false
 HORIZONS=(eos)
 VERSION=""
+MAX=""
 MANIFEST=""
 BASELINES_DIR=""
 OUTPUT_ROOT=""
@@ -75,6 +79,18 @@ while [[ $# -gt 0 ]]; do
       COUNTRY=$2
       shift 2
       ;;
+    --countries)
+      shift
+      COUNTRIES=()
+      while [[ $# -gt 0 && "$1" != --* ]]; do
+        COUNTRIES+=("$1")
+        shift
+      done
+      ;;
+    --all-countries)
+      ALL_COUNTRIES=true
+      shift
+      ;;
     --horizon)
       HORIZONS=("$2")
       shift 2
@@ -89,6 +105,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --version)
       VERSION=$2
+      shift 2
+      ;;
+    --max)
+      MAX=$2
       shift 2
       ;;
     --manifest)
@@ -139,8 +159,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "${BATCH}" && -z "${COUNTRY}" ]]; then
-  echo "Provide --batch or --country" >&2
+if [[ -z "${BATCH}" && -z "${COUNTRY}" && ${#COUNTRIES[@]} -eq 0 && "${ALL_COUNTRIES}" != true ]]; then
+  echo "Provide --batch, --country, --countries, or --all-countries" >&2
   usage
   exit 1
 fi
@@ -148,8 +168,11 @@ fi
 cmd=(poetry run python "${COMPLETE_PY}" --phase "${PHASE}")
 [[ -n "${BATCH}" ]] && cmd+=(--batch "${BATCH}")
 [[ -n "${COUNTRY}" ]] && cmd+=(--country "${COUNTRY}")
+[[ ${#COUNTRIES[@]} -gt 0 ]] && cmd+=(--countries "${COUNTRIES[@]}")
+[[ "${ALL_COUNTRIES}" == true ]] && cmd+=(--all-countries)
 cmd+=(--horizons "${HORIZONS[@]}")
 [[ -n "${VERSION}" ]] && cmd+=(--version "${VERSION}")
+[[ -n "${MAX}" ]] && cmd+=(--max "${MAX}")
 [[ -n "${MANIFEST}" ]] && cmd+=(--manifest "${MANIFEST}")
 [[ -n "${OUTPUT_ROOT}" ]] && cmd+=(--output-root "${OUTPUT_ROOT}")
 [[ -n "${BASELINES_DIR}" ]] && cmd+=(--baselines-dir "${BASELINES_DIR}")
