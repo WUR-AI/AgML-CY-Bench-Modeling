@@ -1,0 +1,70 @@
+"""Tests for map-based dashboard index."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from cybench.runs.analysis.index_map_lib import (
+    build_index_map_payload,
+    group_walk_forward_entries,
+    map_iso_for_cybencH,
+)
+from cybench.runs.analysis.publish_dashboard_bundle import IndexEntry
+
+
+def test_map_iso_alias_greece():
+    assert map_iso_for_cybencH("EL") == "GR"
+    assert map_iso_for_cybencH("DE") == "DE"
+
+
+def test_group_walk_forward_entries():
+    entries = [
+        IndexEntry(
+            href="de_walk_forward_eos_v1/dashboard.html",
+            slug="de_walk_forward_eos_v1",
+            title="Germany",
+            subtitle="eos",
+            country_code="DE",
+            kind="walk_forward",
+        ),
+        IndexEntry(
+            href="de_walk_forward_mid_v1/dashboard.html",
+            slug="de_walk_forward_mid_v1",
+            title="Germany",
+            subtitle="mid",
+            country_code="DE",
+            kind="walk_forward",
+        ),
+        IndexEntry(
+            href="el_walk_forward_eos_v1/dashboard.html",
+            slug="el_walk_forward_eos_v1",
+            title="Greece",
+            subtitle="eos",
+            country_code="EL",
+            kind="walk_forward",
+        ),
+    ]
+    grouped = group_walk_forward_entries(entries)
+    de = next(r for r in grouped if r["cc"] == "DE")
+    el = next(r for r in grouped if r["cc"] == "EL")
+    assert de["eos"] and de["mid"]
+    assert el["map_cc"] == "GR"
+    assert el["eos"]
+
+
+def test_build_index_map_payload(tmp_path: Path):
+    (tmp_path / "insights.html").write_text("<html></html>", encoding="utf-8")
+    entries = [
+        IndexEntry(
+            href="pl_walk_forward_eos_v1/dashboard.html",
+            slug="pl_walk_forward_eos_v1",
+            title="Poland",
+            subtitle="eos",
+            country_code="PL",
+            kind="walk_forward",
+        ),
+    ]
+    payload = build_index_map_payload(entries, publish_root=tmp_path)
+    assert payload["has_insights"] is True
+    assert payload["n_countries"] == 1
+    assert payload["countries"][0]["cc"] == "PL"

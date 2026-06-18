@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CY-Bench Global Insights</title>
+  <style>
+    :root {
+      --bg: #f6f8fa;
+      --card: #fff;
+      --border: #d8dee4;
+      --text: #1f2328;
+      --muted: #656d76;
+      --accent: #0969da;
+      --accent-soft: #ddf4ff;
+      --good: #1a7f37;
+      --bad: #cf222e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1.25rem;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    .page { max-width: 1400px; margin: 0 auto; }
+    h1 { margin: 0 0 0.35rem; font-size: 1.5rem; }
+    h2 { margin: 0 0 0.75rem; font-size: 1.15rem; }
+    .lead { color: var(--muted); margin: 0 0 1.25rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.1rem;
+      box-shadow: 0 1px 2px rgba(31, 35, 40, 0.06);
+      margin-bottom: 1rem;
+    }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 0.75rem;
+      margin: 0.75rem 0 1rem;
+    }
+    .stat {
+      background: #f9fafb;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 0.75rem;
+    }
+    .stat .label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+    .stat .value { font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .stat .value.good { color: var(--good); }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+    .controls label {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+    .controls select, .controls input[type="search"] {
+      padding: 0.35rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font: inherit;
+      background: #fff;
+    }
+    .table-scroll {
+      overflow: auto;
+      max-height: min(65vh, 640px);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 0.86rem;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 0.45rem 0.55rem;
+      text-align: right;
+      white-space: nowrap;
+    }
+    th:first-child, td:first-child,
+    th:nth-child(2), td:nth-child(2) { text-align: left; }
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f3f4f6;
+      font-weight: 600;
+    }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { background: #e8eaed; }
+    th .sort-mark { display: inline-block; width: 0.9rem; color: var(--accent); font-size: 0.75rem; }
+    td.metric-cell { font-variant-numeric: tabular-nums; }
+    tr:nth-child(even) td { background: #fafbfc; }
+    a { color: var(--accent); }
+    .note { margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>CY-Bench global insights</h1>
+    <p class="lead">Cross-country model comparison and end-of-season vs mid-season walk-forward results.</p>
+    <p class="muted" id="meta"></p>
+
+    <div class="card">
+      <h2>Research Q1 — Which models perform best across countries?</h2>
+      <p class="muted">
+        Ranked by <strong>sample-weighted mean NRMSE</strong> (region-year level).
+        NRMSE normalizes RMSE by mean absolute yield, so values are more comparable across countries than raw RMSE.
+        Lower is better. Each row aggregates all crop×country datasets for that model.
+      </p>
+      <div class="table-scroll" id="leaderboard-wrap"></div>
+    </div>
+
+    <div class="card">
+      <h2>Research Q2 — Is end-of-season (nowcast) better than mid-season?</h2>
+      <p class="muted" id="horizon-note"></p>
+      <div class="stat-grid" id="horizon-stats"></div>
+      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">By model (paired eos vs mid)</h3>
+      <div class="table-scroll" id="horizon-summary-wrap"></div>
+      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">Detail per crop × country × model</h3>
+      <div class="controls">
+        <label>Model <input type="search" id="detail-model-filter" placeholder="Filter…" /></label>
+        <label>Country
+          <select id="detail-country-filter"><option value="">All</option></select>
+        </label>
+      </div>
+      <div class="table-scroll" id="horizon-detail-wrap"></div>
+      <p class="muted note">
+        Δ NRMSE = mid-season − end-of-season. <strong>Positive</strong> ⇒ end-of-season is better (lower error).
+        EOS win % = share of pairs where eos NRMSE &lt; mid NRMSE.
+      </p>
+    </div>
+
+    <p class="muted"><a href="index.html">← Back to country dashboards</a></p>
+  </div>
+
+  <script>
+    const DATA = __DATA_JSON__;
+
+    function fmt(v, digits = 3) {
+      if (v === null || v === undefined) return "—";
+      if (typeof v === "string" && v !== "" && Number.isNaN(Number(v))) return v;
+      const n = Number(v);
+      if (Number.isNaN(n)) return "—";
+      return n.toFixed(digits);
+    }
+
+    function pct(v) {
+      if (v === null || v === undefined || Number.isNaN(v)) return "—";
+      return `${(100 * v).toFixed(1)}%`;
+    }
+
+    function heatColor(value, min, max, higherBetter) {
+      if (value === null || min === null || max === null || min === max) return null;
+      const t = higherBetter ? (value - min) / (max - min) : (max - value) / (max - min);
+      const clamped = Math.max(0, Math.min(1, t));
+      const hue = Math.round(clamped * 120);
+      const alpha = 0.12 + clamped * 0.28;
+      return `hsla(${hue}, 55%, 42%, ${alpha.toFixed(2)})`;
+    }
+
+    function fixedNrmseBg(v) {
+      return heatColor(v, 0, 0.5, false);
+    }
+
+    function fixedDeltaBg(v) {
+      if (v === null) return null;
+      return heatColor(v, -0.1, 0.1, true);
+    }
+
+    function renderSortableTable(container, columns, rows, sortKey, sortDir, onSort) {
+      const sortMark = (key) => sortKey === key
+        ? `<span class="sort-mark">${sortDir === "asc" ? "▲" : "▼"}</span>`
+        : `<span class="sort-mark"></span>`;
+      let html = "<table><thead><tr>";
+      for (const col of columns) {
+        const cls = col.sortable === false ? "" : "sortable";
+        const sk = col.sortKey || col.key;
+        html += `<th class="${cls}" data-sort="${sk}">${col.label} ${col.sortable === false ? "" : sortMark(sk)}</th>`;
+      }
+      html += "</tr></thead><tbody>";
+      for (const row of rows) {
+        html += "<tr>";
+        for (const col of columns) {
+          const raw = row[col.key];
+          const display = col.format ? col.format(raw, row) : fmt(raw);
+          const bg = col.bg ? col.bg(raw, row) : null;
+          const style = bg ? ` style="background-color:${bg}"` : "";
+          html += `<td class="metric-cell"${style}>${display}</td>`;
+        }
+        html += "</tr>";
+      }
+      html += "</tbody></table>";
+      container.innerHTML = html;
+      container.querySelectorAll("th.sortable").forEach(th => {
+        th.addEventListener("click", () => onSort(th.dataset.sort));
+      });
+    }
+
+    function compareSortValues(a, b, key) {
+      const av = a[key];
+      const bv = b[key];
+      const aMissing = av === null || av === undefined || av === "";
+      const bMissing = bv === null || bv === undefined || bv === "";
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      if (typeof av === "string" || typeof bv === "string") {
+        return String(av).localeCompare(String(bv));
+      }
+      return av - bv;
+    }
+
+    document.getElementById("meta").textContent =
+      `${DATA.n_countries} countries · ${DATA.n_rows} dataset×model rows · ${DATA.n_summary_files} collected summaries`;
+
+    // Leaderboard
+    let lbSort = "weighted_nrmse";
+    let lbDir = "asc";
+    const lbWrap = document.getElementById("leaderboard-wrap");
+    const lbCols = [
+      { key: "rank", label: "#", sortable: false },
+      { key: "model", label: "Model" },
+      { key: "weighted_nrmse", label: "Weighted NRMSE", bg: fixedNrmseBg },
+      { key: "mean_nrmse", label: "Mean NRMSE", bg: fixedNrmseBg },
+      { key: "median_nrmse", label: "Median NRMSE", bg: fixedNrmseBg },
+      { key: "mean_r2", label: "Mean R²" },
+      { key: "n_datasets", label: "Datasets" },
+      { key: "n_countries", label: "Countries" },
+      { key: "total_samples", label: "Samples", format: (v) => v == null ? "—" : String(v) },
+    ];
+
+    function renderLeaderboard() {
+      const rows = [...DATA.leaderboard].sort((a, b) => {
+        const dir = lbDir === "asc" ? 1 : -1;
+        const cmp = compareSortValues(a, b, lbSort);
+        if (cmp !== 0) return dir * cmp;
+        return a.model.localeCompare(b.model);
+      });
+      renderSortableTable(lbWrap, lbCols, rows, lbSort, lbDir, (key) => {
+        if (lbSort === key) lbDir = lbDir === "asc" ? "desc" : "asc";
+        else { lbSort = key; lbDir = key.includes("nrmse") || key === "rank" ? "asc" : "desc"; }
+        renderLeaderboard();
+      });
+    }
+    renderLeaderboard();
+
+    // Horizon overall
+    const oh = DATA.overall_horizon || {};
+    document.getElementById("horizon-note").textContent = oh.interpretation || "";
+    const statsEl = document.getElementById("horizon-stats");
+    if (oh.n_pairs) {
+      statsEl.innerHTML = `
+        <div class="stat"><div class="label">Paired comparisons</div><div class="value">${oh.n_pairs}</div></div>
+        <div class="stat"><div class="label">EOS wins</div><div class="value good">${pct(oh.eos_win_rate)}</div></div>
+        <div class="stat"><div class="label">Mean Δ NRMSE</div><div class="value">${fmt(oh.mean_delta_nrmse)}</div></div>
+        <div class="stat"><div class="label">Weighted Δ NRMSE</div><div class="value">${fmt(oh.weighted_delta_nrmse)}</div></div>`;
+    } else {
+      statsEl.innerHTML = `<p class="muted">No paired eos/mid summaries available yet.</p>`;
+    }
+
+    // Horizon summary by model
+    let hsSort = "weighted_delta_nrmse";
+    let hsDir = "desc";
+    const hsWrap = document.getElementById("horizon-summary-wrap");
+    const hsCols = [
+      { key: "model", label: "Model" },
+      { key: "n_pairs", label: "Pairs" },
+      { key: "eos_win_rate", label: "EOS win %", format: pct },
+      { key: "weighted_delta_nrmse", label: "Weighted Δ NRMSE", bg: fixedDeltaBg },
+      { key: "mean_delta_nrmse", label: "Mean Δ NRMSE", bg: fixedDeltaBg },
+      { key: "mean_eos_nrmse", label: "Mean EOS NRMSE", bg: fixedNrmseBg },
+      { key: "mean_mid_nrmse", label: "Mean mid NRMSE", bg: fixedNrmseBg },
+    ];
+
+    function renderHorizonSummary() {
+      const rows = [...(DATA.horizon_summary || [])].sort((a, b) => {
+        const dir = hsDir === "asc" ? 1 : -1;
+        const cmp = compareSortValues(a, b, hsSort);
+        if (cmp !== 0) return dir * cmp;
+        return a.model.localeCompare(b.model);
+      });
+      renderSortableTable(hsWrap, hsCols, rows, hsSort, hsDir, (key) => {
+        if (hsSort === key) hsDir = hsDir === "asc" ? "desc" : "asc";
+        else { hsSort = key; hsDir = key === "eos_win_rate" || key.includes("delta") ? "desc" : "asc"; }
+        renderHorizonSummary();
+      });
+    }
+    renderHorizonSummary();
+
+    // Horizon detail
+    const countryFilter = document.getElementById("detail-country-filter");
+    const modelFilter = document.getElementById("detail-model-filter");
+    const countries = [...new Set((DATA.horizon_detail || []).map(r => r.country))].sort();
+    countryFilter.innerHTML = `<option value="">All</option>` +
+      countries.map(c => `<option value="${c}">${c}</option>`).join("");
+
+    let hdSort = "delta_nrmse";
+    let hdDir = "desc";
+    const hdWrap = document.getElementById("horizon-detail-wrap");
+    const hdCols = [
+      { key: "dataset", label: "Dataset" },
+      { key: "model", label: "Model" },
+      { key: "eos_nrmse", label: "EOS NRMSE", bg: fixedNrmseBg },
+      { key: "mid_nrmse", label: "Mid NRMSE", bg: fixedNrmseBg },
+      { key: "delta_nrmse", label: "Δ NRMSE", bg: fixedDeltaBg },
+      { key: "eos_r2", label: "EOS R²" },
+      { key: "mid_r2", label: "Mid R²" },
+      { key: "eos_samples", label: "EOS samples", format: (v) => v == null ? "—" : String(v) },
+      { key: "mid_samples", label: "Mid samples", format: (v) => v == null ? "—" : String(v) },
+    ];
+
+    function renderHorizonDetail() {
+      const cq = countryFilter.value;
+      const mq = modelFilter.value.trim().toLowerCase();
+      const rows = (DATA.horizon_detail || []).filter(r => {
+        if (cq && r.country !== cq) return false;
+        if (mq && !r.model.toLowerCase().includes(mq)) return false;
+        return true;
+      }).sort((a, b) => {
+        const dir = hdDir === "asc" ? 1 : -1;
+        const cmp = compareSortValues(a, b, hdSort);
+        if (cmp !== 0) return dir * cmp;
+        return a.model.localeCompare(b.model);
+      });
+      renderSortableTable(hdWrap, hdCols, rows, hdSort, hdDir, (key) => {
+        if (hdSort === key) hdDir = hdDir === "asc" ? "desc" : "asc";
+        else { hdSort = key; hdDir = key === "dataset" || key === "model" ? "asc" : "desc"; }
+        renderHorizonDetail();
+      });
+    }
+    countryFilter.addEventListener("change", renderHorizonDetail);
+    modelFilter.addEventListener("input", renderHorizonDetail);
+    renderHorizonDetail();
+  </script>
+</body>
+</html>

@@ -8,6 +8,8 @@ api_keys
 *.csv
 *.dbf
 *.html
+!cybench/runs/viz/*_template.html
+!cybench/runs/viz/index_map_template.html
 *.nc4
 *.prj
 *.Rhistory

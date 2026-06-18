@@ -24,21 +24,49 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _COUNTRY_NAMES: dict[str, str] = {
-    "de": "Germany",
-    "fr": "France",
-    "us": "United States",
-    "nl": "Netherlands",
-    "be": "Belgium",
-    "at": "Austria",
-    "es": "Spain",
-    "it": "Italy",
-    "pl": "Poland",
-    "br": "Brazil",
-    "in": "India",
-    "au": "Australia",
-    "cn": "China",
-    "mx": "Mexico",
+    "ao": "Angola",
     "ar": "Argentina",
+    "at": "Austria",
+    "au": "Australia",
+    "be": "Belgium",
+    "bf": "Burkina Faso",
+    "bg": "Bulgaria",
+    "br": "Brazil",
+    "cn": "China",
+    "cz": "Czechia",
+    "de": "Germany",
+    "dk": "Denmark",
+    "ee": "Estonia",
+    "el": "Greece",
+    "es": "Spain",
+    "et": "Ethiopia",
+    "fi": "Finland",
+    "fr": "France",
+    "hr": "Croatia",
+    "hu": "Hungary",
+    "ie": "Ireland",
+    "in": "India",
+    "it": "Italy",
+    "ls": "Lesotho",
+    "lt": "Lithuania",
+    "lv": "Latvia",
+    "mg": "Madagascar",
+    "ml": "Mali",
+    "mw": "Malawi",
+    "mx": "Mexico",
+    "mz": "Mozambique",
+    "ne": "Niger",
+    "nl": "Netherlands",
+    "pl": "Poland",
+    "pt": "Portugal",
+    "ro": "Romania",
+    "se": "Sweden",
+    "sk": "Slovakia",
+    "sn": "Senegal",
+    "td": "Chad",
+    "us": "United States",
+    "za": "South Africa",
+    "zm": "Zambia",
 }
 
 _HORIZON_LABELS: dict[str, str] = {
@@ -183,7 +211,23 @@ def discover_index_entries(publish_root: Path) -> list[IndexEntry]:
 
 
 def build_index_html(entries: list[IndexEntry], *, publish_root: Path | None = None) -> str:
-    """Landing page matching the multi-model dashboard visual style."""
+    """Landing page with clickable world map."""
+    from cybench.runs.analysis.index_map_lib import (
+        build_index_map_html,
+        build_index_map_payload,
+        ensure_world_geojson,
+    )
+
+    if publish_root is None:
+        raise ValueError("publish_root is required to build the map index")
+
+    payload = build_index_map_payload(entries, publish_root=publish_root)
+    geojson_href = ensure_world_geojson(publish_root)
+    return build_index_map_html(payload, geojson_href=geojson_href)
+
+
+def build_index_html_cards(entries: list[IndexEntry], *, publish_root: Path | None = None) -> str:
+    """Legacy card-grid index (kept for reference / fallback)."""
     sections: dict[str, list[IndexEntry]] = {"walk_forward": [], "screening": []}
     for entry in entries:
         sections.setdefault(entry.kind, []).append(entry)

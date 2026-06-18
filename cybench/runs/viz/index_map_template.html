@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CY-Bench dashboards</title>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <style>
+    :root {
+      --bg: #f6f8fa;
+      --card: #fff;
+      --border: #d8dee4;
+      --text: #1f2328;
+      --muted: #656d76;
+      --accent: #0969da;
+      --accent-soft: #ddf4ff;
+      --land: #e8eaed;
+      --land-available: #9ec5fe;
+      --land-active: #0969da;
+      --land-missing: #f0f0f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1.25rem;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    .page { max-width: 1200px; margin: 0 auto; }
+    h1 { margin: 0; font-size: 1.5rem; font-weight: 600; }
+    h2 { margin: 0 0 0.75rem; font-size: 1.05rem; font-weight: 600; }
+    .lead { margin: 0.35rem 0 1rem; color: var(--muted); }
+    .top-links { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-bottom: 1rem; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.45rem 0.75rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.88rem;
+    }
+    .pill:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 1rem;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.85rem;
+      box-shadow: 0 1px 2px rgba(31, 35, 40, 0.06);
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.65rem;
+    }
+    .toolbar button {
+      padding: 0.35rem 0.7rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.86rem;
+    }
+    .toolbar button.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .muted { color: var(--muted); font-size: 0.88rem; }
+    #map-wrap { width: 100%; overflow: hidden; }
+    #map-wrap svg { display: block; width: 100%; height: auto; }
+    .country {
+      stroke: #fff;
+      stroke-width: 0.5px;
+      cursor: default;
+      transition: fill 0.15s;
+    }
+    .country.available { cursor: pointer; }
+    .country.available:hover { filter: brightness(0.92); }
+    .country.selected { stroke: var(--text); stroke-width: 1.2px; }
+    #detail h3 { margin: 0 0 0.35rem; font-size: 1rem; }
+    #detail .cc { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.75rem; }
+    .dash-link {
+      display: block;
+      padding: 0.55rem 0.65rem;
+      margin-bottom: 0.45rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      text-decoration: none;
+      color: inherit;
+      background: #fafbfc;
+    }
+    .dash-link:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .dash-link.disabled {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+    .legend { margin-top: 0.65rem; display: flex; gap: 1rem; flex-wrap: wrap; }
+    .legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .swatch {
+      width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border);
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>CY-Bench dashboards</h1>
+      <p class="lead">Click a country on the map to open walk-forward dashboards. Colors reflect the selected forecast horizon.</p>
+    </header>
+
+    <div class="top-links" id="top-links"></div>
+
+    <div class="layout">
+      <div class="card">
+        <div class="toolbar">
+          <span class="muted">Horizon</span>
+          <button type="button" data-horizon="both" class="active">Both</button>
+          <button type="button" data-horizon="eos">End of season</button>
+          <button type="button" data-horizon="mid">Mid-season</button>
+        </div>
+        <div id="map-wrap"><p class="muted">Loading map…</p></div>
+        <div class="legend muted">
+          <span><i class="swatch" style="background:var(--land-available)"></i> Dashboard available</span>
+          <span><i class="swatch" style="background:var(--land-missing)"></i> No dashboard</span>
+        </div>
+      </div>
+      <div class="card" id="detail">
+        <h3>Select a country</h3>
+        <p class="muted">Click a highlighted country on the map.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const DATA = __MAP_DATA_JSON__;
+    const byCc = new Map(DATA.countries.map(c => [c.cc, c]));
+    const byMapIso = new Map(DATA.countries.map(c => [c.map_cc || c.cc, c]));
+    let horizon = "both";
+    let selectedCc = null;
+
+    const topLinks = document.getElementById("top-links");
+    if (DATA.has_insights) {
+      topLinks.innerHTML += `<a class="pill" href="insights.html">Global insights</a>`;
+    }
+    if (DATA.has_screening && DATA.screening_href) {
+      topLinks.innerHTML += `<a class="pill" href="${DATA.screening_href}">Screening (all)</a>`;
+    }
+    topLinks.innerHTML += `<span class="pill muted">${DATA.n_countries} countries published</span>`;
+
+    function hasHorizon(c, hz) {
+      if (hz === "both") return Boolean(c.eos || c.mid);
+      return Boolean(c[hz]);
+    }
+
+    function fillForIso(mapIso) {
+      const c = byMapIso.get(mapIso);
+      if (!c || !hasHorizon(c, horizon)) return "var(--land-missing)";
+      if (selectedCc === c.cc) return "var(--land-active)";
+      return "var(--land-available)";
+    }
+
+    function renderDetail(cc) {
+      const el = document.getElementById("detail");
+      if (!cc || !byCc.has(cc)) {
+        el.innerHTML = `<h3>Select a country</h3><p class="muted">Click a highlighted country on the map.</p>`;
+        return;
+      }
+      const c = byCc.get(cc);
+      const eosCls = c.eos ? "" : " disabled";
+      const midCls = c.mid ? "" : " disabled";
+      el.innerHTML = `
+        <h3>${c.name}</h3>
+        <div class="cc">${c.cc}</div>
+        <a class="dash-link${eosCls}" href="${c.eos || "#"}">End-of-season walk-forward</a>
+        <a class="dash-link${midCls}" href="${c.mid || "#"}">Mid-season walk-forward</a>`;
+    }
+
+    function selectCountry(cc) {
+      selectedCc = cc;
+      renderDetail(cc);
+      d3.selectAll(".country")
+        .attr("fill", d => fillForIso(d.properties.ISO_A2));
+    }
+
+    function isoToCountry(mapIso) {
+      return byMapIso.get(mapIso) || null;
+    }
+
+    const width = 960;
+    const height = 520;
+    const svg = d3.select("#map-wrap").html("").append("svg")
+      .attr("viewBox", `0 0 ${width} ${height}`)
+      .attr("role", "img")
+      .attr("aria-label", "World map of CY-Bench dashboard countries");
+
+    const g = svg.append("g");
+    const projection = d3.geoNaturalEarth1().fitSize([width, height], {type: "Sphere"});
+    const path = d3.geoPath(projection);
+
+    d3.json(DATA.geojson_href).then(geo => {
+      g.selectAll("path")
+        .data(geo.features)
+        .join("path")
+        .attr("class", d => {
+          const c = isoToCountry(d.properties.ISO_A2);
+          return c && hasHorizon(c, horizon) ? "country available" : "country";
+        })
+        .attr("d", path)
+        .attr("fill", d => fillForIso(d.properties.ISO_A2))
+        .on("click", (event, d) => {
+          const c = isoToCountry(d.properties.ISO_A2);
+          if (c && hasHorizon(c, horizon)) selectCountry(c.cc);
+        });
+    }).catch(err => {
+      document.getElementById("map-wrap").innerHTML =
+        `<p class="muted">Could not load map (${err}). Use the country links in the repository README or open insights.</p>`;
+    });
+
+    document.querySelectorAll(".toolbar button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".toolbar button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        horizon = btn.dataset.horizon;
+        selectedCc = null;
+        renderDetail(null);
+        d3.selectAll(".country")
+          .attr("class", d => {
+            const c = isoToCountry(d.properties.ISO_A2);
+            return c && hasHorizon(c, horizon) ? "country available" : "country";
+          })
+          .attr("fill", d => fillForIso(d.properties.ISO_A2));
+      });
+    });
+  </script>
+</body>
+</html>
