@@ -4,17 +4,28 @@
 Designed to run entirely on the WUR lustre HPC (anunna): baselines, collect output,
 and the GitHub Pages clone can all live on lustre or $HOME.
 
-Example (on anunna, from the repo root)::
+Examples (from repo root on anunna)::
 
+    # Dry-run one country
     poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
-        --config cybench/runs/analysis/dashboard_targets.yaml \\
-        --mode ready --dry-run
+        --country EE --mode ready --dry-run
 
+    # Collect + publish + index (full pipeline, scans baselines_*)
     poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
-        --mode ready --commit
+        --mode ready --commit-once --push
 
+    # Publish-only (fast: uses paper_walk_forward_* only, no baselines scan)
     poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
-        --country DE --horizon eos --force publish,index,commit
+        --mode ready --stages publish,index --commit-once --push
+
+    # Parallel collect on compute nodes, then publish on login:
+    cybench/runs/slurm/submit_collect.sh --no-plot --mode ready --submit
+    poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
+        --mode ready --stages publish,index --commit-once --push
+
+    # Force republish one batch
+    poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
+        --country DE --horizon eos --stages publish,index --force publish
 """
 
 from __future__ import annotations
@@ -27,8 +38,9 @@ from pathlib import Path
 from cybench.runs.analysis.publish_pipeline_lib import (
     PipelineDefaults,
     StageName,
+    assess_publish_readiness,
     assess_readiness,
-    filter_ready_targets,
+    discover_paper_walk_forward_targets,
     load_pipeline_defaults,
     resolve_targets,
     run_collect_stage,
@@ -71,7 +83,8 @@ def main(argv: list[str] | None = None) -> int:
         choices=["planned", "ready", "all-available"],
         default="ready",
         help=(
-            "ready: lustre baselines_* batches with complete walk-forward (default); "
+            "ready: complete batches (baselines scan when collecting; "
+            "compare_models.html when publish-only); "
             "all-available: all discovered batches; "
             "planned: only explicit include: list in config"
         ),
@@ -120,7 +133,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--commit",
         action="store_true",
-        help="Git commit publish-root changes for each processed target",
+        help="Git commit publish-root changes (see --commit-once)",
+    )
+    parser.add_argument(
+        "--commit-once",
+        action="store_true",
+        help="Single git commit after all targets (default: one commit per country)",
     )
     parser.add_argument(
         "--push",
@@ -146,14 +164,26 @@ def main(argv: list[str] | None = None) -> int:
         publish_root=(args.publish_root or PipelineDefaults().publish_root).expanduser(),
     )
     defaults = load_pipeline_defaults(config_path, overrides=defaults)
+
+    stages = _parse_stages(args.stages)
+    publish_only = "collect" not in stages
+
     try:
-        targets = resolve_targets(
-            mode="all-available" if args.list else args.mode,
-            config_path=config_path,
-            defaults=defaults,
-            countries=args.countries,
-            horizons=args.horizons,
-        )
+        if publish_only:
+            targets = discover_paper_walk_forward_targets(
+                defaults.output_root,
+                defaults=defaults,
+                countries=args.countries,
+                horizons=args.horizons,
+            )
+        else:
+            targets = resolve_targets(
+                mode="all-available" if args.list else args.mode,
+                config_path=config_path,
+                defaults=defaults,
+                countries=args.countries,
+                horizons=args.horizons,
+            )
     except ValueError as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
         return 2
@@ -162,7 +192,8 @@ def main(argv: list[str] | None = None) -> int:
         print("[WARN] No targets matched filters")
         return 1
 
-    readiness = {t.batch_name: assess_readiness(t) for t in targets}
+    assess_fn = assess_publish_readiness if publish_only else assess_readiness
+    readiness = {t.batch_name: assess_fn(t) for t in targets}
 
     if args.list:
         print(f"{'batch':<28} {'ready':<5} complete  reason")
@@ -180,20 +211,23 @@ def main(argv: list[str] | None = None) -> int:
         skipped = [t for t in targets if not readiness[t.batch_name].ready]
         for target in skipped:
             print(f"[SKIP] {target.batch_name}: {readiness[target.batch_name].reason}")
-        targets = [t for t, _ in filter_ready_targets(targets)]
+        targets = [t for t in targets if readiness[t.batch_name].ready]
 
     if not targets:
         print("[DONE] Nothing ready to publish")
         return 0
 
-    stages = _parse_stages(args.stages)
     if args.commit:
         stages.add("commit")
     force = _parse_force_stages(args.force)
+    commit_per_target = args.commit and not args.commit_once
     exit_code = 0
 
+    if publish_only:
+        print(f"[INFO] publish-only: {len(targets)} target(s) from paper_walk_forward_* (no baselines scan)")
+
     for target in targets:
-        report = readiness.get(target.batch_name) or assess_readiness(target)
+        report = readiness.get(target.batch_name) or assess_fn(target)
         print(f"\n=== {target.batch_name} | {report.complete_runs} runs | slug={target.publish_slug} ===")
         try:
             if "collect" in stages:
@@ -213,11 +247,11 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 print(f"[{'SKIP' if status.skipped else 'OK'}] publish: {status.message}")
 
-            if "commit" in stages:
+            if commit_per_target:
                 status = run_commit_stage(
                     target,
                     dry_run=args.dry_run,
-                    push=args.push,
+                    push=False,
                 )
                 print(f"[{'SKIP' if status.skipped else 'OK'}] commit: {status.message}")
         except (RuntimeError, subprocess.CalledProcessError, FileNotFoundError) as exc:
@@ -230,6 +264,42 @@ def main(argv: list[str] | None = None) -> int:
         else:
             status = run_index_stage(targets[0], dry_run=False)
             print(f"\n[OK] index: {status.message}")
+
+    if "commit" in stages and args.commit_once:
+        publish_root = targets[0].publish_root
+        if args.dry_run:
+            print(f"\n[DRY-RUN] git add -A && git commit in {publish_root}")
+            if args.push:
+                print("[DRY-RUN] git push")
+        elif (publish_root / ".git").is_dir():
+            subprocess.run(["git", "-C", str(publish_root), "add", "-A"], check=True)
+            status = subprocess.run(
+                ["git", "-C", str(publish_root), "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if status.stdout.strip():
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(publish_root),
+                        "commit",
+                        "-m",
+                        "Sync walk-forward dashboards",
+                    ],
+                    check=True,
+                )
+                print("\n[OK] commit: Sync walk-forward dashboards")
+                if args.push:
+                    subprocess.run(["git", "-C", str(publish_root), "push"], check=True)
+                    print("[OK] push: done")
+            else:
+                print("\n[SKIP] commit: no changes")
+        else:
+            print(f"\n[SKIP] commit: not a git repo: {publish_root}", file=sys.stderr)
+            exit_code = 1
 
     return exit_code
 
