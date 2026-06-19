@@ -344,6 +344,10 @@ th.left, td.left { text-align: left; }
 ALL_PANELS = ("map_actual", "map_pred", "scatter", "temporal")
 DASHBOARD_PANELS = ("map_actual", "map_pred", "scatter", "temporal")
 
+# Switch to hexbin when overplotting would obscure structure.
+SCATTER_HEX_THRESHOLD = 500
+SCATTER_HEX_GRIDSIZE = 50
+
 
 def parse_panels(raw: str) -> tuple[str, ...]:
     panels = tuple(part.strip() for part in raw.split(",") if part.strip())
@@ -517,7 +521,6 @@ def generate_local_report_html(stats_list: List[dict], pdf_filename: str) -> str
 # -----------------------------
 def _plot_scatter_panel(
     ax: Axes,
-    fig: Figure,
     df_filtered: pd.DataFrame,
     model: str,
     *,
@@ -530,38 +533,35 @@ def _plot_scatter_panel(
 
     lo = float(min(np.min(y_true), np.min(y_pred)))
     hi = float(max(np.max(y_true), np.max(y_pred)))
-    pad = (hi - lo) * 0.04 or 1.0
+    pad = (hi - lo) * 0.02 or 1.0
     lim = (lo - pad, hi + pad)
 
-    if len(y_true) > 500:
-        hb = ax.hexbin(
+    n = len(y_true)
+    if n > SCATTER_HEX_THRESHOLD:
+        ax.hexbin(
             y_true,
             y_pred,
-            gridsize=42,
-            cmap="cividis",
+            gridsize=SCATTER_HEX_GRIDSIZE,
+            cmap="Blues",
             mincnt=1,
-            linewidths=0.15,
-            edgecolors="face",
-            alpha=0.92,
-            extent=(*lim, *lim),
+            linewidths=0,
+            alpha=0.85,
         )
-        fig.colorbar(hb, ax=ax, label="count", shrink=0.72, pad=0.02)
     else:
+        alpha = min(0.75, max(0.35, 30 / np.sqrt(max(n, 1))))
         ax.scatter(
             y_true,
             y_pred,
-            alpha=0.5,
-            s=14,
-            c="#2563eb",
+            alpha=alpha,
+            s=15,
+            c="#2166ac",
             edgecolors="none",
             rasterized=True,
         )
 
-    ax.plot(lim, lim, color="#64748b", linestyle="--", linewidth=1.2, zorder=5)
+    ax.plot([lo, hi], [lo, hi], "k--", alpha=0.55, linewidth=1.0, zorder=5)
     ax.set_xlim(lim)
     ax.set_ylim(lim)
-    ax.set_aspect("equal", adjustable="box")
-    ax.grid(True, alpha=0.25, linestyle=":")
 
     ax.set_title("Scatter (all region-years)")
     ax.set_xlabel("Actual yield")
@@ -742,7 +742,6 @@ def process_dataset(
         elif panel_name == "scatter":
             _plot_scatter_panel(
                 ax,
-                fig,
                 df_filtered,
                 model,
                 metrics_model=metrics_model,
