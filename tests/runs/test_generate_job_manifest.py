@@ -7,11 +7,24 @@ from pathlib import Path
 from cybench.runs.slurm.generate_job_manifest import generate
 
 
+def _write_yield(path: Path, crop: str, country: str, years: list[int]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = ["crop_name,country_code,adm_id,harvest_year,yield"]
+    for year in years:
+        lines.append(f"{crop},{country},R1,{year},10.0")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def test_countries_filter_skips_crop_without_country(
     tmp_path: Path, monkeypatch
 ):
     data = tmp_path / "data"
-    (data / "maize" / "AO").mkdir(parents=True)
+    _write_yield(
+        data / "maize" / "AO" / "yield_maize_AO.csv",
+        "maize",
+        "AO",
+        list(range(2000, 2012)),
+    )
     models = tmp_path / "models.txt"
     models.write_text("ridge pandas yes yes no\n", encoding="utf-8")
     out = tmp_path / "jobs.txt"
@@ -30,14 +43,6 @@ def test_countries_filter_skips_crop_without_country(
     text = out.read_text(encoding="utf-8")
     assert "maize AO ridge" in text
     assert "wheat" not in text
-
-
-def _write_yield(path: Path, crop: str, country: str, years: list[int]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lines = ["crop_name,country_code,adm_id,harvest_year,yield"]
-    for year in years:
-        lines.append(f"{crop},{country},R1,{year},10.0")
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def test_skips_crop_country_with_too_few_yield_years(
