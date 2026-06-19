@@ -91,9 +91,14 @@ def export_world_geojson(dest: Path, *, simplify: float = 0.08) -> Path:
     shp = world_shape_path("110")
     world = gpd.read_file(shp).to_crs(4326)
     iso_col = next(
-        (c for c in ("ISO_A2", "iso_a2", "ISO_A2_EH") if c in world.columns),
+        (c for c in ("ISO_A2", "iso_a2") if c in world.columns),
         None,
     )
+    iso_eh_col = next(
+        (c for c in ("ISO_A2_EH", "iso_a2_eh") if c in world.columns),
+        None,
+    )
+    wb_col = next((c for c in ("WB_A2", "wb_a2") if c in world.columns), None)
     name_col = next(
         (c for c in ("NAME", "name", "ADMIN") if c in world.columns),
         None,
@@ -105,7 +110,16 @@ def export_world_geojson(dest: Path, *, simplify: float = 0.08) -> Path:
     keep = keep.rename(columns={iso_col: "ISO_A2", name_col: "NAME"} if name_col else {iso_col: "ISO_A2"})
     if "NAME" not in keep.columns:
         keep["NAME"] = keep["ISO_A2"]
-    keep = keep[keep["ISO_A2"].notna() & (keep["ISO_A2"] != "-99")]
+    # Natural Earth marks some countries (e.g. France, Norway) as ISO_A2 "-99".
+    iso = keep["ISO_A2"].astype(str)
+    bad = iso.isna() | (iso == "-99") | (iso == "nan")
+    if iso_eh_col is not None:
+        iso = iso.where(~bad, world[iso_eh_col].astype(str))
+        bad = iso.isna() | (iso == "-99") | (iso == "nan")
+    if wb_col is not None:
+        iso = iso.where(~bad, world[wb_col].astype(str))
+    keep["ISO_A2"] = iso
+    keep = keep[keep["ISO_A2"].notna() & (keep["ISO_A2"] != "-99") & (keep["ISO_A2"] != "nan")]
     keep["geometry"] = keep.geometry.simplify(simplify, preserve_topology=True)
     dest.parent.mkdir(parents=True, exist_ok=True)
     keep.to_file(dest, driver="GeoJSON")

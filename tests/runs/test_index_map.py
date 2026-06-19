@@ -6,9 +6,11 @@ from pathlib import Path
 
 from cybench.runs.analysis.index_map_lib import (
     build_index_map_payload,
+    export_world_geojson,
     group_walk_forward_entries,
     map_iso_for_cybencH,
 )
+from cybench.util.geo import world_shape_path
 from cybench.runs.analysis.publish_dashboard_bundle import IndexEntry
 
 
@@ -50,6 +52,17 @@ def test_group_walk_forward_entries():
     assert de["eos"] and de["mid"]
     assert el["map_cc"] == "GR"
     assert el["eos"]
+
+
+def test_export_world_geojson_includes_france(tmp_path: Path):
+    try:
+        world_shape_path("110")
+    except FileNotFoundError:
+        return
+    dest = tmp_path / "world_countries.geojson"
+    export_world_geojson(dest, simplify=0.2)
+    text = dest.read_text(encoding="utf-8")
+    assert '"ISO_A2": "FR"' in text or '"ISO_A2":"FR"' in text
 
 
 def test_build_index_map_payload(tmp_path: Path):
