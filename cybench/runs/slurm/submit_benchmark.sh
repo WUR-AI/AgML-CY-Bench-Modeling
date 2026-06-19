@@ -189,19 +189,20 @@ regenerate_manifest() {
 }
 
 ensure_batch_manifests() {
-  if [[ -f "${MANIFEST_CPU}" && -f "${MANIFEST_GPU}" ]]; then
-    return 0
+  if [[ ! -f "${BASE_MANIFEST}" ]]; then
+    if [[ -f "${SHARED_MANIFEST}" ]]; then
+      echo "[INFO] Seeding batch manifests from ${SHARED_MANIFEST} -> ${MANIFEST_ROOT}"
+      mkdir -p "${MANIFEST_ROOT}"
+      cp "${SHARED_MANIFEST}" "${BASE_MANIFEST}"
+    else
+      echo "No manifests for batch '${CYBENCH_EXPERIMENT_NAME}' under ${MANIFEST_ROOT}." >&2
+      echo "Run with --regenerate or generate_job_manifest.py -o ${BASE_MANIFEST}" >&2
+      exit 1
+    fi
   fi
-  if [[ -f "${SHARED_MANIFEST}" ]]; then
-    echo "[INFO] Seeding batch manifests from ${SHARED_MANIFEST} -> ${MANIFEST_ROOT}"
-    mkdir -p "${MANIFEST_ROOT}"
-    cp "${SHARED_MANIFEST}" "${BASE_MANIFEST}"
-    split_manifests
-    return 0
-  fi
-  echo "No manifests for batch '${CYBENCH_EXPERIMENT_NAME}' under ${MANIFEST_ROOT}." >&2
-  echo "Run with --regenerate or generate_job_manifest.py -o ${BASE_MANIFEST}" >&2
-  exit 1
+  # Always re-split: orchestrate_benchmark_complete overwrites benchmark_jobs.txt
+  # with a partial retry list; stale cpu/naive/gpu files must not be reused.
+  split_manifests
 }
 
 init_manifest_paths
