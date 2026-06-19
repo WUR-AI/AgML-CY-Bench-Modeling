@@ -46,7 +46,22 @@ validate_experiment_name() {
 # Per-batch working manifests (regenerate / split). Not passed to SLURM directly.
 manifest_batch_dir() {
   local slurm_dir=$1 batch=$2
-  echo "${slurm_dir}/manifests/${batch}"
+  local parent="${slurm_dir}/manifests"
+  if [[ -d "${parent}/${batch}" ]]; then
+    echo "${parent}/${batch}"
+    return
+  fi
+  local key entry base
+  key=$(printf '%s' "${batch}" | tr '[:upper:]' '[:lower:]')
+  for entry in "${parent}"/baselines_*; do
+    [[ -d "${entry}" ]] || continue
+    base=$(basename "${entry}")
+    if [[ "$(printf '%s' "${base}" | tr '[:upper:]' '[:lower:]')" == "${key}" ]]; then
+      echo "${entry}"
+      return
+    fi
+  done
+  echo "${parent}/${batch}"
 }
 
 # Immutable copy at sbatch time — in-flight jobs keep this path even if working manifests change.

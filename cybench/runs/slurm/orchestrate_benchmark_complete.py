@@ -38,6 +38,7 @@ from pathlib import Path
 from cybench.runs.slurm.benchmark_completion_lib import (
     assess_manifest,
     default_output_root,
+    ensure_manifest,
     expand_all_country_targets,
     expand_target_batches,
     jobs_for_phase,
@@ -46,7 +47,10 @@ from cybench.runs.slurm.benchmark_completion_lib import (
     split_manifest_groups,
     write_manifest,
 )
-from cybench.runs.slurm.benchmark_submit_lib import gpu_partition_for_batch
+from cybench.runs.slurm.benchmark_submit_lib import (
+    gpu_partition_for_batch,
+    resolve_case_insensitive_child,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SLURM_DIR = _REPO_ROOT / "cybench" / "runs" / "slurm"
@@ -203,6 +207,19 @@ def _process_batch(
     effective_batch = baselines_dir.name if baselines_dir.is_dir() else batch
     if alias_note:
         print(f"[INFO] {alias_note}")
+
+    # Manifest + submit must use the on-disk batch folder name (e.g. baselines_de_eos_v1).
+    # resolve_paths() may use canonical casing (baselines_DE_eos_v1); on lustre those can be
+    # different directories, which made submit_benchmark.sh seed the full shared manifest.
+    manifests_parent = _SLURM_DIR / "manifests"
+    manifest_root = resolve_case_insensitive_child(manifests_parent, effective_batch)
+    if manifest_root is None:
+        manifest_root = manifests_parent / effective_batch
+    manifest_path, jobs, manifest_source = ensure_manifest(
+        batch=effective_batch,
+        repo_root=_REPO_ROOT,
+        manifest_path=args.manifest,
+    )
 
     if not baselines_dir.is_dir():
         print(
