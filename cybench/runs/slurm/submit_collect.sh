@@ -59,6 +59,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 cd "${REPO_ROOT}"
+
+echo "[STEP 1/2] Writing collect manifest (fast directory scan)..."
 poetry run python cybench/runs/analysis/generate_collect_manifest.py \
   -o "${MANIFEST}" \
   "${GEN_ARGS[@]}"
@@ -76,14 +78,18 @@ fi
 echo "[INFO] ${n} collect task(s); manifest=${MANIFEST}"
 
 if [[ "${DO_SUBMIT}" != true ]]; then
-  echo "[INFO] Dry run — add --submit to launch SLURM array"
+  echo ""
+  echo "[WARN] No SLURM jobs submitted — you omitted --submit"
+  echo "       To launch the array, re-run with: $0 ${GEN_ARGS[*]} --submit"
   exit 0
 fi
 
+echo "[STEP 2/2] Submitting SLURM array ${ARRAY_RANGE} (${n} tasks)..."
 mkdir -p output/collect
 export JOB_MANIFEST="${MANIFEST}"
-sbatch \
+job_id=$(sbatch --parsable \
   --job-name=cb_collect \
   --array="${ARRAY_RANGE}" \
   --export=ALL,JOB_MANIFEST="${MANIFEST}" \
-  "${SLURM_DIR}/collect_results.sh"
+  "${SLURM_DIR}/collect_results.sh")
+echo "[DONE] Submitted job ${job_id} — check: squeue -u \"\$USER\" -n cb_collect"

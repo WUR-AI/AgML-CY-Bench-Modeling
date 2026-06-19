@@ -252,6 +252,59 @@ def discover_baselines_batches(
     return targets
 
 
+def discover_baselines_batches_fast(
+    output_root: Path,
+    *,
+    defaults: PipelineDefaults | None = None,
+) -> list[PublishTarget]:
+    """List ``baselines_{CC}_{eos|mid}_vN`` folders only (no monolithic scan)."""
+    defaults = defaults or PipelineDefaults()
+    targets: list[PublishTarget] = []
+    seen: set[tuple[str, str, int]] = set()
+    if not output_root.is_dir():
+        return targets
+    for entry in sorted(output_root.iterdir()):
+        if not entry.is_dir():
+            continue
+        parsed = parse_batch_dir_name(entry.name)
+        if parsed is None:
+            continue
+        country, batch_hz, version = parsed
+        key = (country.upper(), batch_hz, version)
+        if key in seen:
+            continue
+        seen.add(key)
+        targets.append(
+            PublishTarget(
+                country=country.upper(),
+                batch_horizon=batch_hz,
+                version=version,
+                output_root=output_root,
+                repo_root=defaults.repo_root,
+                publish_root=defaults.publish_root,
+                min_run_fraction=defaults.min_run_fraction,
+            )
+        )
+    return targets
+
+
+def has_walk_forward_runs_fast(target: PublishTarget) -> bool:
+    """True if the batch folder contains any walk-forward run dirs for this country."""
+    baselines_dir, _ = resolve_batch_dir(target.output_root, target.batch_name)
+    if not baselines_dir.is_dir():
+        return False
+    cc = target.country_upper
+    token = "_walk_forward_"
+    for entry in baselines_dir.iterdir():
+        if not entry.is_dir() or token not in entry.name:
+            continue
+        prefix = entry.name.split(token, 1)[0]
+        parts = prefix.split("_", 2)
+        if len(parts) >= 2 and parts[1].upper() == cc:
+            return True
+    return False
+
+
 def load_pipeline_defaults(
     config_path: Path | None,
     *,

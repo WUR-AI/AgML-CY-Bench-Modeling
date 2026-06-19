@@ -3,6 +3,9 @@
 
 Each line: ``COUNTRY HORIZON PLOT`` where PLOT is ``yes`` or ``no``.
 
+Uses a fast lustre scan (directory names only). Full readiness checks run inside
+each SLURM collect task, not here.
+
 Example::
 
     poetry run python cybench/runs/analysis/generate_collect_manifest.py \\
@@ -13,17 +16,52 @@ Example::
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from cybench.runs.analysis.publish_pipeline_lib import (
     PipelineDefaults,
     assess_readiness,
+    discover_baselines_batches_fast,
     filter_ready_targets,
+    horizon_to_batch_suffix,
     load_pipeline_defaults,
-    resolve_targets,
+    has_walk_forward_runs_fast,
 )
 
 _DEFAULT_CONFIG = Path(__file__).resolve().parent / "dashboard_targets.yaml"
+
+
+def _resolve_targets_fast(
+    *,
+    mode: str,
+    config_path: Path | None,
+    defaults: PipelineDefaults,
+    countries: list[str] | None,
+    horizons: list[str] | None,
+) -> list:
+    if config_path and config_path.is_file():
+        import yaml
+
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        defaults = load_pipeline_defaults(config_path, overrides=defaults)
+        entries = raw.get("include") or raw.get("targets") or []
+        if entries and mode == "planned":
+            from cybench.runs.analysis.publish_pipeline_lib import _explicit_targets_from_config
+
+            targets = _explicit_targets_from_config(raw, defaults=defaults)
+        else:
+            targets = discover_baselines_batches_fast(defaults.output_root, defaults=defaults)
+    else:
+        targets = discover_baselines_batches_fast(defaults.output_root, defaults=defaults)
+
+    if countries:
+        wanted = {c.upper() for c in countries}
+        targets = [t for t in targets if t.country_upper in wanted]
+    if horizons:
+        wanted_hz = {horizon_to_batch_suffix(h) for h in horizons}
+        targets = [t for t in targets if t.batch_horizon in wanted_hz]
+    return targets
 
 
 def main() -> int:
@@ -80,7 +118,12 @@ def main() -> int:
     plot = "yes" if args.plot and not args.no_plot else "no"
     config_path = args.config if args.config.is_file() else None
     defaults = load_pipeline_defaults(config_path)
-    targets = resolve_targets(
+    print(
+        "[INFO] Scanning batch folders on lustre (fast; no CSV reads)...",
+        file=sys.stderr,
+        flush=True,
+    )
+    targets = _resolve_targets_fast(
         mode=args.mode,
         config_path=config_path,
         defaults=defaults,
@@ -88,14 +131,20 @@ def main() -> int:
         horizons=args.horizons,
     )
     if args.mode == "ready":
+        print(
+            "[INFO] --mode ready: checking walk-forward completeness (may take a few minutes)...",
+            file=sys.stderr,
+            flush=True,
+        )
         targets = [t for t, _ in filter_ready_targets(targets)]
 
     lines: list[str] = []
     for target in targets:
-        report = assess_readiness(target)
-        if args.mode == "ready" and not report.ready:
-            continue
-        if report.complete_runs <= 0:
+        if args.mode == "ready":
+            report = assess_readiness(target)
+            if not report.ready or report.complete_runs <= 0:
+                continue
+        elif not has_walk_forward_runs_fast(target):
             continue
         lines.append(f"{target.country_upper} {target.batch_horizon} {plot}")
 
