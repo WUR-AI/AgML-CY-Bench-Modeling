@@ -28,6 +28,9 @@ MONOLITHIC_BASELINES_DIR = "baselines"
 _BATCH_RE = re.compile(
     r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid)_v(?P<version>\d+)$"
 )
+_PAPER_COLLECT_RE = re.compile(
+    r"^paper_walk_forward_(?P<country>[a-z]{2})_(?P<batch_hz>eos|mid)_v(?P<version>\d+)$"
+)
 
 # Batch folder suffix → horizon tags accepted under ../output/<batch>/.
 HORIZON_TAGS_BY_BATCH_SUFFIX: dict[str, tuple[str, ...]] = {
@@ -297,6 +300,94 @@ def has_walk_forward_runs_fast(target: PublishTarget) -> bool:
     for _ in baselines_dir.glob(f"*_{cc}_*_walk_forward_*"):
         return True
     return False
+
+
+def discover_paper_walk_forward_targets(
+    output_root: Path,
+    *,
+    defaults: PipelineDefaults | None = None,
+    countries: list[str] | None = None,
+    horizons: list[str] | None = None,
+) -> list[PublishTarget]:
+    """Discover targets from existing ``paper_walk_forward_*`` collect output (fast)."""
+    defaults = defaults or PipelineDefaults()
+    wanted_cc = {c.upper() for c in countries} if countries else None
+    wanted_hz = {horizon_to_batch_suffix(h) for h in horizons} if horizons else None
+    targets: list[PublishTarget] = []
+    seen: set[tuple[str, str, int]] = set()
+    if not output_root.is_dir():
+        return targets
+    for entry in sorted(output_root.glob("paper_walk_forward_*")):
+        if not entry.is_dir():
+            continue
+        match = _PAPER_COLLECT_RE.match(entry.name)
+        if match is None:
+            continue
+        country = match.group("country").upper()
+        batch_hz = match.group("batch_hz")
+        version = int(match.group("version"))
+        if wanted_cc and country not in wanted_cc:
+            continue
+        if wanted_hz and batch_hz not in wanted_hz:
+            continue
+        key = (country, batch_hz, version)
+        if key in seen:
+            continue
+        seen.add(key)
+        targets.append(
+            PublishTarget(
+                country=country,
+                batch_horizon=batch_hz,
+                version=version,
+                output_root=output_root,
+                repo_root=defaults.repo_root,
+                publish_root=defaults.publish_root,
+                min_run_fraction=defaults.min_run_fraction,
+            )
+        )
+    return targets
+
+
+def _summary_row_count(collect_dir: Path) -> int:
+    summary = collect_dir / "walk_forward_summary.csv"
+    if not summary.is_file():
+        return 0
+    try:
+        text = summary.read_text(encoding="utf-8")
+    except OSError:
+        return 0
+    lines = [line for line in text.splitlines() if line.strip()]
+    return max(0, len(lines) - 1)
+
+
+def assess_publish_readiness(target: PublishTarget) -> ReadinessReport:
+    """Fast readiness from collected paper output (no baselines scan)."""
+    collect_dir = target.collect_dir
+    html = collect_dir / "compare_models.html"
+    n_rows = _summary_row_count(collect_dir)
+    if html.is_file() and n_rows > 0:
+        return ReadinessReport(
+            target=target,
+            expected_runs=0,
+            complete_runs=n_rows,
+            ready=True,
+            reason=f"collected: {n_rows} summary rows in {collect_dir.name}",
+        )
+    if html.is_file():
+        return ReadinessReport(
+            target=target,
+            expected_runs=0,
+            complete_runs=0,
+            ready=False,
+            reason=f"empty summary in {collect_dir.name}",
+        )
+    return ReadinessReport(
+        target=target,
+        expected_runs=0,
+        complete_runs=0,
+        ready=False,
+        reason=f"missing {html}",
+    )
 
 
 def load_pipeline_defaults(
