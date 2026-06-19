@@ -1,0 +1,9 @@
+_target_: cybench.models.lpjml_model.LpjmlBiasCorrectedModel
+name: lpjml_bc
+framework: pandas
+
+# rainfed | irrigated
+variant: rainfed
+
+# Optional override for LPJmL CSV root (default: cybench.config.PATH_DATA_DIR)
+# data_dir: /path/to/cybench/data

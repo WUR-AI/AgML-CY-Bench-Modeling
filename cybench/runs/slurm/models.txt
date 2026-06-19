@@ -6,6 +6,7 @@
 #   needs_gpu:      yes | no  (TabPFN: pandas but requires CUDA)
 average          pandas  no   no   no
 trend            pandas  no   no   no
+lpjml_bc         pandas  no   no   no
 random_forest    pandas  yes  yes  no
 ridge            pandas  yes  yes  no
 xgboost          pandas  yes  yes  no

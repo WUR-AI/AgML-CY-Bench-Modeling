@@ -39,17 +39,24 @@ from cybench.config import KEY_COUNTRY, KEY_LOC, KEY_YEAR, KEY_TARGET
 log = logging.getLogger(__name__)
 
 
-def _maybe_drop_temporal_for_average_model(cfg) -> None:
-    """AverageYieldModel only uses targets and static location columns; skip all temporal IO."""
+def _model_target(cfg) -> str:
     target = OmegaConf.select(cfg, "model._target_") or ""
-    if not (isinstance(target, str) and "AverageYieldModel" in target):
+    return target if isinstance(target, str) else ""
+
+
+def _maybe_drop_temporal_for_standalone_models(cfg) -> None:
+    """Standalone baselines (average yield, LPJmL) do not use time-series predictors."""
+    target = _model_target(cfg)
+    standalone_markers = ("AverageYieldModel", "LpjmlBiasCorrectedModel")
+    if not any(marker in target for marker in standalone_markers):
         return
     if "temporal" not in cfg.dataset or "sources" not in cfg.dataset.temporal:
         return
     with open_dict(cfg.dataset.temporal):
         cfg.dataset.temporal.sources.clear()
     log.info(
-        "AverageYieldModel: dropped all temporal sources (model does not use time series)."
+        "%s: dropped all temporal sources (model does not use time series).",
+        target.rsplit(".", 1)[-1],
     )
 
 
@@ -93,7 +100,7 @@ def main(cfg):
     #print(OmegaConf.to_yaml(cfg))
     set_seed(cfg.experiment.seed)
 
-    _maybe_drop_temporal_for_average_model(cfg)
+    _maybe_drop_temporal_for_standalone_models(cfg)
 
     log.info("=== Create Datasets ===")
     dataset = DataFactory(cfg.dataset).build()

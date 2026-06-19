@@ -236,7 +236,11 @@ class DataFactory:
         path_data_cn = os.path.join(PATH_DATA_DIR, crop, country_code)
 
         df_ls = []
-        for file_name, values in self.cfg.non_temporal.sources.items():
+        sources = getattr(self.cfg.non_temporal, "sources", None) or {}
+        if not sources:
+            return pd.DataFrame(index=pd.Index([], name=KEY_LOC))
+
+        for file_name, values in sources.items():
             if file_name == "climate_vars":
                 assert np.any(["climate_vars" in file_name for file_name in os.listdir(path_data_cn)]), f"Your configuration is using 'climate-variables' which are non-native to the CY-Bench data and have to be pre-processed. Execute the climate_variables_preprocess.py script."
             df_x = pd.read_csv(

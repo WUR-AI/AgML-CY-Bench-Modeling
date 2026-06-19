@@ -447,6 +447,8 @@ def align_inputs_and_labels(
     index_y_selection = set(df_y.index.values)
 
     for df_x in dfs_x.values():
+        if df_x.empty:
+            continue
         if len(df_x.index.names) == 1:
             index_y_selection = {
                 (loc_id, year)
