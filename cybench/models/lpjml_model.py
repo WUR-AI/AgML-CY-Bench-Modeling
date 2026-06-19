@@ -24,11 +24,16 @@ LPJML_VARIANTS = ("rainfed", "irrigated")
 
 
 @dataclass(frozen=True)
-class _LocationCalibration:
+class _MomentCalibration:
     mean_obs: float
     std_obs: float
     mean_mod: float
     std_mod: float
+
+
+@dataclass(frozen=True)
+class _LocationCalibration(_MomentCalibration):
+    n_years: int
 
 
 def lpjml_csv_path(crop: str, country: str, data_dir: str | Path = PATH_DATA_DIR) -> Path:
@@ -75,9 +80,9 @@ def load_lpjml_yields(
 
 def bias_correct_lpj_yield(
     lpj_yield: float,
-    calibration: _LocationCalibration,
+    calibration: _MomentCalibration,
 ) -> float:
-    """Per-location mean/std rescaling (notebook-style bias correction)."""
+    """Variance-matching bias correction: y_hat = y_bar + (sigma_y / sigma_P) * (P - P_bar)."""
     if calibration.std_mod == 0 or np.isnan(calibration.std_mod):
         return float(calibration.mean_obs)
     return float(
@@ -86,12 +91,28 @@ def bias_correct_lpj_yield(
     )
 
 
-class LpjmlBiasCorrectedModel(BaseModel):
-    """Standalone LPJmL baseline with per-location bias correction.
+def _needs_global_calibration(
+    local: _LocationCalibration | None,
+    *,
+    min_location_years: int,
+    min_std_mod: float,
+) -> bool:
+    if local is None:
+        return True
+    if local.n_years < min_location_years:
+        return True
+    if local.std_mod < min_std_mod or np.isnan(local.std_mod):
+        return True
+    return False
 
-    Fits location-wise mean/std mapping from training observed yields to LPJmL
-    yields, then applies it at prediction time. Uses only LPJmL outputs — no
-    weather or other CY-Bench predictors.
+
+class LpjmlBiasCorrectedModel(BaseModel):
+    """Standalone LPJmL baseline with per-location variance-matching bias correction.
+
+    For each location, fits alpha = sigma_y / sigma_P and beta = y_bar - alpha P_bar
+    on training observed yields and LPJmL outputs. When a location has fewer than
+    min_location_years training years or near-zero LPJmL variance (sigma_P), global
+    training moments across all locations are used instead.
     """
 
     def __init__(
@@ -99,6 +120,8 @@ class LpjmlBiasCorrectedModel(BaseModel):
         name: str = "lpjml_bc",
         data_dir: str | None = None,
         variant: str = "rainfed",
+        min_location_years: int = 5,
+        min_std_mod: float = 0.1,
         **_ignored,
     ):
         self.name = name
@@ -106,11 +129,13 @@ class LpjmlBiasCorrectedModel(BaseModel):
         if variant not in LPJML_VARIANTS:
             raise ValueError(f"variant must be one of {LPJML_VARIANTS}, got {variant!r}")
         self._variant = variant
+        self._min_location_years = int(min_location_years)
+        self._min_std_mod = float(min_std_mod)
         self._crop: str | None = None
         self._country: str | None = None
         self._lpj_yields: pd.Series | None = None
         self._calibration: dict[str, _LocationCalibration] = {}
-        self._global_mean_obs: float | None = None
+        self._global_calibration: _MomentCalibration | None = None
 
     def fit(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, dataset: PandasDataset, **fit_params
@@ -123,8 +148,8 @@ class LpjmlBiasCorrectedModel(BaseModel):
         )
 
         y = dataset.y.reset_index()
-        self._global_mean_obs = float(y[KEY_TARGET].mean())
         self._calibration = {}
+        self._global_calibration = self._fit_global_calibration(y)
 
         for loc, obs_sub in y.groupby(KEY_LOC):
             mod_sub = self._lpj_series_for_rows(obs_sub[[KEY_LOC, KEY_YEAR]])
@@ -143,20 +168,34 @@ class LpjmlBiasCorrectedModel(BaseModel):
                 std_obs=std_obs,
                 mean_mod=mean_mod,
                 std_mod=std_mod,
+                n_years=len(mod_sub),
             )
 
+        n_global = sum(
+            1
+            for loc in self._calibration
+            if _needs_global_calibration(
+                self._calibration[loc],
+                min_location_years=self._min_location_years,
+                min_std_mod=self._min_std_mod,
+            )
+        )
         log.info(
-            "LpjmlBiasCorrectedModel fitted for %s/%s: %d locations calibrated",
+            "LpjmlBiasCorrectedModel fitted for %s/%s: %d locations calibrated "
+            "(%d use global fallback, N_min=%d, sigma_P_min=%.3f)",
             crop,
             country,
             len(self._calibration),
+            n_global,
+            self._min_location_years,
+            self._min_std_mod,
         )
         return self, {}
 
     def predict(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, dataset: PandasDataset, **predict_params
     ) -> tuple[npt.NDArray[Any], dict[str, Any]]:
-        if self._lpj_yields is None or self._global_mean_obs is None:
+        if self._lpj_yields is None or self._global_calibration is None:
             raise RuntimeError(f"{self.name} must be fitted before predict()")
 
         y = dataset.y
@@ -170,14 +209,50 @@ class LpjmlBiasCorrectedModel(BaseModel):
             if pd.isna(lpj):
                 predictions[i] = np.nan
                 continue
-            cal = self._calibration.get(loc_s)
-            if cal is None:
-                predictions[i] = float(lpj)
-                log.debug("No calibration for %s; using raw LPJmL", loc_s)
-                continue
+            local = self._calibration.get(loc_s)
+            cal = self._effective_calibration(local)
             predictions[i] = bias_correct_lpj_yield(float(lpj), cal)
 
         return predictions, {}
+
+    def _effective_calibration(
+        self, local: _LocationCalibration | None
+    ) -> _MomentCalibration:
+        assert self._global_calibration is not None
+        if _needs_global_calibration(
+            local,
+            min_location_years=self._min_location_years,
+            min_std_mod=self._min_std_mod,
+        ):
+            return self._global_calibration
+        assert local is not None
+        return local
+
+    def _fit_global_calibration(self, y: pd.DataFrame) -> _MomentCalibration:
+        assert self._lpj_yields is not None
+        keys = list(zip(y[KEY_LOC], y[KEY_YEAR].astype(int), strict=True))
+        mod_vals = [self._lpj_yields.get(key, np.nan) for key in keys]
+        mod_arr = np.asarray(mod_vals, dtype=float)
+        obs_arr = y[KEY_TARGET].to_numpy(dtype=float)
+        mask = ~np.isnan(mod_arr)
+        obs_arr = obs_arr[mask]
+        mod_arr = mod_arr[mask]
+
+        if obs_arr.size == 0:
+            raise ValueError("No overlapping LPJmL and observed yields in training set")
+
+        std_obs = float(obs_arr.std(ddof=0))
+        std_mod = float(mod_arr.std(ddof=0))
+        if np.isnan(std_obs):
+            std_obs = 0.0
+        if np.isnan(std_mod):
+            std_mod = 0.0
+        return _MomentCalibration(
+            mean_obs=float(obs_arr.mean()),
+            std_obs=std_obs,
+            mean_mod=float(mod_arr.mean()),
+            std_mod=std_mod,
+        )
 
     def _lpj_series_for_rows(self, rows: pd.DataFrame) -> pd.Series:
         assert self._lpj_yields is not None
