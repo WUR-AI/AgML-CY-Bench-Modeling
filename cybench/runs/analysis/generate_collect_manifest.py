@@ -26,8 +26,8 @@ from cybench.runs.analysis.publish_pipeline_lib import (
     filter_ready_targets,
     horizon_to_batch_suffix,
     load_pipeline_defaults,
-    has_walk_forward_runs_fast,
 )
+from cybench.runs.slurm.benchmark_submit_lib import resolve_batch_dir
 
 _DEFAULT_CONFIG = Path(__file__).resolve().parent / "dashboard_targets.yaml"
 
@@ -119,7 +119,12 @@ def main() -> int:
     config_path = args.config if args.config.is_file() else None
     defaults = load_pipeline_defaults(config_path)
     print(
-        "[INFO] Scanning batch folders on lustre (fast; no CSV reads)...",
+        "[INFO] generate_collect_manifest: fast scan (no CSV/Hydra reads unless --mode ready)",
+        file=sys.stderr,
+        flush=True,
+    )
+    print(
+        "[INFO] Scanning batch folders on lustre...",
         file=sys.stderr,
         flush=True,
     )
@@ -129,6 +134,11 @@ def main() -> int:
         defaults=defaults,
         countries=args.countries,
         horizons=args.horizons,
+    )
+    print(
+        f"[INFO] Found {len(targets)} batch folder(s) under {defaults.output_root}",
+        file=sys.stderr,
+        flush=True,
     )
     if args.mode == "ready":
         print(
@@ -144,8 +154,10 @@ def main() -> int:
             report = assess_readiness(target)
             if not report.ready or report.complete_runs <= 0:
                 continue
-        elif not has_walk_forward_runs_fast(target):
-            continue
+        else:
+            baselines_dir, _ = resolve_batch_dir(target.output_root, target.batch_name)
+            if not baselines_dir.is_dir():
+                continue
         lines.append(f"{target.country_upper} {target.batch_horizon} {plot}")
 
     if args.list:

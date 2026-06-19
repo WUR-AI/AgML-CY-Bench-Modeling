@@ -263,7 +263,7 @@ def discover_baselines_batches_fast(
     seen: set[tuple[str, str, int]] = set()
     if not output_root.is_dir():
         return targets
-    for entry in sorted(output_root.iterdir()):
+    for entry in sorted(output_root.glob("baselines_*")):
         if not entry.is_dir():
             continue
         parsed = parse_batch_dir_name(entry.name)
@@ -294,14 +294,8 @@ def has_walk_forward_runs_fast(target: PublishTarget) -> bool:
     if not baselines_dir.is_dir():
         return False
     cc = target.country_upper
-    token = "_walk_forward_"
-    for entry in baselines_dir.iterdir():
-        if not entry.is_dir() or token not in entry.name:
-            continue
-        prefix = entry.name.split(token, 1)[0]
-        parts = prefix.split("_", 2)
-        if len(parts) >= 2 and parts[1].upper() == cc:
-            return True
+    for _ in baselines_dir.glob(f"*_{cc}_*_walk_forward_*"):
+        return True
     return False
 
 
