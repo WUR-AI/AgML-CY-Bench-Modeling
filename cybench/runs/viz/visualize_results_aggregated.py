@@ -341,17 +341,33 @@ th.left, td.left { text-align: left; }
     return html
 
 
+ALL_PANELS = ("map_actual", "map_pred", "scatter", "temporal")
+DASHBOARD_PANELS = ("map_actual", "map_pred", "scatter", "temporal")
+
+
+def parse_panels(raw: str) -> tuple[str, ...]:
+    panels = tuple(part.strip() for part in raw.split(",") if part.strip())
+    unknown = set(panels) - set(ALL_PANELS)
+    if unknown:
+        raise ValueError(f"Unknown panel(s): {sorted(unknown)}; allowed: {ALL_PANELS}")
+    if not panels:
+        raise ValueError("At least one panel is required")
+    return panels
+
+
 def save_panel_images(
-    fig: Figure, axes: npt.NDArray[Any], output_dir: str, dataset_key: str
+    fig: Figure,
+    panel_axes: dict[str, Axes],
+    output_dir: str,
+    dataset_key: str,
 ) -> Dict[str, str]:
     """Save each subplot panel as a separate PNG and return relative paths."""
     os.makedirs(output_dir, exist_ok=True)
     renderer = FigureCanvasAgg(fig).get_renderer()
 
-    panel_names = ["map_actual", "map_pred", "scatter", "temporal"]
     out_paths: Dict[str, str] = {}
 
-    for panel_name, ax in zip(panel_names, axes):
+    for panel_name, ax in panel_axes.items():
         axis = cast(Axes, ax)
         tight_bbox = axis.get_tightbbox(renderer)
         if tight_bbox is None:
@@ -499,12 +515,89 @@ def generate_local_report_html(stats_list: List[dict], pdf_filename: str) -> str
 # -----------------------------
 # Plotting
 # -----------------------------
+def _plot_scatter_panel(
+    ax: Axes,
+    fig: Figure,
+    df_filtered: pd.DataFrame,
+    model: str,
+    *,
+    metrics_model: dict,
+    metrics_base: dict | None,
+    n_samples: int,
+) -> None:
+    y_true = _as_float_array(df_filtered[KEY_TARGET])
+    y_pred = _as_float_array(df_filtered[model])
+
+    lo = float(min(np.min(y_true), np.min(y_pred)))
+    hi = float(max(np.max(y_true), np.max(y_pred)))
+    pad = (hi - lo) * 0.04 or 1.0
+    lim = (lo - pad, hi + pad)
+
+    if len(y_true) > 500:
+        hb = ax.hexbin(
+            y_true,
+            y_pred,
+            gridsize=42,
+            cmap="cividis",
+            mincnt=1,
+            linewidths=0.15,
+            edgecolors="face",
+            alpha=0.92,
+            extent=(*lim, *lim),
+        )
+        fig.colorbar(hb, ax=ax, label="count", shrink=0.72, pad=0.02)
+    else:
+        ax.scatter(
+            y_true,
+            y_pred,
+            alpha=0.5,
+            s=14,
+            c="#2563eb",
+            edgecolors="none",
+            rasterized=True,
+        )
+
+    ax.plot(lim, lim, color="#64748b", linestyle="--", linewidth=1.2, zorder=5)
+    ax.set_xlim(lim)
+    ax.set_ylim(lim)
+    ax.set_aspect("equal", adjustable="box")
+    ax.grid(True, alpha=0.25, linestyle=":")
+
+    ax.set_title("Scatter (all region-years)")
+    ax.set_xlabel("Actual yield")
+    ax.set_ylabel("Predicted yield")
+
+    def fmt_line(label, m):
+        return (
+            f"{label}: r = {m['r']:.2f}, R² = {m['r2']:.2f} | "
+            f"r_res = {m['r_res']:.2f}, R²_res = {m['r2_res']:.2f}"
+        )
+
+    txt_lines = [f"N = {n_samples:,}", fmt_line("Model", metrics_model)]
+    if metrics_base:
+        txt_lines.append(fmt_line("Base", metrics_base))
+    else:
+        txt_lines.append("(Baseline not found)")
+
+    ax.text(
+        0.05,
+        0.95,
+        "\n".join(txt_lines),
+        transform=ax.transAxes,
+        fontsize=10,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+    )
+
+
 def process_dataset(
     dataset_key: str,
     df: pd.DataFrame,
     model: str,
-    world: gpd.GeoDataFrame,
-) -> Tuple[Figure, dict, npt.NDArray[Any]]:
+    *,
+    world: gpd.GeoDataFrame | None,
+    panels: tuple[str, ...] = ALL_PANELS,
+) -> Tuple[Figure, dict, dict[str, Axes]]:
 
     # 1. Core Year Filtering
     years = sorted(df["year"].unique())
@@ -524,33 +617,38 @@ def process_dataset(
 
     df_filtered = cast(pd.DataFrame, df[df[KEY_LOC].isin(valid_locs)].copy())
 
-    # 2. Geometry Prep
-    try:
-        crop, region_code = dataset_key.split("_")[:2]
-    except ValueError:
-        crop, region_code = "Unknown", "XX"
+    need_maps = "map_actual" in panels or "map_pred" in panels
+    geo_df = None
+    bounds = None
+    if need_maps:
+        if world is None:
+            raise ValueError("World geometry is required for map panels")
+        try:
+            _, region_code = dataset_key.split("_")[:2]
+        except ValueError:
+            region_code = "XX"
 
-    shapes = get_shapes_from_polygons(region=region_code)
-    geo_df = shapes[[KEY_LOC, "geometry"]].merge(
-        df_filtered.groupby(KEY_LOC)[[KEY_TARGET, model]].mean().reset_index(),
-        on=KEY_LOC,
-        how="inner",
-    )
+        shapes = get_shapes_from_polygons(region=region_code)
+        geo_df = shapes[[KEY_LOC, "geometry"]].merge(
+            df_filtered.groupby(KEY_LOC)[[KEY_TARGET, model]].mean().reset_index(),
+            on=KEY_LOC,
+            how="inner",
+        )
 
-    if geo_df.empty:
-        raise ValueError(f"No geometry matches found for regions in {dataset_key}.")
+        if geo_df.empty:
+            raise ValueError(f"No geometry matches found for regions in {dataset_key}.")
 
-    bounds = geo_df.total_bounds
-    pad_x = (bounds[2] - bounds[0]) * 0.05
-    pad_y = (bounds[3] - bounds[1]) * 0.05
-    bounds = (
-        bounds[0] - pad_x,
-        bounds[2] + pad_x,
-        bounds[1] - pad_y,
-        bounds[3] + pad_y,
-    )
+        raw_bounds = geo_df.total_bounds
+        pad_x = (raw_bounds[2] - raw_bounds[0]) * 0.05
+        pad_y = (raw_bounds[3] - raw_bounds[1]) * 0.05
+        bounds = (
+            raw_bounds[0] - pad_x,
+            raw_bounds[2] + pad_x,
+            raw_bounds[1] - pad_y,
+            raw_bounds[3] + pad_y,
+        )
 
-    # 3. Stats Calculation (Primary Model)
+    # Stats calculation (Primary Model)
     metrics_model = get_metrics_dict(df_filtered, KEY_TARGET, model)
 
     # 3b. Stats Calculation (Baseline)
@@ -612,98 +710,69 @@ def process_dataset(
         "metrics_spatial": {"r": r_spatial_model, "r2": r2_spatial_model},
     }
 
-    # 4. Plotting
-    fig, axes = plt.subplots(1, 4, figsize=(26, 6.5), constrained_layout=True)
+    n_panels = len(panels)
+    fig, axes_arr = plt.subplots(
+        1, n_panels, figsize=(6.5 * n_panels, 6.5), constrained_layout=True
+    )
+    if n_panels == 1:
+        axes_list = [cast(Axes, axes_arr)]
+    else:
+        axes_list = [cast(Axes, ax) for ax in axes_arr]
     fig.suptitle(f"{dataset_key} (Model: {model})", fontsize=16)
 
-    # Map 1: GT
-    ax = axes[0]
-    world.plot(ax=ax, color="lightgrey", edgecolor="k", linewidth=0.1)
-    geo_df.plot(column=KEY_TARGET, ax=ax, legend=True, legend_kwds={"shrink": 0.5})
-    ax.set_xlim(bounds[0], bounds[1])
-    ax.set_ylim(bounds[2], bounds[3])
-    ax.set_title(f"Ground Truth (Mean)\n($N_{{reg}}={n_regions}$)")
-    ax.axis("off")
+    panel_axes: dict[str, Axes] = {}
+    for panel_name, ax in zip(panels, axes_list):
+        panel_axes[panel_name] = ax
+        if panel_name == "map_actual":
+            assert geo_df is not None and bounds is not None and world is not None
+            world.plot(ax=ax, color="lightgrey", edgecolor="k", linewidth=0.1)
+            geo_df.plot(column=KEY_TARGET, ax=ax, legend=True, legend_kwds={"shrink": 0.5})
+            ax.set_xlim(bounds[0], bounds[1])
+            ax.set_ylim(bounds[2], bounds[3])
+            ax.set_title(f"Ground Truth (Mean)\n($N_{{reg}}={n_regions}$)")
+            ax.axis("off")
+        elif panel_name == "map_pred":
+            assert geo_df is not None and bounds is not None and world is not None
+            world.plot(ax=ax, color="lightgrey", edgecolor="k", linewidth=0.1)
+            geo_df.plot(column=model, ax=ax, legend=True, legend_kwds={"shrink": 0.5})
+            ax.set_xlim(bounds[0], bounds[1])
+            ax.set_ylim(bounds[2], bounds[3])
+            ax.set_title(f"Prediction (Mean)\n({model})")
+            ax.axis("off")
+        elif panel_name == "scatter":
+            _plot_scatter_panel(
+                ax,
+                fig,
+                df_filtered,
+                model,
+                metrics_model=metrics_model,
+                metrics_base=metrics_base,
+                n_samples=n_samples,
+            )
+        elif panel_name == "temporal":
+            ax.plot(ts.index, ts[KEY_TARGET], "-o", linewidth=2, label="Actual")
+            ax.plot(
+                ts.index,
+                ts[model],
+                "--o",
+                linewidth=2,
+                label=f"Model ($r={r_time_model:.2f}$)",
+            )
+            if has_baseline:
+                ax.plot(
+                    ts.index,
+                    ts[base_col_name],
+                    ":o",
+                    color="green",
+                    alpha=0.7,
+                    label=f"Base ($r={r_time_base:.2f}$)",
+                )
+            ax.set_title(f"Spatial Mean over Time ($N_{{yrs}}={n_years}$)")
+            ax.legend()
+            ax.grid(alpha=0.3)
+            ax.set_xlabel("Year")
 
-    # Map 2: Pred
-    ax = axes[1]
-    world.plot(ax=ax, color="lightgrey", edgecolor="k", linewidth=0.1)
-    geo_df.plot(column=model, ax=ax, legend=True, legend_kwds={"shrink": 0.5})
-    ax.set_xlim(bounds[0], bounds[1])
-    ax.set_ylim(bounds[2], bounds[3])
-    ax.set_title(f"Prediction (Mean)\n({model})")
-    ax.axis("off")
-
-    # Scatter
-    ax = axes[2]
-    y_true = _as_float_array(df_filtered[KEY_TARGET])
-    y_pred = _as_float_array(df_filtered[model])
-
-    if len(y_true) > 500:
-        ax.hexbin(y_true, y_pred, gridsize=50, cmap="Blues", mincnt=1)
-    else:
-        ax.scatter(y_true, y_pred, alpha=0.6, s=15, label="Model")
-
-    lo = float(min(np.min(y_true), np.min(y_pred)))
-    hi = float(max(np.max(y_true), np.max(y_pred)))
-    ax.plot([lo, hi], [lo, hi], "k--", alpha=0.5)
-
-    ax.set_title("Scatter (All Region-Years)")
-    ax.set_xlabel("Actual Yield")
-    ax.set_ylabel("Predicted Yield")
-
-    # Stats Text Box
-    txt_lines = [f"$N={n_samples}$"]
-
-    def fmt_line(label, m):
-        return (
-            f"**{label}**: $r={m['r']:.2f}, R^2={m['r2']:.2f}$ | "
-            f"$r_{{res}}={m['r_res']:.2f}, R^2_{{res}}={m['r2_res']:.2f}$"
-        )
-
-    txt_lines.append(fmt_line("Model", metrics_model))
-
-    if metrics_base:
-        txt_lines.append(fmt_line("Base", metrics_base))
-    else:
-        txt_lines.append("(Baseline not found)")
-
-    stats_text = "\n".join(txt_lines)
-
-    ax.text(
-        0.05,
-        0.95,
-        stats_text,
-        transform=ax.transAxes,
-        fontsize=10,
-        verticalalignment="top",
-        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
-    )
-
-    # Time Series
-    ax = axes[3]
-    ax.plot(ts.index, ts[KEY_TARGET], "-o", linewidth=2, label="Actual")
-    ax.plot(
-        ts.index, ts[model], "--o", linewidth=2, label=f"Model ($r={r_time_model:.2f}$)"
-    )
-
-    if has_baseline:
-        # We plot the explicitly renamed base column
-        ax.plot(
-            ts.index,
-            ts[base_col_name],
-            ":o",
-            color="green",
-            alpha=0.7,
-            label=f"Base ($r={r_time_base:.2f}$)",
-        )
-
-    ax.set_title(f"Spatial Mean over Time ($N_{{yrs}}={n_years}$)")
-    ax.legend()
-    ax.grid(alpha=0.3)
-    ax.set_xlabel("Year")
-
-    return fig, stats, axes
+    return fig, stats, panel_axes
 
 
 # -----------------------------
@@ -732,14 +801,39 @@ def main():
         "--save_individual", action="store_true", help="Save individual PNG/JSON files."
     )
     parser.add_argument(
+        "--dashboard-assets",
+        action="store_true",
+        help="Scatter + temporal PNGs only (published dashboard; no PDF/maps/reports).",
+    )
+    parser.add_argument(
+        "--panels",
+        help=f"Comma-separated panels (default: all). Choices: {', '.join(ALL_PANELS)}",
+    )
+    parser.add_argument(
         "--min_years",
         type=int,
         default=3,
         help="Minimum distinct years required per dataset (default: 3).",
     )
-    parser.add_argument("--output_pdf", help="Custom path for combined PDF.")
+    parser.add_argument(
+        "--output_pdf",
+        help="Optional combined PDF path (skipped with --dashboard-assets).",
+    )
 
     args = parser.parse_args()
+
+    if args.dashboard_assets:
+        panels = DASHBOARD_PANELS
+        write_reports = False
+        pdf_path = None
+    elif args.panels:
+        panels = parse_panels(args.panels)
+        write_reports = True
+        pdf_path = args.output_pdf or os.path.join(args.results_dir, "evaluation_plots.pdf")
+    else:
+        panels = ALL_PANELS
+        write_reports = True
+        pdf_path = args.output_pdf or os.path.join(args.results_dir, "evaluation_plots.pdf")
 
     # 1. Discovery
     all_groups = discover_inputs(args.results_dir)
@@ -761,72 +855,75 @@ def main():
         print("[INFO] No datasets matched. Exiting.")
         return
 
-    # 3. Setup Output
-    if args.output_pdf:
-        pdf_path = args.output_pdf
+    need_maps = "map_actual" in panels or "map_pred" in panels
+    world = None
+    if need_maps:
+        print("[INFO] Loading world geometry...")
+        world = gpd.read_file(world_shape_path())
+
+    if pdf_path:
+        print(f"[INFO] Processing {len(datasets_to_run)} dataset(s). PDF: {pdf_path}")
+        os.makedirs(os.path.dirname(os.path.abspath(pdf_path)), exist_ok=True)
     else:
-        pdf_path = os.path.join(args.results_dir, "evaluation_plots.pdf")
+        print(
+            f"[INFO] Processing {len(datasets_to_run)} dataset(s). "
+            f"Panels: {', '.join(panels)} (no PDF)"
+        )
 
-    print("[INFO] Loading world geometry...")
-    world = gpd.read_file(world_shape_path())
-
-    print(f"[INFO] Processing {len(datasets_to_run)} dataset(s). Output: {pdf_path}")
-    os.makedirs(os.path.dirname(os.path.abspath(pdf_path)), exist_ok=True)
-
-    # Accumulator for final table
     all_stats_list = []
     panel_dir = os.path.join(args.results_dir, "report_assets")
 
-    with PdfPages(pdf_path) as pdf:
-        for key in sorted(datasets_to_run.keys()):
-            files = datasets_to_run[key]
-            print(f"--> {key}...", end=" ", flush=True)
-
-            # Load
-            df, msg = load_and_clean_data(
-                files, args.model, min_years=args.min_years, dataset_key=key
+    def _run_dataset(key: str, files: list[str], pdf: PdfPages | None) -> None:
+        df, msg = load_and_clean_data(
+            files, args.model, min_years=args.min_years, dataset_key=key
+        )
+        if df is None:
+            print(f"[SKIP] {msg}")
+            return
+        try:
+            fig, stats, panel_axes = process_dataset(
+                key, df, args.model, world=world, panels=panels
             )
-            if df is None:
-                print(f"[SKIP] {msg}")
-                continue
-
-            # Process
-            try:
-                fig, stats, axes = process_dataset(key, df, args.model, world)
+            if pdf is not None:
                 pdf.savefig(fig)
+            all_stats_list.append(stats)
 
-                # Append stats for table generation
-                all_stats_list.append(stats)
+            if args.save_individual:
+                fig.savefig(
+                    os.path.join(args.results_dir, f"{key}_plot.png"),
+                    dpi=100,
+                    bbox_inches="tight",
+                )
+                with open(
+                    os.path.join(args.results_dir, f"{key}_stats.json"), "w"
+                ) as f:
+                    json.dump(stats, f, indent=2)
 
-                if args.save_individual:
-                    fig.savefig(
-                        os.path.join(args.results_dir, f"{key}_plot.png"),
-                        dpi=100,
-                        bbox_inches="tight",
-                    )
-                    with open(
-                        os.path.join(args.results_dir, f"{key}_stats.json"), "w"
-                    ) as f:
-                        json.dump(stats, f, indent=2)
+            panel_paths_abs = save_panel_images(fig, panel_axes, panel_dir, key)
+            stats["panel_paths"] = {
+                k: os.path.relpath(v, args.results_dir).replace(os.sep, "/")
+                for k, v in panel_paths_abs.items()
+            }
+            plt.close(fig)
+            print("[OK]")
+        except Exception as e:
+            print(f"[FAIL] {e}")
+            import traceback
 
-                # Always save per-panel PNGs for local interactive report.
-                panel_paths_abs = save_panel_images(fig, axes, panel_dir, key)
-                stats["panel_paths"] = {
-                    k: os.path.relpath(v, args.results_dir).replace(os.sep, "/")
-                    for k, v in panel_paths_abs.items()
-                }
+            traceback.print_exc()
 
-                plt.close(fig)
-                print("[OK]")
+    dataset_items = sorted(datasets_to_run.items())
+    if pdf_path:
+        with PdfPages(pdf_path) as pdf:
+            for key, files in dataset_items:
+                print(f"--> {key}...", end=" ", flush=True)
+                _run_dataset(key, files, pdf)
+    else:
+        for key, files in dataset_items:
+            print(f"--> {key}...", end=" ", flush=True)
+            _run_dataset(key, files, None)
 
-            except Exception as e:
-                print(f"[FAIL] {e}")
-                import traceback
-
-                traceback.print_exc()
-
-    # 4. Generate and Print Markdown Table
-    if all_stats_list:
+    if write_reports and all_stats_list:
         md_table = generate_markdown_table(all_stats_list)
 
         table_path = os.path.join(args.results_dir, "summary_table.md")
@@ -839,7 +936,7 @@ def main():
             f.write(html_table)
 
         report_html = generate_local_report_html(
-            all_stats_list, os.path.basename(pdf_path)
+            all_stats_list, os.path.basename(pdf_path or "evaluation_plots.pdf")
         )
         report_html_path = os.path.join(args.results_dir, "report.html")
         with open(report_html_path, "w") as f:
@@ -849,8 +946,10 @@ def main():
         print(f"[DONE] HTML table saved to: {html_table_path}")
         print(f"[DONE] Local interactive report saved to: {report_html_path}")
         print(f"[DONE] Report panel assets saved to: {panel_dir}")
+    elif all_stats_list:
+        print(f"\n[DONE] Report panel assets saved to: {panel_dir}")
     else:
-        print("\n[WARN] No stats collected. No table generated.")
+        print("\n[WARN] No stats collected.")
 
     print("\n[DONE]")
 

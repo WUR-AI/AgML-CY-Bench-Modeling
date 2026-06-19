@@ -156,6 +156,14 @@
     }
     .img-grid { display: grid; grid-template-columns: 1fr; gap: 0.6rem; }
     .img-grid.two { grid-template-columns: 1fr 1fr; }
+    .map-caption {
+      font-size: 0.82rem;
+      margin-bottom: 0.35rem;
+      text-align: center;
+    }
+    @media (max-width: 900px) {
+      .img-grid.two { grid-template-columns: 1fr; }
+    }
     img {
       max-width: 100%;
       border: 1px solid var(--border);
@@ -202,14 +210,20 @@
       <h3>Drill-down plots</h3>
       <div id="selection-label" class="muted">Click a table row to inspect plots.</div>
       <div class="toolbar">
-        <button data-panel="maps" class="active">Maps (actual + prediction)</button>
+        <button data-panel="maps" class="active">Maps</button>
         <button data-panel="scatter">Scatter</button>
         <button data-panel="temporal">Temporal</button>
       </div>
       <div id="missing-note" class="muted"></div>
       <div id="img-grid" class="img-grid two">
-        <img id="drill-image-a" alt="Selected panel image A" />
-        <img id="drill-image-b" alt="Selected panel image B" />
+        <div>
+          <div id="map-caption-left" class="map-caption muted">Ground truth (mean yield)</div>
+          <img id="drill-image-a" alt="Ground truth map" />
+        </div>
+        <div id="drill-col-b">
+          <div id="map-caption-right" class="map-caption muted">Model prediction</div>
+          <img id="drill-image-b" alt="Model prediction map" />
+        </div>
       </div>
     </div>
   </div>
@@ -225,6 +239,9 @@
     const selectionLabel = document.getElementById("selection-label");
     const missingNote = document.getElementById("missing-note");
     const imgGrid = document.getElementById("img-grid");
+    const drillColB = document.getElementById("drill-col-b");
+    const mapCaptionLeft = document.getElementById("map-caption-left");
+    const mapCaptionRight = document.getElementById("map-caption-right");
     const drillImageA = document.getElementById("drill-image-a");
     const drillImageB = document.getElementById("drill-image-b");
     const panelButtons = Array.from(document.querySelectorAll(".toolbar button"));
@@ -505,24 +522,32 @@
 
       if (activePanel === "maps") {
         imgGrid.classList.add("two");
-        const a = images["map_actual"] || "";
-        const b = images["map_pred"] || "";
-        if (!a && !b) {
+        drillColB.style.display = "";
+        mapCaptionLeft.style.display = "";
+        mapCaptionRight.style.display = "";
+        mapCaptionLeft.textContent = "Ground truth (mean yield)";
+        mapCaptionRight.textContent = "Model prediction";
+
+        const actual = images["map_actual"] || "";
+        const pred = images["map_pred"] || "";
+        if (!actual && !pred) {
           drillImageA.removeAttribute("src");
           drillImageB.removeAttribute("src");
           missingNote.textContent =
-            "No map images found for this run. Generate report assets first (map_actual/map_pred).";
+            "No map images found. Re-run collect with plot enabled.";
           return;
         }
-        drillImageA.src = a || "";
-        drillImageB.src = b || "";
-        if (!a) drillImageA.removeAttribute("src");
-        if (!b) drillImageB.removeAttribute("src");
+        if (actual) drillImageA.src = actual; else drillImageA.removeAttribute("src");
+        if (pred) drillImageB.src = pred; else drillImageB.removeAttribute("src");
         return;
       }
 
       imgGrid.classList.remove("two");
+      drillColB.style.display = "none";
+      mapCaptionLeft.style.display = "none";
+      mapCaptionRight.style.display = "none";
       drillImageB.removeAttribute("src");
+
       const path = images[activePanel] || "";
       if (!path) {
         drillImageA.removeAttribute("src");
@@ -551,11 +576,11 @@
 
     drillImageA.addEventListener("error", () => {
       missingNote.textContent =
-        "Could not load image A. Check relative path vs dashboard location.";
+        "Could not load image. Re-run collect with plot enabled to regenerate dashboard assets.";
     });
     drillImageB.addEventListener("error", () => {
       missingNote.textContent =
-        "Could not load image B. Check relative path vs dashboard location.";
+        "Could not load prediction map. Re-run collect with plot enabled.";
     });
 
     buildRows();

@@ -262,9 +262,7 @@ def run_visualize(
         model_col,
         "--min_years",
         str(min_years),
-        "--save_individual",
-        "--output_pdf",
-        str(plot_output_dir / "evaluation_plots.pdf"),
+        "--dashboard-assets",
     ]
     print(f"[INFO] Plotting {model_label} ({model_col}) from {preds_dir}")
     proc = subprocess.run(cmd, cwd=REPO_DIR, capture_output=True, text=True)
