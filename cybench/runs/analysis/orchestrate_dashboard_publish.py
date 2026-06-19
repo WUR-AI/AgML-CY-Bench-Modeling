@@ -12,16 +12,16 @@ Examples (from repo root on anunna)::
 
     # Collect + publish + index (full pipeline, scans baselines_*)
     poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
-        --mode ready --commit-once --push
+        --mode ready --commit --push
 
     # Publish-only (fast: uses paper_walk_forward_* only, no baselines scan)
     poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
-        --mode ready --stages publish,index --commit-once --push
+        --mode ready --stages publish,index --commit --push
 
     # Parallel collect on compute nodes, then publish on login:
     cybench/runs/slurm/submit_collect.sh --no-plot --mode ready --submit
     poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
-        --mode ready --stages publish,index --commit-once --push
+        --mode ready --stages publish,index --commit --push
 
     # Force republish one batch
     poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
@@ -47,6 +47,7 @@ from cybench.runs.analysis.publish_pipeline_lib import (
     run_commit_stage,
     run_index_stage,
     run_publish_stage,
+    git_commit_all,
 )
 
 _DEFAULT_CONFIG = Path(__file__).resolve().parent / "dashboard_targets.yaml"
@@ -133,12 +134,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--commit",
         action="store_true",
-        help="Git commit publish-root changes (see --commit-once)",
+        help="Git commit publish-root changes after publish/index (once at end by default)",
     )
     parser.add_argument(
-        "--commit-once",
+        "--commit-each",
         action="store_true",
-        help="Single git commit after all targets (default: one commit per country)",
+        help="One git commit per country (default: single commit after all targets)",
     )
     parser.add_argument(
         "--push",
@@ -220,7 +221,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.commit:
         stages.add("commit")
     force = _parse_force_stages(args.force)
-    commit_per_target = args.commit and not args.commit_once
+    commit_per_target = args.commit and args.commit_each
+    commit_once = args.commit and not args.commit_each
     exit_code = 0
 
     if publish_only:
@@ -265,41 +267,14 @@ def main(argv: list[str] | None = None) -> int:
             status = run_index_stage(targets[0], dry_run=False)
             print(f"\n[OK] index: {status.message}")
 
-    if "commit" in stages and args.commit_once:
-        publish_root = targets[0].publish_root
-        if args.dry_run:
-            print(f"\n[DRY-RUN] git add -A && git commit in {publish_root}")
-            if args.push:
-                print("[DRY-RUN] git push")
-        elif (publish_root / ".git").is_dir():
-            subprocess.run(["git", "-C", str(publish_root), "add", "-A"], check=True)
-            status = subprocess.run(
-                ["git", "-C", str(publish_root), "status", "--porcelain"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if status.stdout.strip():
-                subprocess.run(
-                    [
-                        "git",
-                        "-C",
-                        str(publish_root),
-                        "commit",
-                        "-m",
-                        "Sync walk-forward dashboards",
-                    ],
-                    check=True,
-                )
-                print("\n[OK] commit: Sync walk-forward dashboards")
-                if args.push:
-                    subprocess.run(["git", "-C", str(publish_root), "push"], check=True)
-                    print("[OK] push: done")
-            else:
-                print("\n[SKIP] commit: no changes")
-        else:
-            print(f"\n[SKIP] commit: not a git repo: {publish_root}", file=sys.stderr)
-            exit_code = 1
+    if "commit" in stages and commit_once:
+        status = git_commit_all(
+            targets[0].publish_root,
+            message="Sync walk-forward dashboards",
+            push=args.push,
+            dry_run=args.dry_run,
+        )
+        print(f"\n[{'SKIP' if status.skipped else 'OK'}] commit: {status.message}")
 
     return exit_code
 

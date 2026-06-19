@@ -770,8 +770,31 @@ def run_commit_stage(
     insights = publish_root / "insights.html"
     if insights.is_file():
         rel_paths.append("insights.html")
+
+    message = f"Update {target.publish_slug} dashboard"
+    return git_commit_paths(
+        publish_root,
+        rel_paths,
+        message=message,
+        push=push,
+        dry_run=dry_run,
+    )
+
+
+def git_commit_paths(
+    publish_root: Path,
+    paths: list[str],
+    *,
+    message: str,
+    push: bool = False,
+    dry_run: bool = False,
+) -> StageStatus:
+    """Stage and commit changes under ``paths`` (plus deletions and new files)."""
+    if not (publish_root / ".git").is_dir():
+        return StageStatus("commit", True, f"not a git repo: {publish_root}")
+
     status = subprocess.run(
-        ["git", "-C", str(publish_root), "status", "--porcelain", "--", *rel_paths],
+        ["git", "-C", str(publish_root), "status", "--porcelain", "--", *paths],
         capture_output=True,
         text=True,
         check=False,
@@ -779,17 +802,62 @@ def run_commit_stage(
     if not status.stdout.strip():
         return StageStatus("commit", True, "no changes to commit")
 
-    message = f"Update {target.publish_slug} dashboard"
     if dry_run:
-        print(f"[DRY-RUN] git commit in {publish_root}: {message}")
+        print(f"[DRY-RUN] git add + commit in {publish_root}: {message}")
         if push:
             print("[DRY-RUN] git push")
         return StageStatus("commit", False, f"would commit: {message}")
 
     subprocess.run(
-        ["git", "-C", str(publish_root), "add", *rel_paths],
+        ["git", "-C", str(publish_root), "add", "-A", "--", *paths],
         check=True,
     )
+    subprocess.run(
+        ["git", "-C", str(publish_root), "commit", "-m", message],
+        check=True,
+    )
+    if push:
+        subprocess.run(["git", "-C", str(publish_root), "push"], check=True)
+    return StageStatus("commit", False, message)
+
+
+def git_commit_all(
+    publish_root: Path,
+    *,
+    message: str,
+    push: bool = False,
+    dry_run: bool = False,
+) -> StageStatus:
+    """``git add -A``, commit if anything staged, optionally push."""
+    if not (publish_root / ".git").is_dir():
+        return StageStatus("commit", True, f"not a git repo: {publish_root}")
+
+    if dry_run:
+        print(f"[DRY-RUN] git add -A && git commit in {publish_root}: {message}")
+        if push:
+            print("[DRY-RUN] git push")
+        return StageStatus("commit", False, f"would commit: {message}")
+
+    subprocess.run(["git", "-C", str(publish_root), "add", "-A"], check=True)
+    staged = subprocess.run(
+        ["git", "-C", str(publish_root), "diff", "--cached", "--quiet"],
+        check=False,
+    )
+    if staged.returncode == 0:
+        dirty = subprocess.run(
+            ["git", "-C", str(publish_root), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if dirty.stdout.strip():
+            print(
+                "[WARN] Working tree has changes but nothing was staged — "
+                "check .gitignore or file permissions",
+                file=__import__("sys").stderr,
+            )
+        return StageStatus("commit", True, "no changes to commit")
+
     subprocess.run(
         ["git", "-C", str(publish_root), "commit", "-m", message],
         check=True,
