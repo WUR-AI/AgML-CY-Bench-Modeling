@@ -161,7 +161,8 @@
       <h2>Research Q1 — Which models perform best across countries?</h2>
       <p class="muted">
         Rankings are computed <strong>per forecast horizon</strong> and can be split by <strong>crop</strong>.
-        Each row is the unweighted <strong>median</strong> NRMSE across country datasets (lower is better).
+        Each row is the <strong>median NRMSE across countries</strong> for the selected crop and horizon
+        (one NRMSE per country; lower is better).
         <strong>Beat baseline %</strong> = share of datasets where the model beats
         <span id="baseline-label">average</span> (shown as its own row for reference).
         Optional <em>Skilful only</em> keeps datasets where the model beats baseline or has R² &gt; 0.
@@ -377,9 +378,10 @@
     }
 
     function rq1MatrixSource() {
-      const byHorizon = DATA.model_country && DATA.model_country[rq1Horizon];
-      if (!byHorizon) return { models: [], countries: [], cells: [] };
-      return byHorizon[rq1Crop] || byHorizon.all || { models: [], countries: [], cells: [] };
+      const root = rq1SkilledOnly ? DATA.model_country_skilled : DATA.model_country;
+      const byHorizon = root && root[rq1Horizon];
+      if (!byHorizon) return { models: [], countries: [], cells: [], model_totals: {} };
+      return byHorizon[rq1Crop] || byHorizon.all || { models: [], countries: [], cells: [], model_totals: {} };
     }
 
     function matrixMetricSpec() {
@@ -388,24 +390,15 @@
           key: "median_r2",
           label: "R²",
           bg: fixedR2Bg,
-          note: "Row median = median across countries. Cell values = median NRMSE/R² per model×country. Green = higher R².",
+          note: "Median column = median of country values (same as Table 1). Country cells = NRMSE/R² for that model×country. Green = higher R².",
         };
       }
       return {
         key: "median_nrmse",
         label: "NRMSE",
         bg: fixedNrmseBg,
-        note: "Row median = median across countries. Cell values = median NRMSE/R² per model×country. Green = lower NRMSE.",
+        note: "Median column = median of country values (same as Table 1). Country cells = NRMSE/R² for that model×country. Green = lower NRMSE.",
       };
-    }
-
-    function medianOf(values) {
-      const nums = values.filter(v => v !== null && v !== undefined && !Number.isNaN(Number(v)))
-        .map(v => Number(v))
-        .sort((a, b) => a - b);
-      if (!nums.length) return null;
-      const mid = Math.floor(nums.length / 2);
-      return nums.length % 2 === 1 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
     }
 
     function defaultMatrixSortDir(metric, key) {
@@ -414,18 +407,18 @@
       return "asc";
     }
 
-    function buildMatrixRows(models, countries, cellMap, spec) {
+    function buildMatrixRows(models, countries, cellMap, spec, modelTotals) {
       const rows = [];
       for (const model of models) {
         const byCountry = {};
-        const rowValues = [];
         for (const cc of countries) {
           const cell = cellMap.get(`${model}|||${cc}`);
           const raw = cell ? cell[spec.key] : null;
           byCountry[cc] = { raw, cell };
-          if (raw !== null && raw !== undefined) rowValues.push(raw);
         }
-        rows.push({ model, median: medianOf(rowValues), byCountry });
+        const total = modelTotals && modelTotals[model];
+        const median = total ? total[spec.key] : null;
+        rows.push({ model, median, byCountry });
       }
       return rows;
     }
@@ -501,7 +494,7 @@
       html += "</tr></thead><tbody>";
 
       const rows = sortMatrixRows(
-        buildMatrixRows(models, countries, cellMap, spec),
+        buildMatrixRows(models, countries, cellMap, spec, matrix.model_totals || {}),
         mcSort,
         mcDir,
       );

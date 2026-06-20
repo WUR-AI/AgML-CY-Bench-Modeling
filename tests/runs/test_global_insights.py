@@ -93,9 +93,11 @@ def test_baseline_beat_rate():
     assert xgb["beat_baseline_rate"] == 0.0
     avg = board.loc[board["model"] == "average"].iloc[0]
     assert pd.isna(avg["beat_baseline_rate"])
+    assert not bool(tagged.loc[tagged["model"] == "average", "skilled"].iloc[0])
 
 
 def test_skilled_only_leaderboard():
+    """Skilled filter drops unskilled rows; baseline models are never kept."""
     df = pd.DataFrame(
         [
             {
@@ -168,7 +170,56 @@ def test_build_model_country_matrix():
     matrix = build_model_country_matrix(df, batch_horizon="eos", crop="maize")
     assert matrix["models"] == ["average", "ridge"]
     assert matrix["countries"] == ["DE"]
-    assert matrix["cells"][0]["median_nrmse"] == 0.10
+    ridge_cell = next(c for c in matrix["cells"] if c["model"] == "ridge")
+    average_cell = next(c for c in matrix["cells"] if c["model"] == "average")
+    assert ridge_cell["median_nrmse"] == 0.10
+    assert average_cell["median_nrmse"] == 0.30
+    assert matrix["model_totals"]["ridge"]["median_nrmse"] == 0.10
+
+
+def test_model_median_by_country_matches_matrix():
+    """Leaderboard and matrix Median column: median of per-country NRMSE values."""
+    df = pd.DataFrame(
+        [
+            {
+                "model": "tabpfn",
+                "crop": "maize",
+                "country": "DE",
+                "batch_horizon": "eos",
+                "nrmse": 0.10,
+                "r2": 0.9,
+                "n_samples": 50,
+            },
+            {
+                "model": "tabpfn",
+                "crop": "maize",
+                "country": "FR",
+                "batch_horizon": "eos",
+                "nrmse": 0.30,
+                "r2": 0.7,
+                "n_samples": 50,
+            },
+            {
+                "model": "tabpfn",
+                "crop": "wheat",
+                "country": "FR",
+                "batch_horizon": "eos",
+                "nrmse": 0.50,
+                "r2": 0.5,
+                "n_samples": 50,
+            },
+        ]
+    )
+    board = aggregate_model_leaderboard(df, batch_horizon="eos")
+    matrix = build_model_country_matrix(df, batch_horizon="eos")
+    expected = float(board.loc[board["model"] == "tabpfn", "median_nrmse"].iloc[0])
+    assert matrix["model_totals"]["tabpfn"]["median_nrmse"] == expected
+    assert expected == 0.25
+    de_cell = next(c for c in matrix["cells"] if c["country"] == "DE")
+    fr_cell = next(c for c in matrix["cells"] if c["country"] == "FR")
+    assert de_cell["median_nrmse"] == 0.10
+    assert fr_cell["median_nrmse"] == 0.40
+    assert (de_cell["median_nrmse"] + fr_cell["median_nrmse"]) / 2 == 0.25
 
 
 def test_compare_horizons_eos_better():
@@ -257,3 +308,7 @@ def test_build_insights_payload_structure(tmp_path: Path):
     models = {r["model"] for r in payload["leaderboards"]["eos"]["all"]}
     assert models == {"average", "ridge"}
     assert payload["model_country"]["eos"]["all"]["models"] == ["average", "ridge"]
+    assert "model_country_skilled" in payload
+    ridge_board = next(r for r in payload["leaderboards"]["eos"]["all"] if r["model"] == "ridge")
+    ridge_matrix = payload["model_country"]["eos"]["all"]["model_totals"]["ridge"]["median_nrmse"]
+    assert ridge_board["median_nrmse"] == ridge_matrix

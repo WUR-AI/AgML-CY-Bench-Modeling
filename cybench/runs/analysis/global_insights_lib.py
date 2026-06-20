@@ -103,6 +103,7 @@ def attach_baseline_metrics(df: pd.DataFrame) -> pd.DataFrame:
         out["skilled"] = out["beats_baseline"] | (out["r2"].fillna(float("-inf")) > 0)
     else:
         out["skilled"] = out["beats_baseline"]
+    out.loc[out["model"].apply(is_baseline_model), "skilled"] = False
     return out
 
 
@@ -115,6 +116,45 @@ def _beat_baseline_rate(model: str, grp: pd.DataFrame) -> float | None:
     return float(comparable["beats_baseline"].mean())
 
 
+def _filter_summary_work(
+    df: pd.DataFrame,
+    *,
+    batch_horizon: str | None = None,
+    crop: str | None = None,
+    skilled_only: bool = False,
+) -> pd.DataFrame:
+    work = attach_baseline_metrics(df)
+    if batch_horizon is not None:
+        work = work[work["batch_horizon"] == batch_horizon]
+    if crop:
+        work = work[work["crop"] == crop]
+    if skilled_only:
+        work = work[work["skilled"]]
+    return work[work["nrmse"].notna()].copy()
+
+
+def _model_median_by_country(work: pd.DataFrame) -> dict[str, dict[str, Any]]:
+    """Per-model median of per-country NRMSE/R².
+
+    Each country contributes one value: the median within that country (relevant when
+    crop=all spans multiple crops in the same country). The model summary is then the
+    median across those country values — not a median over all crop×country rows pooled.
+    """
+    totals: dict[str, dict[str, Any]] = {}
+    for model, model_grp in work.groupby("model", sort=True):
+        country_nrmse: list[float] = []
+        country_r2: list[float] = []
+        for _, country_grp in model_grp.groupby("country", sort=True):
+            country_nrmse.append(float(country_grp["nrmse"].median()))
+            if "r2" in country_grp.columns:
+                country_r2.append(float(country_grp["r2"].median()))
+        totals[str(model)] = {
+            "median_nrmse": round(float(pd.Series(country_nrmse).median()), 4),
+            "median_r2": round(float(pd.Series(country_r2).median()), 4) if country_r2 else None,
+        }
+    return totals
+
+
 def aggregate_model_leaderboard(
     df: pd.DataFrame,
     *,
@@ -122,30 +162,27 @@ def aggregate_model_leaderboard(
     crop: str | None = None,
     skilled_only: bool = False,
 ) -> pd.DataFrame:
-    """Rank models by unweighted median NRMSE across crop×country datasets."""
+    """Rank models by median NRMSE across countries (one value per country)."""
     if df.empty or "model" not in df.columns:
         return pd.DataFrame()
 
-    work = attach_baseline_metrics(df)
-    if batch_horizon:
-        work = work[work["batch_horizon"] == batch_horizon]
-    if crop:
-        work = work[work["crop"] == crop]
-    if skilled_only:
-        work = work[work["skilled"]]
-    work = work[work["nrmse"].notna()].copy()
+    work = _filter_summary_work(
+        df, batch_horizon=batch_horizon, crop=crop, skilled_only=skilled_only
+    )
     if work.empty:
         return pd.DataFrame()
 
+    by_country = _model_median_by_country(work)
     rows: list[dict[str, Any]] = []
     for model, grp in work.groupby("model", sort=True):
         beat_rate = _beat_baseline_rate(str(model), grp)
+        totals = by_country[str(model)]
 
         rows.append(
             {
                 "model": model,
-                "median_nrmse": float(grp["nrmse"].median()),
-                "median_r2": float(grp["r2"].median()) if "r2" in grp else float("nan"),
+                "median_nrmse": totals["median_nrmse"],
+                "median_r2": totals["median_r2"] if totals["median_r2"] is not None else float("nan"),
                 "beat_baseline_rate": beat_rate,
                 "n_datasets": int(len(grp)),
                 "n_countries": int(grp["country"].nunique()) if "country" in grp else 0,
@@ -191,15 +228,14 @@ def build_model_country_matrix(
     *,
     batch_horizon: str,
     crop: str | None = None,
+    skilled_only: bool = False,
 ) -> dict[str, Any]:
     """Model × country matrix (median NRMSE and R² per model×country)."""
-    work = attach_baseline_metrics(df)
-    work = work[work["batch_horizon"] == batch_horizon]
-    if crop:
-        work = work[work["crop"] == crop]
-    work = work[work["nrmse"].notna()].copy()
+    work = _filter_summary_work(
+        df, batch_horizon=batch_horizon, crop=crop, skilled_only=skilled_only
+    )
     if work.empty:
-        return {"models": [], "countries": [], "cells": []}
+        return {"models": [], "countries": [], "cells": [], "model_totals": {}}
 
     cells: list[dict[str, Any]] = []
     for (model, country), grp in work.groupby(["model", "country"], sort=True):
@@ -217,19 +253,29 @@ def build_model_country_matrix(
 
     models = sorted({c["model"] for c in cells})
     countries = sorted({c["country"] for c in cells})
-    return {"models": models, "countries": countries, "cells": cells}
+    return {
+        "models": models,
+        "countries": countries,
+        "cells": cells,
+        "model_totals": _model_median_by_country(work),
+    }
 
 
 def build_model_country_by_crop(
     df: pd.DataFrame,
     *,
     batch_horizon: str,
+    skilled_only: bool = False,
 ) -> dict[str, dict[str, Any]]:
     matrices: dict[str, dict[str, Any]] = {
-        "all": build_model_country_matrix(df, batch_horizon=batch_horizon),
+        "all": build_model_country_matrix(
+            df, batch_horizon=batch_horizon, skilled_only=skilled_only
+        ),
     }
     for crop in _crop_keys(df):
-        matrices[crop] = build_model_country_matrix(df, batch_horizon=batch_horizon, crop=crop)
+        matrices[crop] = build_model_country_matrix(
+            df, batch_horizon=batch_horizon, crop=crop, skilled_only=skilled_only
+        )
     return matrices
 
 
@@ -301,12 +347,16 @@ def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, 
     leaderboards: dict[str, dict[str, list[dict[str, Any]]]] = {}
     leaderboards_skilled: dict[str, dict[str, list[dict[str, Any]]]] = {}
     model_country: dict[str, dict[str, dict[str, Any]]] = {}
+    model_country_skilled: dict[str, dict[str, dict[str, Any]]] = {}
     for hz in ("eos", "mid"):
         leaderboards[hz] = build_leaderboards_by_crop(df, batch_horizon=hz, skilled_only=False)
         leaderboards_skilled[hz] = build_leaderboards_by_crop(
             df, batch_horizon=hz, skilled_only=True
         )
-        model_country[hz] = build_model_country_by_crop(df, batch_horizon=hz)
+        model_country[hz] = build_model_country_by_crop(df, batch_horizon=hz, skilled_only=False)
+        model_country_skilled[hz] = build_model_country_by_crop(
+            df, batch_horizon=hz, skilled_only=True
+        )
 
     countries = sorted(df["country"].unique()) if "country" in df.columns else []
     crops = _crop_keys(df)
@@ -322,6 +372,7 @@ def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, 
         "leaderboards": leaderboards,
         "leaderboards_skilled": leaderboards_skilled,
         "model_country": model_country,
+        "model_country_skilled": model_country_skilled,
         "horizon_summary": _df_records(horizon_summary),
         "horizon_detail": _df_records(horizon_detail),
         "overall_horizon": _overall_horizon_stats(horizon_detail),
