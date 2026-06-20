@@ -150,11 +150,11 @@
     <div class="card">
       <h2>Research Q1 — Which models perform best across countries?</h2>
       <p class="muted">
-        Rankings are computed <strong>per forecast horizon</strong> (end-of-season vs mid-season are not mixed).
-        Primary metric: sample-weighted mean NRMSE (lower is better).
-        <strong>Beat baseline %</strong> = share of crop×country datasets where the model beats
-        <span id="baseline-label">average</span> (region mean yield).
-        Enable <em>Skilful only</em> to restrict to datasets where the model beats baseline or has R² &gt; 0.
+        Rankings are computed <strong>per forecast horizon</strong> and can be split by <strong>crop</strong>.
+        Each row is the unweighted mean NRMSE across country datasets (lower is better).
+        <strong>Beat baseline %</strong> = share of datasets where the model beats
+        <span id="baseline-label">average</span>.
+        Optional <em>Skilful only</em> keeps datasets where the model beats baseline or has R² &gt; 0.
       </p>
       <div class="controls">
         <span class="muted">Horizon</span>
@@ -162,6 +162,11 @@
           <button type="button" data-horizon="eos" class="active">End of season</button>
           <button type="button" data-horizon="mid">Mid-season</button>
         </div>
+        <label>Crop
+          <select id="rq1-crop-filter">
+            <option value="all">All crops</option>
+          </select>
+        </label>
         <label>
           <input type="checkbox" id="rq1-skilled-only" />
           Skilful datasets only
@@ -172,7 +177,7 @@
         </label>
       </div>
       <div class="table-scroll" id="leaderboard-wrap"></div>
-      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">Model × country (weighted NRMSE)</h3>
+      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">Model × country (mean NRMSE)</h3>
       <p class="muted" style="margin-top:0;">Darker green = lower error. Empty cells = no data for that pair.</p>
       <div class="table-scroll" id="model-country-wrap"></div>
     </div>
@@ -283,38 +288,55 @@
     const baselineLabel = (DATA.baseline_models || []).join(", ") || "average";
     document.getElementById("baseline-label").textContent = baselineLabel;
 
-    // RQ1 — horizon-specific leaderboard + heatmap
+    // RQ1 — horizon + crop leaderboard + heatmap
     let rq1Horizon = "eos";
+    let rq1Crop = "all";
     let rq1SkilledOnly = false;
-    let lbSort = "weighted_nrmse";
+    let lbSort = "mean_nrmse";
     let lbDir = "asc";
     const lbWrap = document.getElementById("leaderboard-wrap");
     const mcWrap = document.getElementById("model-country-wrap");
     const rq1ModelFilter = document.getElementById("rq1-model-filter");
     const rq1HorizonToolbar = document.getElementById("rq1-horizon-toolbar");
+    const rq1CropFilter = document.getElementById("rq1-crop-filter");
     const rq1SkilledCheckbox = document.getElementById("rq1-skilled-only");
+
+    for (const crop of DATA.crops || []) {
+      const opt = document.createElement("option");
+      opt.value = crop;
+      opt.textContent = crop.charAt(0).toUpperCase() + crop.slice(1);
+      rq1CropFilter.appendChild(opt);
+    }
 
     const lbCols = [
       { key: "rank", label: "#", sortable: false },
       { key: "model", label: "Model" },
-      { key: "weighted_nrmse", label: "Weighted NRMSE", bg: fixedNrmseBg },
       { key: "mean_nrmse", label: "Mean NRMSE", bg: fixedNrmseBg },
       { key: "median_nrmse", label: "Median NRMSE", bg: fixedNrmseBg },
-      { key: "std_nrmse", label: "Std NRMSE" },
       { key: "beat_baseline_rate", label: "Beat baseline %", format: pct },
-      { key: "skilled_rate", label: "Skilful %", format: pct },
       { key: "mean_r2", label: "Mean R²" },
       { key: "n_datasets", label: "Datasets" },
       { key: "n_countries", label: "Countries" },
-      { key: "total_samples", label: "Samples", format: (v) => v == null ? "—" : String(v) },
     ];
 
+    function rq1BoardSource() {
+      const root = rq1SkilledOnly ? DATA.leaderboards_skilled : DATA.leaderboards;
+      const byHorizon = root && root[rq1Horizon];
+      if (!byHorizon) return [];
+      return byHorizon[rq1Crop] || byHorizon.all || [];
+    }
+
     function rq1LeaderboardRows() {
-      const source = rq1SkilledOnly ? DATA.leaderboards_skilled : DATA.leaderboards;
-      const rows = (source && source[rq1Horizon]) ? [...source[rq1Horizon]] : [];
+      const rows = [...rq1BoardSource()];
       const mq = rq1ModelFilter.value.trim().toLowerCase();
       if (mq) return rows.filter(r => r.model.toLowerCase().includes(mq));
       return rows;
+    }
+
+    function rq1MatrixSource() {
+      const byHorizon = DATA.model_country && DATA.model_country[rq1Horizon];
+      if (!byHorizon) return { models: [], countries: [], cells: [] };
+      return byHorizon[rq1Crop] || byHorizon.all || { models: [], countries: [], cells: [] };
     }
 
     function renderLeaderboard() {
@@ -332,7 +354,7 @@
     }
 
     function renderModelCountryHeatmap() {
-      const matrix = (DATA.model_country && DATA.model_country[rq1Horizon]) || { models: [], countries: [], cells: [] };
+      const matrix = rq1MatrixSource();
       const mq = rq1ModelFilter.value.trim().toLowerCase();
       let models = matrix.models || [];
       if (mq) models = models.filter(m => m.toLowerCase().includes(mq));
@@ -343,7 +365,7 @@
       }
 
       if (!models.length || !countries.length) {
-        mcWrap.innerHTML = `<p class="muted" style="padding:0.75rem;">No model×country data for this horizon.</p>`;
+        mcWrap.innerHTML = `<p class="muted" style="padding:0.75rem;">No model×country data for this selection.</p>`;
         return;
       }
 
@@ -356,16 +378,16 @@
         html += `<tr><td class="model-col">${model}</td>`;
         for (const cc of countries) {
           const cell = cellMap.get(`${model}|||${cc}`);
-          if (!cell || cell.weighted_nrmse == null) {
+          if (!cell || cell.mean_nrmse == null) {
             html += '<td class="metric-cell">—</td>';
             continue;
           }
-          const bg = fixedNrmseBg(cell.weighted_nrmse);
+          const bg = fixedNrmseBg(cell.mean_nrmse);
           const style = bg ? ` style="background-color:${bg}"` : "";
           const title = cell.beat_baseline_rate != null
             ? ` title="Beat baseline: ${pct(cell.beat_baseline_rate)}"`
             : "";
-          html += `<td class="metric-cell"${style}${title}>${fmt(cell.weighted_nrmse)}</td>`;
+          html += `<td class="metric-cell"${style}${title}>${fmt(cell.mean_nrmse)}</td>`;
         }
         html += "</tr>";
       }
@@ -385,6 +407,10 @@
         rq1Horizon = btn.dataset.horizon;
         renderRq1();
       });
+    });
+    rq1CropFilter.addEventListener("change", () => {
+      rq1Crop = rq1CropFilter.value || "all";
+      renderRq1();
     });
     rq1SkilledCheckbox.addEventListener("change", () => {
       rq1SkilledOnly = rq1SkilledCheckbox.checked;

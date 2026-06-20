@@ -110,9 +110,10 @@ def aggregate_model_leaderboard(
     df: pd.DataFrame,
     *,
     batch_horizon: str | None = None,
+    crop: str | None = None,
     skilled_only: bool = False,
 ) -> pd.DataFrame:
-    """Rank models using sample-weighted mean NRMSE and baseline-relative skill."""
+    """Rank models by unweighted mean NRMSE across crop×country datasets."""
     if df.empty or "model" not in df.columns:
         return pd.DataFrame()
 
@@ -120,66 +121,82 @@ def aggregate_model_leaderboard(
     work = work[~work["model"].apply(is_baseline_model)]
     if batch_horizon:
         work = work[work["batch_horizon"] == batch_horizon]
+    if crop:
+        work = work[work["crop"] == crop]
     if skilled_only:
         work = work[work["skilled"]]
     work = work[work["nrmse"].notna()].copy()
     if work.empty:
         return pd.DataFrame()
 
-    if "n_samples" not in work.columns:
-        work["n_samples"] = 1.0
-    work["n_samples"] = work["n_samples"].fillna(1).clip(lower=1)
-
     rows: list[dict[str, Any]] = []
     for model, grp in work.groupby("model", sort=True):
         comparable = grp[grp["baseline_nrmse"].notna()]
-        if len(comparable):
-            beat_rate = float(comparable["beats_baseline"].mean())
-            weighted_beat = _weighted_mean(
-                comparable["beats_baseline"].astype(float), comparable["n_samples"]
-            )
-        else:
-            beat_rate = float("nan")
-            weighted_beat = float("nan")
+        beat_rate = (
+            float(comparable["beats_baseline"].mean()) if len(comparable) else float("nan")
+        )
 
         rows.append(
             {
                 "model": model,
-                "weighted_nrmse": _weighted_mean(grp["nrmse"], grp["n_samples"]),
                 "mean_nrmse": float(grp["nrmse"].mean()),
                 "median_nrmse": float(grp["nrmse"].median()),
-                "std_nrmse": float(grp["nrmse"].std(ddof=0)) if len(grp) > 1 else 0.0,
                 "mean_r2": float(grp["r2"].mean()) if "r2" in grp else float("nan"),
                 "beat_baseline_rate": beat_rate,
-                "weighted_beat_baseline_rate": weighted_beat,
-                "skilled_rate": float(grp["skilled"].mean()) if "skilled" in grp else float("nan"),
                 "n_datasets": int(len(grp)),
                 "n_countries": int(grp["country"].nunique()) if "country" in grp else 0,
-                "total_samples": int(grp["n_samples"].sum()),
             }
         )
     out = pd.DataFrame(rows)
-    out = out.sort_values(["weighted_nrmse", "mean_nrmse"], ascending=[True, True])
+    out = out.sort_values(["mean_nrmse", "median_nrmse"], ascending=[True, True])
     out.insert(0, "rank", range(1, len(out) + 1))
     return out.reset_index(drop=True)
+
+
+def _crop_keys(df: pd.DataFrame) -> list[str]:
+    if df.empty or "crop" not in df.columns:
+        return []
+    return sorted({str(c) for c in df["crop"].dropna().unique()})
+
+
+def build_leaderboards_by_crop(
+    df: pd.DataFrame,
+    *,
+    batch_horizon: str,
+    skilled_only: bool = False,
+) -> dict[str, list[dict[str, Any]]]:
+    """Leaderboards keyed by crop name; ``all`` aggregates every crop."""
+    boards: dict[str, list[dict[str, Any]]] = {
+        "all": _df_records(
+            aggregate_model_leaderboard(
+                df, batch_horizon=batch_horizon, skilled_only=skilled_only
+            )
+        )
+    }
+    for crop in _crop_keys(df):
+        boards[crop] = _df_records(
+            aggregate_model_leaderboard(
+                df, batch_horizon=batch_horizon, crop=crop, skilled_only=skilled_only
+            )
+        )
+    return boards
 
 
 def build_model_country_matrix(
     df: pd.DataFrame,
     *,
     batch_horizon: str,
+    crop: str | None = None,
 ) -> dict[str, Any]:
-    """Model × country matrix for heatmap (weighted NRMSE per model×country)."""
+    """Model × country matrix (mean NRMSE per model×country)."""
     work = attach_baseline_metrics(df)
     work = work[~work["model"].apply(is_baseline_model)]
     work = work[work["batch_horizon"] == batch_horizon]
+    if crop:
+        work = work[work["crop"] == crop]
     work = work[work["nrmse"].notna()].copy()
     if work.empty:
         return {"models": [], "countries": [], "cells": []}
-
-    if "n_samples" not in work.columns:
-        work["n_samples"] = 1.0
-    work["n_samples"] = work["n_samples"].fillna(1).clip(lower=1)
 
     cells: list[dict[str, Any]] = []
     for (model, country), grp in work.groupby(["model", "country"], sort=True):
@@ -188,7 +205,7 @@ def build_model_country_matrix(
             {
                 "model": model,
                 "country": country,
-                "weighted_nrmse": _weighted_mean(grp["nrmse"], grp["n_samples"]),
+                "mean_nrmse": float(grp["nrmse"].mean()),
                 "mean_r2": float(grp["r2"].mean()) if "r2" in grp else None,
                 "n_datasets": int(len(grp)),
                 "beat_baseline_rate": float(comparable["beats_baseline"].mean())
@@ -200,6 +217,19 @@ def build_model_country_matrix(
     models = sorted({c["model"] for c in cells})
     countries = sorted({c["country"] for c in cells})
     return {"models": models, "countries": countries, "cells": cells}
+
+
+def build_model_country_by_crop(
+    df: pd.DataFrame,
+    *,
+    batch_horizon: str,
+) -> dict[str, dict[str, Any]]:
+    matrices: dict[str, dict[str, Any]] = {
+        "all": build_model_country_matrix(df, batch_horizon=batch_horizon),
+    }
+    for crop in _crop_keys(df):
+        matrices[crop] = build_model_country_matrix(df, batch_horizon=batch_horizon, crop=crop)
+    return matrices
 
 
 def compare_horizons(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -267,17 +297,18 @@ def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, 
     df = load_summary_frame(paths)
     horizon_detail, horizon_summary = compare_horizons(df)
 
-    leaderboards: dict[str, list[dict[str, Any]]] = {}
-    leaderboards_skilled: dict[str, list[dict[str, Any]]] = {}
-    model_country: dict[str, dict[str, Any]] = {}
+    leaderboards: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    leaderboards_skilled: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    model_country: dict[str, dict[str, dict[str, Any]]] = {}
     for hz in ("eos", "mid"):
-        board = aggregate_model_leaderboard(df, batch_horizon=hz, skilled_only=False)
-        board_skilled = aggregate_model_leaderboard(df, batch_horizon=hz, skilled_only=True)
-        leaderboards[hz] = _df_records(board)
-        leaderboards_skilled[hz] = _df_records(board_skilled)
-        model_country[hz] = build_model_country_matrix(df, batch_horizon=hz)
+        leaderboards[hz] = build_leaderboards_by_crop(df, batch_horizon=hz, skilled_only=False)
+        leaderboards_skilled[hz] = build_leaderboards_by_crop(
+            df, batch_horizon=hz, skilled_only=True
+        )
+        model_country[hz] = build_model_country_by_crop(df, batch_horizon=hz)
 
     countries = sorted(df["country"].unique()) if "country" in df.columns else []
+    crops = _crop_keys(df)
     baseline_models = sorted({str(m) for m in df["model"].unique() if is_baseline_model(m)})
     return {
         "output_root": str(output_root.resolve()),
@@ -285,6 +316,7 @@ def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, 
         "n_rows": int(len(df)),
         "n_countries": int(df["country"].nunique()) if "country" in df.columns else 0,
         "countries": countries,
+        "crops": crops,
         "baseline_models": baseline_models,
         "leaderboards": leaderboards,
         "leaderboards_skilled": leaderboards_skilled,

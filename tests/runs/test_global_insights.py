@@ -30,7 +30,7 @@ def test_is_baseline_model():
     assert not is_baseline_model("ridge")
 
 
-def test_aggregate_model_leaderboard_weighted_nrmse():
+def test_aggregate_model_leaderboard_mean_nrmse():
     df = pd.DataFrame(
         [
             {"model": "ridge", "nrmse": 0.10, "r2": 0.9, "n_samples": 100, "country": "DE", "batch_horizon": "eos", "crop": "maize"},
@@ -41,12 +41,13 @@ def test_aggregate_model_leaderboard_weighted_nrmse():
     )
     board = aggregate_model_leaderboard(df, batch_horizon="eos")
     assert list(board["model"]) == ["ridge", "xgboost"]
-    assert board.loc[board["model"] == "ridge", "weighted_nrmse"].iloc[0] < 0.15
-    assert int(board.loc[board["model"] == "ridge", "total_samples"].iloc[0]) == 110
+    assert board.loc[board["model"] == "ridge", "mean_nrmse"].iloc[0] == 0.2
+
+    maize = aggregate_model_leaderboard(df, batch_horizon="eos", crop="maize")
+    assert list(maize["model"]) == ["ridge", "xgboost"]
 
     mid_board = aggregate_model_leaderboard(df, batch_horizon="mid")
     assert list(mid_board["model"]) == ["ridge"]
-    assert len(mid_board) == 1
 
 
 def test_baseline_beat_rate():
@@ -163,10 +164,10 @@ def test_build_model_country_matrix():
             },
         ]
     )
-    matrix = build_model_country_matrix(df, batch_horizon="eos")
+    matrix = build_model_country_matrix(df, batch_horizon="eos", crop="maize")
     assert matrix["models"] == ["ridge"]
-    assert matrix["countries"] == ["DE", "FR"]
-    assert len(matrix["cells"]) == 2
+    assert matrix["countries"] == ["DE"]
+    assert matrix["cells"][0]["mean_nrmse"] == 0.10
 
 
 def test_compare_horizons_eos_better():
@@ -251,7 +252,7 @@ def test_build_insights_payload_structure(tmp_path: Path):
 
     payload = build_insights_payload(tmp_path, version=1)
     assert "leaderboards" in payload
-    assert len(payload["leaderboards"]["eos"]) == 1
-    assert payload["leaderboards"]["eos"][0]["model"] == "ridge"
-    assert "model_country" in payload
-    assert payload["model_country"]["eos"]["models"] == ["ridge"]
+    assert len(payload["leaderboards"]["eos"]["all"]) == 1
+    assert payload["leaderboards"]["eos"]["all"][0]["model"] == "ridge"
+    assert payload["crops"] == ["maize"]
+    assert payload["model_country"]["eos"]["all"]["models"] == ["ridge"]
