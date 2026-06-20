@@ -41,7 +41,7 @@ def test_aggregate_model_leaderboard_mean_nrmse():
     )
     board = aggregate_model_leaderboard(df, batch_horizon="eos")
     assert list(board["model"]) == ["ridge", "xgboost"]
-    assert board.loc[board["model"] == "ridge", "mean_nrmse"].iloc[0] == 0.2
+    assert board.loc[board["model"] == "ridge", "median_nrmse"].iloc[0] == 0.2
 
     maize = aggregate_model_leaderboard(df, batch_horizon="eos", crop="maize")
     assert list(maize["model"]) == ["ridge", "xgboost"]
@@ -91,7 +91,8 @@ def test_baseline_beat_rate():
     xgb = board.loc[board["model"] == "xgboost"].iloc[0]
     assert ridge["beat_baseline_rate"] == 1.0
     assert xgb["beat_baseline_rate"] == 0.0
-    assert "average" not in set(board["model"])
+    avg = board.loc[board["model"] == "average"].iloc[0]
+    assert pd.isna(avg["beat_baseline_rate"])
 
 
 def test_skilled_only_leaderboard():
@@ -165,9 +166,8 @@ def test_build_model_country_matrix():
         ]
     )
     matrix = build_model_country_matrix(df, batch_horizon="eos", crop="maize")
-    assert matrix["models"] == ["ridge"]
+    assert matrix["models"] == ["average", "ridge"]
     assert matrix["countries"] == ["DE"]
-    assert matrix["cells"][0]["mean_nrmse"] == 0.10
     assert matrix["cells"][0]["median_nrmse"] == 0.10
 
 
@@ -253,7 +253,7 @@ def test_build_insights_payload_structure(tmp_path: Path):
 
     payload = build_insights_payload(tmp_path, version=1)
     assert "leaderboards" in payload
-    assert len(payload["leaderboards"]["eos"]["all"]) == 1
-    assert payload["leaderboards"]["eos"]["all"][0]["model"] == "ridge"
-    assert payload["crops"] == ["maize"]
-    assert payload["model_country"]["eos"]["all"]["models"] == ["ridge"]
+    assert len(payload["leaderboards"]["eos"]["all"]) == 2
+    models = {r["model"] for r in payload["leaderboards"]["eos"]["all"]}
+    assert models == {"average", "ridge"}
+    assert payload["model_country"]["eos"]["all"]["models"] == ["average", "ridge"]

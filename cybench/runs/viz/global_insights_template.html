@@ -161,9 +161,9 @@
       <h2>Research Q1 — Which models perform best across countries?</h2>
       <p class="muted">
         Rankings are computed <strong>per forecast horizon</strong> and can be split by <strong>crop</strong>.
-        Each row is the unweighted mean NRMSE across country datasets (lower is better).
+        Each row is the unweighted <strong>median</strong> NRMSE across country datasets (lower is better).
         <strong>Beat baseline %</strong> = share of datasets where the model beats
-        <span id="baseline-label">average</span>.
+        <span id="baseline-label">average</span> (shown as its own row for reference).
         Optional <em>Skilful only</em> keeps datasets where the model beats baseline or has R² &gt; 0.
       </p>
       <div class="controls">
@@ -196,8 +196,8 @@
         </label>
         <label>Metric
           <select id="rq1-matrix-metric">
-            <option value="nrmse" selected>NRMSE (mean)</option>
-            <option value="r2">R² (mean)</option>
+            <option value="nrmse" selected>NRMSE (median)</option>
+            <option value="r2">R² (median)</option>
           </select>
         </label>
       </div>
@@ -325,7 +325,7 @@
     let rq1MatrixMetric = "nrmse";
     let mcSort = "median";
     let mcDir = "asc";
-    let lbSort = "mean_nrmse";
+    let lbSort = "median_nrmse";
     let lbDir = "asc";
     const lbWrap = document.getElementById("leaderboard-wrap");
     const mcWrap = document.getElementById("model-country-wrap");
@@ -355,10 +355,9 @@
     const lbCols = [
       { key: "rank", label: "#", sortable: false },
       { key: "model", label: "Model" },
-      { key: "mean_nrmse", label: "Mean NRMSE", bg: fixedNrmseBg },
       { key: "median_nrmse", label: "Median NRMSE", bg: fixedNrmseBg },
+      { key: "median_r2", label: "Median R²" },
       { key: "beat_baseline_rate", label: "Beat baseline %", format: pct },
-      { key: "mean_r2", label: "Mean R²" },
       { key: "n_datasets", label: "Datasets" },
       { key: "n_countries", label: "Countries" },
     ];
@@ -386,17 +385,17 @@
     function matrixMetricSpec() {
       if (rq1MatrixMetric === "r2") {
         return {
-          key: "mean_r2",
+          key: "median_r2",
           label: "R²",
           bg: fixedR2Bg,
-          note: "Median column = median across countries per model. Green = higher R².",
+          note: "Row median = median across countries. Cell values = median NRMSE/R² per model×country. Green = higher R².",
         };
       }
       return {
-        key: "mean_nrmse",
+        key: "median_nrmse",
         label: "NRMSE",
         bg: fixedNrmseBg,
-        note: "Median column = median across countries per model. Green = lower NRMSE.",
+        note: "Row median = median across countries. Cell values = median NRMSE/R² per model×country. Green = lower NRMSE.",
       };
     }
 

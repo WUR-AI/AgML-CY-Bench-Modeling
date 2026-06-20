@@ -106,6 +106,15 @@ def attach_baseline_metrics(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _beat_baseline_rate(model: str, grp: pd.DataFrame) -> float | None:
+    if is_baseline_model(model):
+        return None
+    comparable = grp[grp["baseline_nrmse"].notna()]
+    if comparable.empty:
+        return float("nan")
+    return float(comparable["beats_baseline"].mean())
+
+
 def aggregate_model_leaderboard(
     df: pd.DataFrame,
     *,
@@ -113,12 +122,11 @@ def aggregate_model_leaderboard(
     crop: str | None = None,
     skilled_only: bool = False,
 ) -> pd.DataFrame:
-    """Rank models by unweighted mean NRMSE across crop×country datasets."""
+    """Rank models by unweighted median NRMSE across crop×country datasets."""
     if df.empty or "model" not in df.columns:
         return pd.DataFrame()
 
     work = attach_baseline_metrics(df)
-    work = work[~work["model"].apply(is_baseline_model)]
     if batch_horizon:
         work = work[work["batch_horizon"] == batch_horizon]
     if crop:
@@ -131,24 +139,20 @@ def aggregate_model_leaderboard(
 
     rows: list[dict[str, Any]] = []
     for model, grp in work.groupby("model", sort=True):
-        comparable = grp[grp["baseline_nrmse"].notna()]
-        beat_rate = (
-            float(comparable["beats_baseline"].mean()) if len(comparable) else float("nan")
-        )
+        beat_rate = _beat_baseline_rate(str(model), grp)
 
         rows.append(
             {
                 "model": model,
-                "mean_nrmse": float(grp["nrmse"].mean()),
                 "median_nrmse": float(grp["nrmse"].median()),
-                "mean_r2": float(grp["r2"].mean()) if "r2" in grp else float("nan"),
+                "median_r2": float(grp["r2"].median()) if "r2" in grp else float("nan"),
                 "beat_baseline_rate": beat_rate,
                 "n_datasets": int(len(grp)),
                 "n_countries": int(grp["country"].nunique()) if "country" in grp else 0,
             }
         )
     out = pd.DataFrame(rows)
-    out = out.sort_values(["mean_nrmse", "median_nrmse"], ascending=[True, True])
+    out = out.sort_values("median_nrmse", ascending=True)
     out.insert(0, "rank", range(1, len(out) + 1))
     return out.reset_index(drop=True)
 
@@ -188,9 +192,8 @@ def build_model_country_matrix(
     batch_horizon: str,
     crop: str | None = None,
 ) -> dict[str, Any]:
-    """Model × country matrix (mean/median NRMSE and R² per model×country)."""
+    """Model × country matrix (median NRMSE and R² per model×country)."""
     work = attach_baseline_metrics(df)
-    work = work[~work["model"].apply(is_baseline_model)]
     work = work[work["batch_horizon"] == batch_horizon]
     if crop:
         work = work[work["crop"] == crop]
@@ -200,19 +203,15 @@ def build_model_country_matrix(
 
     cells: list[dict[str, Any]] = []
     for (model, country), grp in work.groupby(["model", "country"], sort=True):
-        comparable = grp[grp["baseline_nrmse"].notna()]
+        beat_rate = _beat_baseline_rate(str(model), grp)
         cells.append(
             {
                 "model": model,
                 "country": country,
-                "mean_nrmse": float(grp["nrmse"].mean()),
                 "median_nrmse": float(grp["nrmse"].median()),
-                "mean_r2": float(grp["r2"].mean()) if "r2" in grp else None,
                 "median_r2": float(grp["r2"].median()) if "r2" in grp else None,
                 "n_datasets": int(len(grp)),
-                "beat_baseline_rate": float(comparable["beats_baseline"].mean())
-                if len(comparable)
-                else None,
+                "beat_baseline_rate": beat_rate,
             }
         )
 
