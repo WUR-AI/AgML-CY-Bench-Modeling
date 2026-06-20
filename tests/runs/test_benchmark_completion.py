@@ -8,6 +8,7 @@ from cybench.runs.slurm.benchmark_completion_lib import (
     JobRow,
     assess_job,
     check_screening_years,
+    filter_jobs_by_models,
     jobs_for_phase,
     read_manifest,
     screening_complete,
@@ -97,6 +98,35 @@ def test_jobs_for_phase_walk_forward_only(tmp_path: Path, monkeypatch):
 
     wf_jobs = jobs_for_phase([assessment], "walk_forward")
     assert wf_jobs == [job]
+    assert jobs_for_phase([assessment], "walk_forward", force_rerun=True) == [job]
+
+
+def test_filter_jobs_by_models():
+    jobs = [
+        JobRow("maize", "US", "ridge", "pandas", "yes", "yes", "no"),
+        JobRow("maize", "US", "lpjml_bc", "pandas", "no", "no", "no"),
+        JobRow("wheat", "DE", "lpjml_bc", "pandas", "no", "no", "no"),
+    ]
+    assert filter_jobs_by_models(jobs, ["lpjml_bc"]) == jobs[1:]
+    assert filter_jobs_by_models(jobs, None) == jobs
+
+
+def test_jobs_for_phase_force_rerun_includes_complete():
+    job = JobRow("maize", "BE", "lpjml_bc", "pandas", "no", "no", "no")
+    from cybench.runs.slurm.benchmark_completion_lib import JobAssessment
+
+    assessment = JobAssessment(
+        job=job,
+        n_years=12,
+        screening_ok=True,
+        screening_reason="ok",
+        walk_forward_ok=True,
+        walk_forward_reason="done",
+        blocked=False,
+        block_reason="",
+    )
+    assert jobs_for_phase([assessment], "walk_forward") == []
+    assert jobs_for_phase([assessment], "walk_forward", force_rerun=True) == [job]
 
 
 def test_read_write_manifest_roundtrip(tmp_path: Path):

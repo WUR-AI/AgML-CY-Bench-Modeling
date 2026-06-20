@@ -26,6 +26,8 @@ Options:
   --version N         Batch version suffix (default: 1)
   --max N             Process at most N batch×horizon targets (0 = unlimited)
   --manifest PATH     Explicit job list
+  --model MODEL       Limit to model slug (repeatable, e.g. --model lpjml_bc)
+  --force-rerun       Include complete jobs in retry manifest (after code fixes)
   --output-root DIR   Parent of baselines_* (default: lustre output or ../output)
   --baselines-dir DIR Override output dir for one batch
   --data-dir DIR      Override cybench/data for year preflight
@@ -42,6 +44,8 @@ Examples:
   orchestrate_benchmark_complete.sh --all-countries --horizons eos mid --list
   orchestrate_benchmark_complete.sh --countries DE FR NL --horizon eos --submit --dry-run
   orchestrate_benchmark_complete.sh --all-countries --horizons eos mid --max 5 --submit
+  orchestrate_benchmark_complete.sh --all-countries --horizon eos --model lpjml_bc \\
+    --phase walk_forward --force-rerun --submit --dry-run
 EOF
 }
 
@@ -62,6 +66,8 @@ HORIZONS=(eos)
 VERSION=""
 MAX=""
 MANIFEST=""
+MODELS=()
+FORCE_RERUN=false
 BASELINES_DIR=""
 OUTPUT_ROOT=""
 DATA_DIR=""
@@ -118,6 +124,14 @@ while [[ $# -gt 0 ]]; do
     --manifest)
       MANIFEST=$2
       shift 2
+      ;;
+    --model)
+      MODELS+=("$2")
+      shift 2
+      ;;
+    --force-rerun)
+      FORCE_RERUN=true
+      shift
       ;;
     --output-root)
       OUTPUT_ROOT=$2
@@ -186,6 +200,10 @@ cmd+=(--horizons "${HORIZONS[@]}")
 [[ -n "${VERSION}" ]] && cmd+=(--version "${VERSION}")
 [[ -n "${MAX}" ]] && cmd+=(--max "${MAX}")
 [[ -n "${MANIFEST}" ]] && cmd+=(--manifest "${MANIFEST}")
+for _model in "${MODELS[@]}"; do
+  cmd+=(--model "${_model}")
+done
+[[ "${FORCE_RERUN}" == true ]] && cmd+=(--force-rerun)
 [[ -n "${OUTPUT_ROOT}" ]] && cmd+=(--output-root "${OUTPUT_ROOT}")
 [[ -n "${BASELINES_DIR}" ]] && cmd+=(--baselines-dir "${BASELINES_DIR}")
 [[ -n "${DATA_DIR}" ]] && cmd+=(--data-dir "${DATA_DIR}")

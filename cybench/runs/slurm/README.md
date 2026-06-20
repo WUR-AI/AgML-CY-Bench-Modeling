@@ -132,6 +132,15 @@ cybench/runs/slurm/orchestrate_benchmark_complete.sh \
 # Walk-forward only (screening already ok everywhere)
 cybench/runs/slurm/orchestrate_benchmark_complete.sh \
   --batch baselines_DE_eos_v1 --phase walk_forward --submit
+
+# One model only (e.g. re-run lpjml_bc after a code fix)
+cybench/runs/slurm/orchestrate_benchmark_complete.sh \
+  --all-countries --horizon eos --model lpjml_bc \
+  --phase walk_forward --force-rerun --list
+
+cybench/runs/slurm/orchestrate_benchmark_complete.sh \
+  --all-countries --horizon eos --model lpjml_bc \
+  --phase walk_forward --force-rerun --submit --dry-run
 ```
 
 Preflight marks rows **BLOCK** when yield years cannot satisfy the fixed screening

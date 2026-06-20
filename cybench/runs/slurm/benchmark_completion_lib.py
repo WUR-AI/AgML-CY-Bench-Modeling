@@ -314,24 +314,45 @@ def assess_manifest(
     ]
 
 
+def filter_jobs_by_models(
+    jobs: list[JobRow],
+    models: list[str] | None,
+) -> list[JobRow]:
+    if not models:
+        return jobs
+    allowed = {model.lower() for model in models}
+    return [job for job in jobs if job.model.lower() in allowed]
+
+
 def jobs_for_phase(
     assessments: list[JobAssessment],
     phase: str,
+    *,
+    force_rerun: bool = False,
 ) -> list[JobRow]:
     if phase == "screening":
+        if force_rerun:
+            return [a.job for a in assessments if not a.blocked]
         return [a.job for a in assessments if a.needs_screening]
     if phase == "walk_forward":
+        if force_rerun:
+            return [
+                a.job
+                for a in assessments
+                if not a.blocked and a.screening_ok
+            ]
         return [a.job for a in assessments if a.needs_walk_forward]
     if phase == "all":
         # Screening retries first; walk-forward-only rows are included too.
         out: list[JobRow] = []
         seen: set[tuple[str, str, str, str, str, str, str]] = set()
         for assessment in assessments:
-            for job in (
-                [assessment.job]
-                if assessment.needs_screening or assessment.needs_walk_forward
-                else []
-            ):
+            include = (
+                (not assessment.blocked)
+                if force_rerun
+                else (assessment.needs_screening or assessment.needs_walk_forward)
+            )
+            for job in ([assessment.job] if include else []):
                 key = (
                     job.crop,
                     job.country,

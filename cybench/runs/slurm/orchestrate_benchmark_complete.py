@@ -26,6 +26,11 @@ Examples (from repo root on anunna)::
     # Submit retries
     cybench/runs/slurm/orchestrate_benchmark_complete.sh \\
         --country DE --horizons eos mid --submit --dry-run
+
+    # Re-run walk-forward for one model (e.g. after a code fix)
+    cybench/runs/slurm/orchestrate_benchmark_complete.sh \\
+        --all-countries --horizon eos --model lpjml_bc \\
+        --phase walk_forward --force-rerun --submit --dry-run
 """
 
 from __future__ import annotations
@@ -41,6 +46,7 @@ from cybench.runs.slurm.benchmark_completion_lib import (
     ensure_manifest,
     expand_all_country_targets,
     expand_target_batches,
+    filter_jobs_by_models,
     jobs_for_phase,
     resolve_country_list,
     resolve_paths,
@@ -135,6 +141,7 @@ def _submit_retry(
     dry_run: bool,
     force_cpu: bool,
     force_cpu_reason: str | None = None,
+    force_rerun: bool = False,
 ) -> int:
     submit = _SLURM_DIR / "submit_benchmark.sh"
     if not submit.is_file():
@@ -164,8 +171,8 @@ def _submit_retry(
             return 0
         return subprocess.run(cmd, check=False).returncode
 
-    need_scr = [a.job for a in assessments if a.needs_screening]
-    need_wf = [a.job for a in assessments if a.needs_walk_forward]
+    need_scr = jobs_for_phase(assessments, "screening", force_rerun=force_rerun)
+    need_wf = jobs_for_phase(assessments, "walk_forward", force_rerun=force_rerun)
 
     if phase == "screening":
         return _write_and_submit(need_scr, "screening", "screening")
@@ -220,6 +227,15 @@ def _process_batch(
         repo_root=_REPO_ROOT,
         manifest_path=args.manifest,
     )
+    if args.models:
+        jobs = filter_jobs_by_models(jobs, args.models)
+        manifest_source = f"{manifest_source} | models={','.join(args.models)}"
+        if not jobs:
+            print(
+                f"[WARN] No manifest rows for model(s) {args.models!r} in {batch}",
+                file=sys.stderr,
+            )
+            return 0
 
     if not baselines_dir.is_dir():
         print(
@@ -234,7 +250,7 @@ def _process_batch(
         repo_root=_REPO_ROOT,
         data_dir=args.data_dir,
     )
-    retry_jobs = jobs_for_phase(assessments, args.phase)
+    retry_jobs = jobs_for_phase(assessments, args.phase, force_rerun=args.force_rerun)
 
     if args.list or (not args.output and not args.submit):
         _print_report(
@@ -278,6 +294,7 @@ def _process_batch(
             dry_run=args.dry_run,
             force_cpu=force_cpu,
             force_cpu_reason=force_cpu_reason,
+            force_rerun=args.force_rerun,
         )
 
     return 0
@@ -332,6 +349,18 @@ def main(argv: list[str] | None = None) -> int:
         "--manifest",
         type=Path,
         help="Explicit job list (skips auto-resolve)",
+    )
+    parser.add_argument(
+        "--model",
+        action="append",
+        dest="models",
+        metavar="MODEL",
+        help="Limit to model slug(s); repeat for multiple (e.g. --model lpjml_bc)",
+    )
+    parser.add_argument(
+        "--force-rerun",
+        action="store_true",
+        help="Include complete jobs in retry manifest (use with --model after code fixes)",
     )
     parser.add_argument(
         "--baselines-dir",
