@@ -8,7 +8,11 @@ import pandas as pd
 
 from cybench.runs.analysis.global_insights_lib import (
     aggregate_model_leaderboard,
+    attach_baseline_metrics,
+    build_insights_payload,
+    build_model_country_matrix,
     compare_horizons,
+    is_baseline_model,
     load_summary_frame,
     parse_paper_dir_name,
 )
@@ -20,18 +24,149 @@ def test_parse_paper_dir_name():
     assert parse_paper_dir_name("paper_walk_forward") is None
 
 
+def test_is_baseline_model():
+    assert is_baseline_model("average")
+    assert is_baseline_model("AverageYieldModel")
+    assert not is_baseline_model("ridge")
+
+
 def test_aggregate_model_leaderboard_weighted_nrmse():
     df = pd.DataFrame(
         [
-            {"model": "ridge", "nrmse": 0.10, "r2": 0.9, "n_samples": 100, "country": "DE"},
-            {"model": "ridge", "nrmse": 0.30, "r2": 0.5, "n_samples": 10, "country": "FR"},
-            {"model": "xgboost", "nrmse": 0.20, "r2": 0.7, "n_samples": 50, "country": "DE"},
+            {"model": "ridge", "nrmse": 0.10, "r2": 0.9, "n_samples": 100, "country": "DE", "batch_horizon": "eos", "crop": "maize"},
+            {"model": "ridge", "nrmse": 0.30, "r2": 0.5, "n_samples": 10, "country": "FR", "batch_horizon": "eos", "crop": "maize"},
+            {"model": "xgboost", "nrmse": 0.20, "r2": 0.7, "n_samples": 50, "country": "DE", "batch_horizon": "eos", "crop": "maize"},
+            {"model": "ridge", "nrmse": 0.25, "r2": 0.6, "n_samples": 40, "country": "DE", "batch_horizon": "mid", "crop": "maize"},
         ]
     )
-    board = aggregate_model_leaderboard(df)
+    board = aggregate_model_leaderboard(df, batch_horizon="eos")
     assert list(board["model"]) == ["ridge", "xgboost"]
     assert board.loc[board["model"] == "ridge", "weighted_nrmse"].iloc[0] < 0.15
     assert int(board.loc[board["model"] == "ridge", "total_samples"].iloc[0]) == 110
+
+    mid_board = aggregate_model_leaderboard(df, batch_horizon="mid")
+    assert list(mid_board["model"]) == ["ridge"]
+    assert len(mid_board) == 1
+
+
+def test_baseline_beat_rate():
+    df = pd.DataFrame(
+        [
+            {
+                "model": "average",
+                "crop": "maize",
+                "country": "DE",
+                "batch_horizon": "eos",
+                "nrmse": 0.30,
+                "r2": 0.2,
+                "n_samples": 50,
+            },
+            {
+                "model": "ridge",
+                "crop": "maize",
+                "country": "DE",
+                "batch_horizon": "eos",
+                "nrmse": 0.10,
+                "r2": 0.9,
+                "n_samples": 50,
+            },
+            {
+                "model": "xgboost",
+                "crop": "maize",
+                "country": "DE",
+                "batch_horizon": "eos",
+                "nrmse": 0.40,
+                "r2": -0.1,
+                "n_samples": 50,
+            },
+        ]
+    )
+    tagged = attach_baseline_metrics(df)
+    assert bool(tagged.loc[tagged["model"] == "ridge", "beats_baseline"].iloc[0])
+    assert not bool(tagged.loc[tagged["model"] == "xgboost", "beats_baseline"].iloc[0])
+
+    board = aggregate_model_leaderboard(df, batch_horizon="eos")
+    ridge = board.loc[board["model"] == "ridge"].iloc[0]
+    xgb = board.loc[board["model"] == "xgboost"].iloc[0]
+    assert ridge["beat_baseline_rate"] == 1.0
+    assert xgb["beat_baseline_rate"] == 0.0
+    assert "average" not in set(board["model"])
+
+
+def test_skilled_only_leaderboard():
+    df = pd.DataFrame(
+        [
+            {
+                "model": "average",
+                "crop": "maize",
+                "country": "DE",
+                "batch_horizon": "eos",
+                "nrmse": 0.20,
+                "r2": 0.3,
+                "n_samples": 50,
+            },
+            {
+                "model": "ridge",
+                "crop": "maize",
+                "country": "DE",
+                "batch_horizon": "eos",
+                "nrmse": 0.10,
+                "r2": 0.9,
+                "n_samples": 50,
+            },
+            {
+                "model": "ridge",
+                "crop": "wheat",
+                "country": "DE",
+                "batch_horizon": "eos",
+                "nrmse": 0.50,
+                "r2": -0.2,
+                "n_samples": 50,
+            },
+        ]
+    )
+    board = aggregate_model_leaderboard(df, batch_horizon="eos", skilled_only=True)
+    assert len(board) == 1
+    assert board.iloc[0]["model"] == "ridge"
+    assert board.iloc[0]["n_datasets"] == 1
+
+
+def test_build_model_country_matrix():
+    df = pd.DataFrame(
+        [
+            {
+                "model": "average",
+                "crop": "maize",
+                "country": "DE",
+                "batch_horizon": "eos",
+                "nrmse": 0.30,
+                "r2": 0.2,
+                "n_samples": 50,
+            },
+            {
+                "model": "ridge",
+                "crop": "maize",
+                "country": "DE",
+                "batch_horizon": "eos",
+                "nrmse": 0.10,
+                "r2": 0.9,
+                "n_samples": 50,
+            },
+            {
+                "model": "ridge",
+                "crop": "wheat",
+                "country": "FR",
+                "batch_horizon": "eos",
+                "nrmse": 0.20,
+                "r2": 0.7,
+                "n_samples": 30,
+            },
+        ]
+    )
+    matrix = build_model_country_matrix(df, batch_horizon="eos")
+    assert matrix["models"] == ["ridge"]
+    assert matrix["countries"] == ["DE", "FR"]
+    assert len(matrix["cells"]) == 2
 
 
 def test_compare_horizons_eos_better():
@@ -87,3 +222,36 @@ def test_load_summary_frame_from_tmp(tmp_path: Path):
     assert len(frame) == 1
     assert frame["country"].iloc[0] == "DE"
     assert frame["batch_horizon"].iloc[0] == "eos"
+
+
+def test_build_insights_payload_structure(tmp_path: Path):
+    for cc, hz in [("de", "eos"), ("de", "mid")]:
+        d = tmp_path / f"paper_walk_forward_{cc}_{hz}_v1"
+        d.mkdir(parents=True)
+        pd.DataFrame(
+            [
+                {
+                    "crop": "maize",
+                    "country": "DE",
+                    "model": "average",
+                    "nrmse": 0.25,
+                    "r2": 0.3,
+                    "n_samples": 40,
+                },
+                {
+                    "crop": "maize",
+                    "country": "DE",
+                    "model": "ridge",
+                    "nrmse": 0.15 if hz == "eos" else 0.22,
+                    "r2": 0.8 if hz == "eos" else 0.6,
+                    "n_samples": 40,
+                },
+            ]
+        ).to_csv(d / "walk_forward_summary.csv", index=False)
+
+    payload = build_insights_payload(tmp_path, version=1)
+    assert "leaderboards" in payload
+    assert len(payload["leaderboards"]["eos"]) == 1
+    assert payload["leaderboards"]["eos"][0]["model"] == "ridge"
+    assert "model_country" in payload
+    assert payload["model_country"]["eos"]["models"] == ["ridge"]

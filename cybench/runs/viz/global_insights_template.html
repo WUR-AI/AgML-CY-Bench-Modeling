@@ -106,6 +106,39 @@
     tr:nth-child(even) td { background: #fafbfc; }
     a { color: var(--accent); }
     .note { margin-top: 0.5rem; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .toolbar button {
+      padding: 0.35rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      font: inherit;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .toolbar button.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .heatmap-matrix th.model-col,
+    .heatmap-matrix td.model-col {
+      text-align: left;
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      background: #f3f4f6;
+      min-width: 7rem;
+    }
+    .heatmap-matrix tbody td.model-col { background: #fff; }
+    .heatmap-matrix tbody tr:nth-child(even) td.model-col { background: #fafbfc; }
+    .heatmap-matrix th.country-col { min-width: 2.6rem; font-size: 0.78rem; }
   </style>
 </head>
 <body>
@@ -117,11 +150,31 @@
     <div class="card">
       <h2>Research Q1 — Which models perform best across countries?</h2>
       <p class="muted">
-        Ranked by <strong>sample-weighted mean NRMSE</strong> (region-year level).
-        NRMSE normalizes RMSE by mean absolute yield, so values are more comparable across countries than raw RMSE.
-        Lower is better. Each row aggregates all crop×country datasets for that model.
+        Rankings are computed <strong>per forecast horizon</strong> (end-of-season vs mid-season are not mixed).
+        Primary metric: sample-weighted mean NRMSE (lower is better).
+        <strong>Beat baseline %</strong> = share of crop×country datasets where the model beats
+        <span id="baseline-label">average</span> (region mean yield).
+        Enable <em>Skilful only</em> to restrict to datasets where the model beats baseline or has R² &gt; 0.
       </p>
+      <div class="controls">
+        <span class="muted">Horizon</span>
+        <div class="toolbar" id="rq1-horizon-toolbar">
+          <button type="button" data-horizon="eos" class="active">End of season</button>
+          <button type="button" data-horizon="mid">Mid-season</button>
+        </div>
+        <label>
+          <input type="checkbox" id="rq1-skilled-only" />
+          Skilful datasets only
+        </label>
+        <label>
+          Model
+          <input type="search" id="rq1-model-filter" placeholder="Filter…" />
+        </label>
+      </div>
       <div class="table-scroll" id="leaderboard-wrap"></div>
+      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">Model × country (weighted NRMSE)</h3>
+      <p class="muted" style="margin-top:0;">Darker green = lower error. Empty cells = no data for that pair.</p>
+      <div class="table-scroll" id="model-country-wrap"></div>
     </div>
 
     <div class="card">
@@ -227,24 +280,45 @@
     document.getElementById("meta").textContent =
       `${DATA.n_countries} countries · ${DATA.n_rows} dataset×model rows · ${DATA.n_summary_files} collected summaries`;
 
-    // Leaderboard
+    const baselineLabel = (DATA.baseline_models || []).join(", ") || "average";
+    document.getElementById("baseline-label").textContent = baselineLabel;
+
+    // RQ1 — horizon-specific leaderboard + heatmap
+    let rq1Horizon = "eos";
+    let rq1SkilledOnly = false;
     let lbSort = "weighted_nrmse";
     let lbDir = "asc";
     const lbWrap = document.getElementById("leaderboard-wrap");
+    const mcWrap = document.getElementById("model-country-wrap");
+    const rq1ModelFilter = document.getElementById("rq1-model-filter");
+    const rq1HorizonToolbar = document.getElementById("rq1-horizon-toolbar");
+    const rq1SkilledCheckbox = document.getElementById("rq1-skilled-only");
+
     const lbCols = [
       { key: "rank", label: "#", sortable: false },
       { key: "model", label: "Model" },
       { key: "weighted_nrmse", label: "Weighted NRMSE", bg: fixedNrmseBg },
       { key: "mean_nrmse", label: "Mean NRMSE", bg: fixedNrmseBg },
       { key: "median_nrmse", label: "Median NRMSE", bg: fixedNrmseBg },
+      { key: "std_nrmse", label: "Std NRMSE" },
+      { key: "beat_baseline_rate", label: "Beat baseline %", format: pct },
+      { key: "skilled_rate", label: "Skilful %", format: pct },
       { key: "mean_r2", label: "Mean R²" },
       { key: "n_datasets", label: "Datasets" },
       { key: "n_countries", label: "Countries" },
       { key: "total_samples", label: "Samples", format: (v) => v == null ? "—" : String(v) },
     ];
 
+    function rq1LeaderboardRows() {
+      const source = rq1SkilledOnly ? DATA.leaderboards_skilled : DATA.leaderboards;
+      const rows = (source && source[rq1Horizon]) ? [...source[rq1Horizon]] : [];
+      const mq = rq1ModelFilter.value.trim().toLowerCase();
+      if (mq) return rows.filter(r => r.model.toLowerCase().includes(mq));
+      return rows;
+    }
+
     function renderLeaderboard() {
-      const rows = [...DATA.leaderboard].sort((a, b) => {
+      const rows = rq1LeaderboardRows().sort((a, b) => {
         const dir = lbDir === "asc" ? 1 : -1;
         const cmp = compareSortValues(a, b, lbSort);
         if (cmp !== 0) return dir * cmp;
@@ -256,9 +330,70 @@
         renderLeaderboard();
       });
     }
-    renderLeaderboard();
 
-    // Horizon overall
+    function renderModelCountryHeatmap() {
+      const matrix = (DATA.model_country && DATA.model_country[rq1Horizon]) || { models: [], countries: [], cells: [] };
+      const mq = rq1ModelFilter.value.trim().toLowerCase();
+      let models = matrix.models || [];
+      if (mq) models = models.filter(m => m.toLowerCase().includes(mq));
+      const countries = matrix.countries || [];
+      const cellMap = new Map();
+      for (const cell of matrix.cells || []) {
+        cellMap.set(`${cell.model}|||${cell.country}`, cell);
+      }
+
+      if (!models.length || !countries.length) {
+        mcWrap.innerHTML = `<p class="muted" style="padding:0.75rem;">No model×country data for this horizon.</p>`;
+        return;
+      }
+
+      let html = '<table class="heatmap-matrix"><thead><tr><th class="model-col">Model</th>';
+      for (const cc of countries) {
+        html += `<th class="country-col">${cc}</th>`;
+      }
+      html += "</tr></thead><tbody>";
+      for (const model of models) {
+        html += `<tr><td class="model-col">${model}</td>`;
+        for (const cc of countries) {
+          const cell = cellMap.get(`${model}|||${cc}`);
+          if (!cell || cell.weighted_nrmse == null) {
+            html += '<td class="metric-cell">—</td>';
+            continue;
+          }
+          const bg = fixedNrmseBg(cell.weighted_nrmse);
+          const style = bg ? ` style="background-color:${bg}"` : "";
+          const title = cell.beat_baseline_rate != null
+            ? ` title="Beat baseline: ${pct(cell.beat_baseline_rate)}"`
+            : "";
+          html += `<td class="metric-cell"${style}${title}>${fmt(cell.weighted_nrmse)}</td>`;
+        }
+        html += "</tr>";
+      }
+      html += "</tbody></table>";
+      mcWrap.innerHTML = html;
+    }
+
+    function renderRq1() {
+      renderLeaderboard();
+      renderModelCountryHeatmap();
+    }
+
+    rq1HorizonToolbar.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        rq1HorizonToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        rq1Horizon = btn.dataset.horizon;
+        renderRq1();
+      });
+    });
+    rq1SkilledCheckbox.addEventListener("change", () => {
+      rq1SkilledOnly = rq1SkilledCheckbox.checked;
+      renderRq1();
+    });
+    rq1ModelFilter.addEventListener("input", renderRq1);
+    renderRq1();
+
+    // Horizon overall (RQ2)
     const oh = DATA.overall_horizon || {};
     document.getElementById("horizon-note").textContent = oh.interpretation || "";
     const statsEl = document.getElementById("horizon-stats");

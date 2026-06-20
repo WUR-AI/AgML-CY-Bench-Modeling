@@ -73,9 +73,11 @@ def main() -> int:
     )
     payload = build_insights_payload(args.output_root.resolve(), version=args.version)
     print(f"[DONE] Insights dashboard: {path}")
+    n_eos = len(payload["leaderboards"].get("eos") or [])
+    n_mid = len(payload["leaderboards"].get("mid") or [])
     print(
         f"[INFO] {payload['n_countries']} countries, "
-        f"{len(payload['leaderboard'])} models in leaderboard"
+        f"{n_eos} models (eos leaderboard), {n_mid} models (mid leaderboard)"
     )
     return 0
 
