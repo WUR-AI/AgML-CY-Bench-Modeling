@@ -168,6 +168,7 @@ def test_build_model_country_matrix():
     assert matrix["models"] == ["ridge"]
     assert matrix["countries"] == ["DE"]
     assert matrix["cells"][0]["mean_nrmse"] == 0.10
+    assert matrix["cells"][0]["median_nrmse"] == 0.10
 
 
 def test_compare_horizons_eos_better():

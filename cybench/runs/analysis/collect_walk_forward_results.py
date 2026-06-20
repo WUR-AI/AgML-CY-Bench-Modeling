@@ -23,7 +23,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 import yaml
@@ -101,7 +101,7 @@ def _load_split_preds(run_dir: Path, model_col: str) -> pd.DataFrame | None:
             out[KEY_COUNTRY] = country
         formatted = out.rename(columns={"targets": KEY_TARGET, "preds": model_col})
         keep = [c for c in [KEY_COUNTRY, KEY_LOC, KEY_YEAR, KEY_TARGET, model_col] if c in formatted.columns]
-        frames.append(formatted[keep])
+        frames.append(cast(pd.DataFrame, formatted.loc[:, keep]))
     if not frames:
         return None
     return pd.concat(frames, ignore_index=True)
@@ -211,7 +211,7 @@ def export_year_csvs(df: pd.DataFrame, run: BenchmarkRun, dest_dir: Path) -> Non
     dest_dir.mkdir(parents=True, exist_ok=True)
     year_col = KEY_YEAR if KEY_YEAR in df.columns else "year"
     for year, year_df in df.groupby(year_col):
-        out_name = f"{run.dataset}_h{run.horizon}_year_{int(year)}.csv"
+        out_name = f"{run.dataset}_h{run.horizon}_year_{int(cast(Any, year))}.csv"
         year_df.to_csv(dest_dir / out_name, index=False, float_format="%.6f")
 
 

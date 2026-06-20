@@ -139,6 +139,14 @@
     .heatmap-matrix tbody td.model-col { background: #fff; }
     .heatmap-matrix tbody tr:nth-child(even) td.model-col { background: #fafbfc; }
     .heatmap-matrix th.country-col { min-width: 2.6rem; font-size: 0.78rem; }
+    .heatmap-matrix th.median-col,
+    .heatmap-matrix td.median-col {
+      text-align: right;
+      font-weight: 600;
+      background: #eef1f4;
+      border-right: 2px solid var(--border);
+    }
+    .heatmap-matrix tbody td.median-col { background: #f3f5f7; }
   </style>
 </head>
 <body>
@@ -177,8 +185,18 @@
         </label>
       </div>
       <div class="table-scroll" id="leaderboard-wrap"></div>
-      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">Model × country (mean NRMSE)</h3>
-      <p class="muted" style="margin-top:0;">Darker green = lower error. Empty cells = no data for that pair.</p>
+      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">Model × country</h3>
+      <div class="controls">
+        <label>Metric
+          <select id="rq1-matrix-metric">
+            <option value="nrmse" selected>NRMSE (mean)</option>
+            <option value="r2">R² (mean)</option>
+          </select>
+        </label>
+      </div>
+      <p class="muted" style="margin-top:0;" id="matrix-metric-note">
+        Median column = median across countries per model. Green = better (lower NRMSE / higher R²).
+      </p>
       <div class="table-scroll" id="model-country-wrap"></div>
     </div>
 
@@ -232,6 +250,11 @@
 
     function fixedNrmseBg(v) {
       return heatColor(v, 0, 0.5, false);
+    }
+
+    function fixedR2Bg(v) {
+      if (v === null || v === undefined || Number.isNaN(v)) return null;
+      return heatColor(v, 0, 1, true);
     }
 
     function fixedDeltaBg(v) {
@@ -292,6 +315,7 @@
     let rq1Horizon = "eos";
     let rq1Crop = "all";
     let rq1SkilledOnly = false;
+    let rq1MatrixMetric = "nrmse";
     let lbSort = "mean_nrmse";
     let lbDir = "asc";
     const lbWrap = document.getElementById("leaderboard-wrap");
@@ -300,6 +324,8 @@
     const rq1HorizonToolbar = document.getElementById("rq1-horizon-toolbar");
     const rq1CropFilter = document.getElementById("rq1-crop-filter");
     const rq1SkilledCheckbox = document.getElementById("rq1-skilled-only");
+    const rq1MatrixMetricSelect = document.getElementById("rq1-matrix-metric");
+    const matrixMetricNote = document.getElementById("matrix-metric-note");
 
     for (const crop of DATA.crops || []) {
       const opt = document.createElement("option");
@@ -339,6 +365,32 @@
       return byHorizon[rq1Crop] || byHorizon.all || { models: [], countries: [], cells: [] };
     }
 
+    function matrixMetricSpec() {
+      if (rq1MatrixMetric === "r2") {
+        return {
+          key: "mean_r2",
+          label: "R²",
+          bg: fixedR2Bg,
+          note: "Median column = median across countries per model. Green = higher R².",
+        };
+      }
+      return {
+        key: "mean_nrmse",
+        label: "NRMSE",
+        bg: fixedNrmseBg,
+        note: "Median column = median across countries per model. Green = lower NRMSE.",
+      };
+    }
+
+    function medianOf(values) {
+      const nums = values.filter(v => v !== null && v !== undefined && !Number.isNaN(Number(v)))
+        .map(v => Number(v))
+        .sort((a, b) => a - b);
+      if (!nums.length) return null;
+      const mid = Math.floor(nums.length / 2);
+      return nums.length % 2 === 1 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+    }
+
     function renderLeaderboard() {
       const rows = rq1LeaderboardRows().sort((a, b) => {
         const dir = lbDir === "asc" ? 1 : -1;
@@ -354,6 +406,9 @@
     }
 
     function renderModelCountryHeatmap() {
+      const spec = matrixMetricSpec();
+      matrixMetricNote.textContent = spec.note;
+
       const matrix = rq1MatrixSource();
       const mq = rq1ModelFilter.value.trim().toLowerCase();
       let models = matrix.models || [];
@@ -370,24 +425,37 @@
       }
 
       let html = '<table class="heatmap-matrix"><thead><tr><th class="model-col">Model</th>';
+      html += `<th class="median-col">Median</th>`;
       for (const cc of countries) {
         html += `<th class="country-col">${cc}</th>`;
       }
       html += "</tr></thead><tbody>";
       for (const model of models) {
         html += `<tr><td class="model-col">${model}</td>`;
+        const rowValues = [];
         for (const cc of countries) {
           const cell = cellMap.get(`${model}|||${cc}`);
-          if (!cell || cell.mean_nrmse == null) {
+          const raw = cell ? cell[spec.key] : null;
+          if (raw !== null && raw !== undefined) rowValues.push(raw);
+        }
+        const rowMed = medianOf(rowValues);
+        const medBg = rowMed !== null ? spec.bg(rowMed) : null;
+        const medStyle = medBg ? ` style="background-color:${medBg}"` : "";
+        html += `<td class="metric-cell median-col"${medStyle}>${fmt(rowMed)}</td>`;
+
+        for (const cc of countries) {
+          const cell = cellMap.get(`${model}|||${cc}`);
+          const raw = cell ? cell[spec.key] : null;
+          if (raw === null || raw === undefined) {
             html += '<td class="metric-cell">—</td>';
             continue;
           }
-          const bg = fixedNrmseBg(cell.mean_nrmse);
+          const bg = spec.bg(raw);
           const style = bg ? ` style="background-color:${bg}"` : "";
           const title = cell.beat_baseline_rate != null
             ? ` title="Beat baseline: ${pct(cell.beat_baseline_rate)}"`
             : "";
-          html += `<td class="metric-cell"${style}${title}>${fmt(cell.mean_nrmse)}</td>`;
+          html += `<td class="metric-cell"${style}${title}>${fmt(raw)}</td>`;
         }
         html += "</tr>";
       }
@@ -411,6 +479,10 @@
     rq1CropFilter.addEventListener("change", () => {
       rq1Crop = rq1CropFilter.value || "all";
       renderRq1();
+    });
+    rq1MatrixMetricSelect.addEventListener("change", () => {
+      rq1MatrixMetric = rq1MatrixMetricSelect.value || "nrmse";
+      renderModelCountryHeatmap();
     });
     rq1SkilledCheckbox.addEventListener("change", () => {
       rq1SkilledOnly = rq1SkilledCheckbox.checked;

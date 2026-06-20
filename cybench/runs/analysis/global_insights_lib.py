@@ -188,7 +188,7 @@ def build_model_country_matrix(
     batch_horizon: str,
     crop: str | None = None,
 ) -> dict[str, Any]:
-    """Model × country matrix (mean NRMSE per model×country)."""
+    """Model × country matrix (mean/median NRMSE and R² per model×country)."""
     work = attach_baseline_metrics(df)
     work = work[~work["model"].apply(is_baseline_model)]
     work = work[work["batch_horizon"] == batch_horizon]
@@ -206,7 +206,9 @@ def build_model_country_matrix(
                 "model": model,
                 "country": country,
                 "mean_nrmse": float(grp["nrmse"].mean()),
+                "median_nrmse": float(grp["nrmse"].median()),
                 "mean_r2": float(grp["r2"].mean()) if "r2" in grp else None,
+                "median_r2": float(grp["r2"].median()) if "r2" in grp else None,
                 "n_datasets": int(len(grp)),
                 "beat_baseline_rate": float(comparable["beats_baseline"].mean())
                 if len(comparable)
