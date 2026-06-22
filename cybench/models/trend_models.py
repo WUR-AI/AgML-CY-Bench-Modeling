@@ -93,38 +93,52 @@ class TrendModel(BaseModel):
         if sel.empty:
             return float(train_df[KEY_TARGET].mean())
 
-        label_df = cast(pd.DataFrame, sel.loc[:, [KEY_YEAR, KEY_TARGET]])
-        train_labels = cast(npt.NDArray[np.floating[Any]], label_df.to_numpy())
-        train_years = sorted(cast(pd.Series, sel[KEY_YEAR]).unique())
+        label_df = cast(
+            pd.DataFrame,
+            sel.loc[:, [KEY_YEAR, KEY_TARGET]].sort_values(KEY_YEAR),
+        )
+        train_years = sorted(cast(pd.Series, label_df[KEY_YEAR]).unique())
 
         lt = [yr for yr in train_years if yr < test_year]
         gt = [yr for yr in train_years if yr > test_year]
 
         # Case 2: not enough years on either side
         if len(lt) < self.min_trend_window and len(gt) < self.min_trend_window:
-            return float(sel[KEY_TARGET].mean())
+            return float(label_df[KEY_TARGET].mean())
 
         trend = None
 
         # Case 3: trend from years before test year
         if len(lt) >= self.min_trend_window:
-            window = self._find_optimal_window(train_labels, lt, extend_forward=False)
+            window = self._find_optimal_window(label_df, lt, extend_forward=False)
             if window is not None:
-                vals = train_labels[np.isin(train_labels[:, 0], window)][:, 1]
-                trend = self._estimate_trend(window, vals, test_year)
+                window_x, vals = self._window_series(label_df, window)
+                trend = self._estimate_trend(window_x, vals, test_year)
 
         # Case 4: trend from years after test year
         if trend is None and len(gt) >= self.min_trend_window:
-            window = self._find_optimal_window(train_labels, gt, extend_forward=True)
+            window = self._find_optimal_window(label_df, gt, extend_forward=True)
             if window is not None:
-                vals = train_labels[np.isin(train_labels[:, 0], window)][:, 1]
-                trend = self._estimate_trend(window, vals, test_year)
+                window_x, vals = self._window_series(label_df, window)
+                trend = self._estimate_trend(window_x, vals, test_year)
 
         # Case 5: no significant trend — use location mean
         if trend is None:
-            trend = float(sel[KEY_TARGET].mean())
+            trend = float(label_df[KEY_TARGET].mean())
 
         return float(trend)
+
+    @staticmethod
+    def _window_series(
+        label_df: pd.DataFrame,
+        years: list[int],
+    ) -> tuple[npt.NDArray[Any], npt.NDArray[np.floating[Any]]]:
+        """Return chronologically ordered (years, yields) for Mann-Kendall / OLS."""
+        sub = label_df[label_df[KEY_YEAR].isin(years)].sort_values(KEY_YEAR)
+        return (
+            sub[KEY_YEAR].to_numpy(),
+            cast(npt.NDArray[np.floating[Any]], sub[KEY_TARGET].to_numpy(dtype=float)),
+        )
 
     def _estimate_trend(self, trend_x, trend_y, test_x):
         """Fit OLS on (year, yield) and predict at test_x."""
@@ -133,7 +147,12 @@ class TrendModel(BaseModel):
         pred_x = add_constant(np.array([[test_x]]), has_constant="add")
         return model.predict(pred_x)[0]
 
-    def _find_optimal_window(self, train_labels, window_years, extend_forward=False):
+    def _find_optimal_window(
+        self,
+        label_df: pd.DataFrame,
+        window_years: list[int],
+        extend_forward: bool = False,
+    ):
         """Select the window size that yields the most significant Mann-Kendall trend."""
         min_p = float("inf")
         best = None
@@ -141,7 +160,7 @@ class TrendModel(BaseModel):
 
         for i in range(self.min_trend_window, upper):
             years = window_years[:i] if extend_forward else window_years[-i:]
-            vals = train_labels[np.isin(train_labels[:, 0], years)][:, 1]
+            _, vals = self._window_series(label_df, years)
             result = trend_mk.original_test(vals)
             if result.h and result.p < min_p:
                 min_p = result.p

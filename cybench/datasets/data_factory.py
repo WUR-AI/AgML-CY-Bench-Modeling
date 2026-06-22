@@ -111,8 +111,9 @@ class DataFactory:
                 torch.save(dataset, cache_path)
 
         elif self.cfg.framework == "pandas":
+            aggregate = getattr(self.cfg.temporal, "aggregate", None)
             tabular_parts = [
-                self._tabularize(df_x)
+                self._tabularize(df_x, aggregate=aggregate)
                 for name, df_x in dfs_x.items()
                 if name != "non_temporal"
             ]
@@ -443,10 +444,12 @@ class DataFactory:
                 "merge crop_season_df before calling _aggregate_time_series."
             )
         season_end = pd.to_datetime(df_ts["end_of_sequence_date"])
+        eos = df_ts[[KEY_LOC, KEY_YEAR, "end_of_sequence_date"]].drop_duplicates()
+        df_ts = df_ts.drop(columns=["end_of_sequence_date"])
+
         day_offset = (season_end - df_ts["date"]).dt.days  # 0 at season end, grows backwards
         window_idx = day_offset // aggregate
         df_ts["date"] = season_end - pd.to_timedelta(window_idx * aggregate, unit="D")
-        df_ts = df_ts.drop(columns=["end_of_sequence_date"])
 
         # Split agg_function into single-fn and multi-fn columns
         single_agg: dict[str, str] = {}  # col -> "mean" | "sum" | …
@@ -477,37 +480,57 @@ class DataFactory:
         for part in parts[1:]:
             df_agg = df_agg.join(part, how="left")
 
-        # index is already [KEY_LOC, KEY_YEAR, "date"] — matches original contract
+        df_agg = (
+            df_agg.reset_index()
+            .merge(eos, on=group_keys, how="left")
+            .set_index(group_keys + ["date"])
+        )
         return df_agg
 
 
     @staticmethod
-    def _tabularize(df_ts: pd.DataFrame) -> pd.DataFrame:
+    def _tabularize(df_ts: pd.DataFrame, aggregate: int | None = None) -> pd.DataFrame:
         """Pivot aggregated time series into one flat row per (adm_id, year).
 
-        Window index is crop-calendar anchored: 0 = last window (end_of_sequence),
-        1 = one before, … Column names follow the pattern <feature>_0, <feature>_1, …
-        adm_ids with shorter seasons produce NaN in their earliest columns.
+        Window index is crop-calendar anchored when ``aggregate`` is set: 0 = EOS
+        window, 1 = one before, … Column names follow <feature>_0, <feature>_1, …
+        Sparse or truncated sources leave NaN in the latest window columns rather
+        than shifting indices.
 
         Args:
             df_ts: aggregated DataFrame with MultiIndex [KEY_LOC, KEY_YEAR, date]
+            aggregate: window size in days when data was EOS-anchored; None for daily series.
 
         Returns:
             Flat DataFrame with MultiIndex [KEY_LOC, KEY_YEAR]
         """
         df = df_ts.reset_index()
-
-        # Rank windows per (loc, year): 0 = EOS (latest date), 1 = one before, ...
-        # rank(ascending=False) gives 1 to the largest date, so subtract 1 for 0-based.
-        # Using method='dense' ensures no gaps even if dates are irregular.
         group_keys = [KEY_LOC, KEY_YEAR]
-        df["window"] = (
-            df.groupby(group_keys, observed=True)["date"]
-            .rank(method="dense", ascending=False)
-            .astype(int) - 1
-        )
 
-        feature_cols = [c for c in df.columns if c not in group_keys + ["date", "window"]]
+        if aggregate is not None:
+            if "end_of_sequence_date" not in df.columns:
+                raise ValueError(
+                    "end_of_sequence_date required for EOS-anchored tabularization; "
+                    "ensure _aggregate_time_series attached it to the aggregated frame."
+                )
+            df["window"] = (
+                (
+                    pd.to_datetime(df["end_of_sequence_date"]) - df["date"]
+                ).dt.days
+                // aggregate
+            ).astype(int)
+            meta_cols = group_keys + ["date", "window", "end_of_sequence_date"]
+        else:
+            # Daily/unaggregated series: rank by date (0 = latest observation).
+            df["window"] = (
+                df.groupby(group_keys, observed=True)["date"]
+                .rank(method="dense", ascending=False)
+                .astype(int)
+                - 1
+            )
+            meta_cols = group_keys + ["date", "window"]
+
+        feature_cols = [c for c in df.columns if c not in meta_cols]
 
         # pivot_table handles missing windows per adm_id gracefully — NaN fills in.
         pivoted = df.pivot_table(

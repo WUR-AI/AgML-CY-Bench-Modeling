@@ -3,7 +3,7 @@
 name: yield
 
 # Optional: null or a list of criteria used for filtering
-# Note: first run cybench/data_preprocessing/assess_yield_quality.py
+# Note: run data_preparation/assess_yield_quality.py (see cybench/datasets/yield_quality.py)
 filter_samples:
   - flag_consecutive_yield
   - flag_area_outlier

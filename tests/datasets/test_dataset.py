@@ -156,3 +156,60 @@ def test_memory_optimization(dataset_cfg):
 
     for col in x_no_optimization.columns:
         assert x_no_optimization[col].equals(x_memory_optimized[col])
+
+
+def test_aggregate_time_series_eos_anchored():
+    eos = pd.Timestamp("2020-06-30")
+    df = pd.DataFrame({
+        KEY_LOC: ["loc1", "loc1", "loc1"],
+        KEY_YEAR: [2020, 2020, 2020],
+        "date": pd.to_datetime(["2020-06-01", "2020-06-15", "2020-06-20"]),
+        "end_of_sequence_date": [eos, eos, eos],
+        "value": [1.0, 2.0, 3.0],
+    })
+    df_agg = DataFactory._aggregate_time_series(df, {"value": "mean"}, aggregate=10)
+    dates = set(df_agg.reset_index()["date"])
+
+    assert pd.Timestamp("2020-06-20") in dates
+    assert pd.Timestamp("2020-06-10") in dates
+    assert pd.Timestamp("2020-06-30") not in dates
+
+
+def test_tabularize_eos_window_index_truncated_series():
+    """Truncated data must not shift EOS window indices (rank bug)."""
+    eos = pd.Timestamp("2020-06-30")
+    df = pd.DataFrame({
+        KEY_LOC: ["loc_full", "loc_full", "loc_sparse", "loc_sparse"],
+        KEY_YEAR: [2020, 2020, 2020, 2020],
+        "date": pd.to_datetime(
+            ["2020-06-30", "2020-06-10", "2020-06-20", "2020-06-10"]
+        ),
+        "end_of_sequence_date": [eos, eos, eos, eos],
+        "value_mean": [5.0, 1.0, 3.0, 1.0],
+    }).set_index([KEY_LOC, KEY_YEAR, "date"])
+
+    tabular = DataFactory._tabularize(df, aggregate=10)
+
+    assert tabular.loc[("loc_full", 2020), "value_mean_0"] == 5.0
+    assert tabular.loc[("loc_sparse", 2020), "value_mean_0"] != 3.0
+    assert pd.isna(tabular.loc[("loc_sparse", 2020), "value_mean_0"])
+    assert tabular.loc[("loc_sparse", 2020), "value_mean_1"] == 3.0
+    assert tabular.loc[("loc_sparse", 2020), "value_mean_2"] == 1.0
+
+
+def test_tabularize_eos_window_index_preserves_gaps():
+    """Empty middle windows keep their calendar index instead of dense re-ranking."""
+    eos = pd.Timestamp("2020-06-30")
+    df = pd.DataFrame({
+        KEY_LOC: ["loc1", "loc1"],
+        KEY_YEAR: [2020, 2020],
+        "date": pd.to_datetime(["2020-06-30", "2020-06-10"]),
+        "end_of_sequence_date": [eos, eos],
+        "value_mean": [5.0, 1.0],
+    }).set_index([KEY_LOC, KEY_YEAR, "date"])
+
+    tabular = DataFactory._tabularize(df, aggregate=10)
+
+    assert tabular.loc[("loc1", 2020), "value_mean_0"] == 5.0
+    assert tabular.loc[("loc1", 2020), "value_mean_2"] == 1.0
+    assert "value_mean_1" not in tabular.columns

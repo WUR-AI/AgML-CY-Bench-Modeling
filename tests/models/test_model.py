@@ -161,6 +161,35 @@ def test_trend_model():
             assert np.round(test_preds[0], 2) == np.round(expected_pred, 2)
 
 
+def test_trend_model_unchanged_when_train_rows_shuffled():
+    """Mann-Kendall and OLS must use chronological yield order, not row order."""
+    rows = [["US-01-001", year, 4.0 + 0.1 * (year - 2000)] for year in range(2000, 2010)]
+    yield_df = pd.DataFrame(rows, columns=pd.Index([KEY_LOC, KEY_YEAR, KEY_TARGET]))
+
+    test_year = 2009
+    train_sorted = yield_df.loc[yield_df[KEY_YEAR] != test_year].set_index([KEY_LOC, KEY_YEAR])
+    train_shuffled = train_sorted.sample(frac=1.0, random_state=0)
+
+    test_index = pd.MultiIndex.from_tuples([("US-01-001", test_year)], names=[KEY_LOC, KEY_YEAR])
+    test_dataset = PandasDataset(
+        cfg=None,
+        y=pd.DataFrame(index=test_index, columns=pd.Index([KEY_TARGET]), data=[[0.0]]),
+        x=pd.DataFrame(index=test_index),
+    )
+
+    model_sorted = TrendModel()
+    model_sorted.fit(PandasDataset(cfg=None, y=train_sorted, x=pd.DataFrame(index=train_sorted.index)))
+    pred_sorted, _ = model_sorted.predict(test_dataset)
+
+    model_shuffled = TrendModel()
+    model_shuffled.fit(
+        PandasDataset(cfg=None, y=train_shuffled, x=pd.DataFrame(index=train_shuffled.index))
+    )
+    pred_shuffled, _ = model_shuffled.predict(test_dataset)
+
+    assert np.round(pred_sorted[0], 4) == np.round(pred_shuffled[0], 4)
+
+
 @pytest.fixture
 def cfg():
     with initialize(version_base=None, config_path="../../cybench/conf"):
@@ -197,6 +226,8 @@ def test_sklearn_model(cfg):
 
     data_path = os.path.join(PATH_DATA_DIR, "features", "maize", "US")
     train_csv = os.path.join(data_path, "grain_maize_US_train.csv")
+    if not os.path.exists(train_csv):
+        pytest.skip(f"Legacy US feature CSV not available at {train_csv}")
     train_df = pd.read_csv(train_csv, index_col=[KEY_LOC, KEY_YEAR])
     train_yields = cast(pd.DataFrame, train_df[[KEY_TARGET]].copy())
     feature_cols = [c for c in train_df.columns if c != KEY_TARGET]
