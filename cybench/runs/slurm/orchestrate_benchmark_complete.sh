@@ -26,7 +26,7 @@ Options:
   --version N         Batch version suffix (default: 1)
   --max N             Process at most N batch×horizon targets (0 = unlimited)
   --manifest PATH     Explicit job list
-  --model MODEL       Limit to model slug (repeatable, e.g. --model lpjml_bc)
+  --model MODEL       Limit to model slug (repeatable, e.g. --model lpjml_bc or twso_bc)
   --force-rerun       Include complete jobs in retry manifest (after code fixes)
   --output-root DIR   Parent of baselines_* (default: lustre output or ../output)
   --baselines-dir DIR Override output dir for one batch
@@ -44,7 +44,7 @@ Examples:
   orchestrate_benchmark_complete.sh --all-countries --horizons eos mid --list
   orchestrate_benchmark_complete.sh --countries DE FR NL --horizon eos --submit --dry-run
   orchestrate_benchmark_complete.sh --all-countries --horizons eos mid --max 5 --submit
-  orchestrate_benchmark_complete.sh --all-countries --horizon eos --model lpjml_bc \\
+  orchestrate_benchmark_complete.sh --all-countries --horizon eos --model twso_bc \\
     --phase walk_forward --force-rerun --submit --dry-run
 EOF
 }

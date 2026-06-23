@@ -355,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         dest="models",
         metavar="MODEL",
-        help="Limit to model slug(s); repeat for multiple (e.g. --model lpjml_bc)",
+        help="Limit to model slug(s); repeat for multiple (e.g. --model lpjml_bc --model twso_bc)",
     )
     parser.add_argument(
         "--force-rerun",

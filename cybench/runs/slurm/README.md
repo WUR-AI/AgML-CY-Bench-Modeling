@@ -64,15 +64,17 @@ With ~16 models and ~40 countries × 2 crops, the full manifest can be **1000+ j
 ```bash
 # CPU tabular (feature_design, no GPU)
 awk '$7=="no" && $6=="yes"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/benchmark_jobs_cpu.txt
-# Naive baselines (average, trend) — no HPO, no feature_design; submit separately
+# Naive / standalone baselines (average, trend, lpjml_bc, twso_bc) — no HPO, no feature_design
 awk '$5=="no" && $6=="no" && $7=="no"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/benchmark_jobs_naive.txt
 # GPU manifest (torch + TabPFN — pandas on GPU)
 awk '$7=="yes"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/benchmark_jobs_gpu.txt
 ```
 
 **Note:** `benchmark_jobs_cpu.txt` from `$7=="no"` includes only models with `feature_design=yes`
-(ridge, xgboost, …). **`average` and `trend` are in `benchmark_jobs_naive.txt`** — run those
-arrays too if you want the naive baseline in `compare_models.html`.
+(ridge, xgboost, …). **`average`, `trend`, `lpjml_bc`, and `twso_bc` are in `benchmark_jobs_naive.txt`**
+— run that array too if you want those baselines in `compare_models.html`. Rows for `lpjml_bc` /
+`twso_bc` are omitted at manifest generation when `lpjml_*.csv` / `twso_*.csv` is missing for a
+crop/country.
 
 ## One-command pipeline (recommended)
 
@@ -133,13 +135,13 @@ cybench/runs/slurm/orchestrate_benchmark_complete.sh \
 cybench/runs/slurm/orchestrate_benchmark_complete.sh \
   --batch baselines_DE_eos_v1 --phase walk_forward --submit
 
-# One model only (e.g. re-run lpjml_bc after a code fix)
+# One model only (e.g. re-run lpjml_bc or twso_bc after a code fix)
 cybench/runs/slurm/orchestrate_benchmark_complete.sh \
   --all-countries --horizon eos --model lpjml_bc \
   --phase walk_forward --force-rerun --list
 
 cybench/runs/slurm/orchestrate_benchmark_complete.sh \
-  --all-countries --horizon eos --model lpjml_bc \
+  --all-countries --horizon eos --model twso_bc \
   --phase walk_forward --force-rerun --submit --dry-run
 ```
 
