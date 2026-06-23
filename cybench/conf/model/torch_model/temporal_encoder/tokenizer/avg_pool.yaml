@@ -1,0 +1,16 @@
+
+_target_: cybench.models.torch.model_components.temporal_encoder.AvgPoolTokenizer
+
+in_dim: ${model.torch_model.temporal_in_dim}
+embed_dim: ${model.torch_model.embed_dim}
+
+# Non-overlapping per-channel mean pool (dekadal when patch_size=10).
+patch_size: 10
+eos_anchor: true
+
+_search_:
+  patch_size:
+    type: int
+    low: 5
+    high: 15
+    step: 5

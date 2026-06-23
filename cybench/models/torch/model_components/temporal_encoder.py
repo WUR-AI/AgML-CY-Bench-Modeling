@@ -2,7 +2,7 @@ import math
 
 import torch
 import torch.nn as nn
-from typing import Optional
+import torch.nn.functional as F
 
 """
 Temporal Encoder Module
@@ -10,8 +10,8 @@ Temporal Encoder Module
 
 This module implements a flexible temporal-encoding pipeline composed of:
 1. **Tokenizer**: Downsamples raw temporal features and maps them into a fixed
-   embedding dimension (`embed_dim`). Implemented via a high–receptive-field
-   Conv1d block (`ConvTokenizer`).
+   embedding dimension (`embed_dim`). Options include a learnable Conv1d block
+   (`ConvTokenizer`) or a fixed per-channel mean pool (`AvgPoolTokenizer`).
 2. **Processor**: Applies temporal feature transformation without changing the
    embedding dimensionality. Two processor families are provided:
        - `CNNProcessor`: Lightweight temporal convolutions with preserved shape.
@@ -141,6 +141,65 @@ class ConvTokenizer(nn.Module):
             return z + seas_embedding
         else:
             return z
+
+
+class _FixedChannelProjection(nn.Module):
+    """Pad or truncate channels without learnable weights."""
+
+    def __init__(self, in_dim: int, embed_dim: int):
+        super().__init__()
+        self.in_dim = in_dim
+        self.embed_dim = embed_dim
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.in_dim == self.embed_dim:
+            return x
+        if self.in_dim < self.embed_dim:
+            return F.pad(x, (0, self.embed_dim - self.in_dim))
+        return x[..., : self.embed_dim]
+
+
+class AvgPoolTokenizer(nn.Module):
+    """
+    Fixed temporal tokenizer: non-overlapping per-channel mean over patch_size days.
+
+  Mimics dekadal (or N-day) mean aggregation on the model side. No learnable
+    weights. When ``eos_anchor`` is True (default), the earliest days are dropped
+    so the last pool window ends at the final timestep (EOS-aligned windows).
+    """
+
+    def __init__(
+        self,
+        in_dim: int,
+        embed_dim: int,
+        patch_size: int = 10,
+        eos_anchor: bool = True,
+    ):
+        super().__init__()
+        if patch_size < 1:
+            raise ValueError(f"patch_size must be >= 1, got {patch_size}")
+        self.patch_size = patch_size
+        self.eos_anchor = eos_anchor
+        self.pool = nn.AvgPool1d(kernel_size=patch_size, stride=patch_size)
+        self.proj = _FixedChannelProjection(in_dim, embed_dim)
+
+    def _trim_to_eos_anchor(self, x: torch.Tensor) -> torch.Tensor:
+        remainder = x.shape[1] % self.patch_size
+        if remainder == 0:
+            return x
+        return x[:, remainder:, :]
+
+    def forward(self, x: torch.Tensor, doys: torch.Tensor) -> torch.Tensor:
+        del doys
+        if self.eos_anchor:
+            x = self._trim_to_eos_anchor(x)
+        if x.shape[1] < self.patch_size:
+            raise ValueError(
+                f"Sequence length {x.shape[1]} is shorter than patch_size "
+                f"{self.patch_size} after EOS anchoring."
+            )
+        z = self.pool(x.transpose(1, 2)).transpose(1, 2)
+        return self.proj(z)
 
 
 # ----------------------------------------------------------------------
