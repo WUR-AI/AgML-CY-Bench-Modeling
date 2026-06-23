@@ -3,6 +3,8 @@ from pathlib import Path
 import pandas as pd
 
 from cybench.runs.analysis.benchmark_run_catalog import parse_benchmark_run_dir
+from cybench.config import KEY_LOC, KEY_TARGET, KEY_YEAR
+from cybench.datasets.yield_quality import FLAG_YIELD
 from cybench.runs.analysis.collect_walk_forward_results import (
     _filter_runs,
     load_pooled_predictions,
@@ -54,6 +56,53 @@ def test_load_pooled_predictions_from_test_preds(tmp_path: Path):
     assert len(df) == 1
     assert df["yield"].iloc[0] == 10.0
     assert df["Ridge"].iloc[0] == 9.5
+
+
+def test_collect_applies_quality_filter(tmp_path: Path, monkeypatch):
+    import cybench.config as config
+    import cybench.datasets.yield_quality as yq
+
+    data_dir = tmp_path / "data"
+    country_dir = data_dir / "maize" / "NL"
+    country_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "crop_name": ["maize"],
+            "country_code": ["NL"],
+            KEY_LOC: ["NL-01"],
+            "harvest_year": [2016],
+            FLAG_YIELD: [True],
+            "flag_consecutive_yield": [False],
+            "flag_area_outlier": [False],
+        }
+    ).to_csv(country_dir / "yield_quality_maize_NL.csv", index=False)
+
+    monkeypatch.setattr(config, "PATH_DATA_DIR", str(data_dir))
+    monkeypatch.setattr(yq, "PATH_DATA_DIR", str(data_dir))
+
+    run_dir = tmp_path / "maize_NL_ridge_walk_forward_eos_20260615_135937"
+    split = run_dir / "2016" / "42"
+    split.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "adm_id": ["NL-01", "NL-02"],
+            "year": [2016, 2016],
+            "targets": [10.0, 11.0],
+            "preds": [9.5, 10.5],
+        }
+    ).to_csv(split / "test_preds.csv", index=False)
+
+    df, model_col = load_pooled_predictions(run_dir, model_slug="ridge")
+    filtered, n_removed = yq.apply_yield_quality_filter(
+        df,
+        "maize",
+        "NL",
+        data_dir=data_dir,
+        quality_flags=[FLAG_YIELD],
+    )
+    assert n_removed == 1
+    assert len(filtered) == 1
+    assert filtered.iloc[0][KEY_LOC] == "NL-02"
 
 
 def test_summary_rows_to_dashboard_records(tmp_path: Path):

@@ -184,11 +184,20 @@ def load_run_metrics(run: BenchmarkRun, *, seed: int = 42) -> dict[str, Any] | N
     """Pooled test metrics for a single Hydra run directory."""
     if run.phase == "walk_forward":
         from cybench.runs.analysis.collect_walk_forward_results import load_pooled_predictions
+        from cybench.datasets.yield_quality import apply_yield_quality_filter, filter_samples_from_target
 
         try:
             df, model_col = load_pooled_predictions(run.path, model_slug=run.model)
         except ValueError:
             return None
+        quality_flags = filter_samples_from_target()
+        if quality_flags:
+            df, _ = apply_yield_quality_filter(
+                df,
+                run.crop,
+                run.country,
+                quality_flags=quality_flags,
+            )
         return flatten_report_metrics(
             compute_report_metrics(df, target_col=KEY_TARGET, model_col=model_col)
         )

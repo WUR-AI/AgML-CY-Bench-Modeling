@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -27,6 +26,7 @@ from cybench.datasets.yield_quality import (
     merge_yield_with_quality,
     process_yield_quality_files,
     slim_quality_dataframe,
+    apply_yield_quality_filter,
     viz_flag_columns,
     yield_quality_settings_from_target,
 )
@@ -270,22 +270,80 @@ def test_assess_yield_dataframe_yield_flag_split():
     assert summary.n_yield_outlier == summary.n_yield_invalid + summary.n_yield_poly_outlier
 
 
+def test_apply_yield_quality_filter_drops_flagged_rows(tmp_path):
+    data_dir = tmp_path / "data"
+    country_dir = data_dir / "maize" / "XX"
+    country_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "crop_name": ["maize", "maize"],
+            "country_code": ["XX", "XX"],
+            KEY_LOC: ["XX01", "XX02"],
+            "harvest_year": [2020, 2021],
+            FLAG_YIELD: [True, False],
+            FLAG_CONSECUTIVE: [False, False],
+            FLAG_AREA: [False, False],
+        }
+    ).to_csv(country_dir / "yield_quality_maize_XX.csv", index=False)
+
+    preds = pd.DataFrame(
+        {
+            KEY_LOC: ["XX01", "XX02"],
+            KEY_YEAR: [2020, 2021],
+            KEY_TARGET: [5.0, 6.0],
+            "Ridge": [4.8, 5.9],
+        }
+    )
+    filtered, n_removed = apply_yield_quality_filter(
+        preds,
+        "maize",
+        "XX",
+        data_dir=data_dir,
+        quality_flags=[FLAG_YIELD],
+    )
+    assert n_removed == 1
+    assert len(filtered) == 1
+    assert filtered.iloc[0][KEY_LOC] == "XX02"
+
+
 def test_run_yield_quality_visualizations(tmp_path):
     from data_preparation.visualize_yield_quality import run_yield_quality_visualizations
 
-    data_dir = Path(__file__).resolve().parents[2] / "cybench" / "testdata"
+    crop, country = "wheat", "ES"
+    data_root = tmp_path / crop / country
+    data_root.mkdir(parents=True)
+    yield_file = data_root / f"yield_{crop}_{country}.csv"
+    years = np.arange(2010, 2020)
+    yields = np.full(len(years), 5.0)
+    yields[5] = 50.0
+    pd.DataFrame(
+        {
+            "crop_name": [crop] * len(years),
+            "country_code": [country] * len(years),
+            KEY_LOC: ["ES241"] * len(years),
+            "harvest_year": years,
+            KEY_TARGET: yields,
+        }
+    ).to_csv(yield_file, index=False)
+
     settings = configured_yield_quality_settings()
+    build_yield_quality_file(
+        yield_file,
+        data_root / f"yield_quality_{crop}_{country}.csv",
+        settings=settings,
+    )
+
     out_root = tmp_path / "viz"
     paths = run_yield_quality_visualizations(
-        data_dir,
-        ["wheat"],
+        tmp_path,
+        [crop],
         settings=settings,
         output_root=out_root,
-        countries=["ES"],
+        countries=[country],
         only_if_flagged=True,
     )
     assert paths
-    assert (out_root / "yield_quality_wheat_ES.png").is_file()
+    assert (out_root / f"yield_quality_{crop}_{country}.png").is_file()
 
 
 def test_data_factory_applies_yield_quality_filter(caplog, monkeypatch):

@@ -5,6 +5,11 @@ Walk-forward writes one split folder per forecast year. For the paper we pool
 those years and compute the same report metrics / plots as screening, but each
 year uses its own refit model (true walk-forward).
 
+Rows flagged in ``yield_quality_*`` sidecars are dropped at collect time using
+``target.filter_samples`` from ``cybench/conf/dataset/target/yield.yaml`` (same
+flags as training). Re-run collect after updating sidecars — no benchmark rerun
+required for QC-only changes.
+
 Typical workflow::
 
     poetry run python cybench/runs/analysis/collect_walk_forward_results.py \\
@@ -29,7 +34,8 @@ import pandas as pd
 import yaml
 from omegaconf import OmegaConf
 
-from cybench.config import KEY_COUNTRY, KEY_LOC, KEY_TARGET, KEY_YEAR, REPO_DIR
+from cybench.config import KEY_COUNTRY, KEY_LOC, KEY_TARGET, KEY_YEAR, PATH_DATA_DIR, REPO_DIR
+from cybench.datasets.yield_quality import apply_yield_quality_filter, filter_samples_from_target
 from cybench.evaluation.aggregated_metrics import (
     compute_report_metrics,
     format_report_metrics,
@@ -323,6 +329,17 @@ def main() -> None:
         choices=["eos", "mid"],
         help="Optional horizon filter (eos or mid / mid_season runs)",
     )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=Path(PATH_DATA_DIR),
+        help="Root data directory with yield_quality sidecars (default: cybench/data)",
+    )
+    parser.add_argument(
+        "--no-quality-filter",
+        action="store_true",
+        help="Do not drop rows flagged in yield_quality sidecars",
+    )
     args = parser.parse_args()
 
     output_dir = args.output_dir.resolve()
@@ -355,6 +372,14 @@ def main() -> None:
     summary_rows: list[dict[str, Any]] = []
     # Key by model slug — torch models all use prediction column "TorchTrainer".
     models_to_plot: dict[str, tuple[Path, str]] = {}
+    apply_qc = not args.no_quality_filter
+    quality_flags = None if apply_qc else []
+    if apply_qc:
+        quality_flags = filter_samples_from_target()
+        if quality_flags:
+            print(f"[QC] Dropping rows flagged by: {', '.join(quality_flags)}")
+        else:
+            print("[QC] No target.filter_samples configured — keeping all rows")
 
     for run in runs:
         try:
@@ -362,6 +387,21 @@ def main() -> None:
         except ValueError as exc:
             print(f"[SKIP] {run.path.name}: {exc}")
             continue
+
+        n_before = len(df)
+        if apply_qc and quality_flags:
+            df, n_removed = apply_yield_quality_filter(
+                df,
+                run.crop,
+                run.country,
+                data_dir=args.data_dir,
+                quality_flags=quality_flags,
+            )
+            if n_removed:
+                print(
+                    f"[QC] {run.dataset} | {run.model}: removed {n_removed}/{n_before} "
+                    f"flagged sample(s)"
+                )
 
         metrics = compute_report_metrics(df, target_col=KEY_TARGET, model_col=model_col)
         flat = flatten_report_metrics(metrics)

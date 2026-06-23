@@ -1,0 +1,21 @@
+_target_: cybench.models.twso_model.TwsoBiasCorrectedModel
+name: twso_bc
+framework: pandas
+
+# Crop-season window for aligning daily TWSO (matches dataset temporal defaults).
+start_of_sequence: sos-60
+end_of_sequence: eos
+min_year: 2000
+max_year: 2024
+
+# Scale raw TWSO max to t/ha-compatible units (kg/ha → t/ha).
+scale: 0.001
+
+# Per-location calibration falls back to global training moments when:
+# - fewer than min_location_years overlap with TWSO, or
+# - local TWSO std (sigma_P) is below min_std_mod.
+min_location_years: 5
+min_std_mod: 0.1
+
+# Optional override for TWSO CSV root (default: cybench.config.PATH_DATA_DIR)
+# data_dir: /path/to/cybench/data

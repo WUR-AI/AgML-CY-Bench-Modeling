@@ -13,6 +13,7 @@ from pathlib import Path
 import cybench.config as config
 from cybench.config import DATASETS
 from cybench.models.lpjml_model import lpjml_csv_path
+from cybench.models.twso_model import twso_csv_path
 from cybench.runs.slurm.benchmark_completion_lib import (
     check_screening_years,
     load_yield_years,
@@ -55,6 +56,7 @@ def generate(
     n = 0
     skipped_years: list[str] = []
     skipped_lpjml: list[str] = []
+    skipped_twso: list[str] = []
     for crop in crops:
         if crop not in DATASETS:
             raise ValueError(f"Unknown crop {crop!r}. Choose from {list(DATASETS)}")
@@ -75,6 +77,9 @@ def generate(
                 if model == "lpjml_bc" and not lpjml_csv_path(crop, country).is_file():
                     skipped_lpjml.append(f"{crop}/{country}")
                     continue
+                if model == "twso_bc" and not twso_csv_path(crop, country).is_file():
+                    skipped_twso.append(f"{crop}/{country}")
+                    continue
                 lines.append(
                     f"{crop} {country} {model} {framework} {hp_search} {feature_design} {needs_gpu}"
                 )
@@ -85,6 +90,8 @@ def generate(
         print(f"Skipped {note} — too few yield years for screening split")
     for note in skipped_lpjml:
         print(f"Skipped {note} — no lpjml_*.csv (run data_preparation/prepare_lpjml_data.py)")
+    for note in skipped_twso:
+        print(f"Skipped {note} — no twso_*.csv")
     return n
 
 

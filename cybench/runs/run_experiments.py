@@ -47,7 +47,7 @@ def _model_target(cfg) -> str:
 def _maybe_drop_temporal_for_standalone_models(cfg) -> None:
     """Standalone baselines (average yield, LPJmL) do not use time-series predictors."""
     target = _model_target(cfg)
-    standalone_markers = ("AverageYieldModel", "LpjmlBiasCorrectedModel")
+    standalone_markers = ("AverageYieldModel", "LpjmlBiasCorrectedModel", "TwsoBiasCorrectedModel")
     if not any(marker in target for marker in standalone_markers):
         return
     if "temporal" not in cfg.dataset or "sources" not in cfg.dataset.temporal:

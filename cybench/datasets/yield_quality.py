@@ -34,7 +34,7 @@ import pandas as pd
 import yaml
 from omegaconf import DictConfig, OmegaConf
 
-from cybench.config import CONF_DIR, DATASETS, KEY_LOC, KEY_TARGET, PATH_DATA_DIR
+from cybench.config import CONF_DIR, DATASETS, KEY_LOC, KEY_TARGET, KEY_YEAR, PATH_DATA_DIR
 
 try:
     from numpy.exceptions import RankWarning  # type: ignore[attr-defined]
@@ -436,6 +436,79 @@ def merge_yield_with_quality(
     for col in flag_cols:
         merged[col] = merged[col].fillna(False).astype(bool)
     return merged.reset_index(drop=True)
+
+
+def _attach_quality_flags(
+    df: pd.DataFrame,
+    quality_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Attach quality flag columns to rows keyed by admin unit and harvest year."""
+    flag_cols = [col for col in FLAG_COLUMNS if col in quality_df.columns]
+    flags = _parse_flag_columns(quality_df, flag_cols)
+    keys = [col for col in quality_merge_keys(flags) if col in df.columns]
+    if KEY_LOC not in keys or HARVEST_YEAR not in keys:
+        keys = [
+            col
+            for col in (KEY_LOC, HARVEST_YEAR)
+            if col in df.columns
+        ]
+
+    left = df.copy()
+    left["_orig_idx"] = np.arange(len(left))
+    year_col = KEY_YEAR if KEY_YEAR in left.columns else HARVEST_YEAR
+    if year_col != HARVEST_YEAR:
+        left = left.rename(columns={year_col: HARVEST_YEAR})
+
+    sort_cols = [KEY_LOC, HARVEST_YEAR]
+    left = left.sort_values(sort_cols)
+    right = flags.sort_values(sort_cols)
+
+    left["_join_ord"] = left.groupby(keys, sort=False).cumcount()
+    right["_join_ord"] = right.groupby(keys, sort=False).cumcount()
+    merge_on = keys + ["_join_ord"]
+
+    merged = left.merge(
+        right[merge_on + flag_cols],
+        on=merge_on,
+        how="left",
+    )
+    merged = merged.sort_values("_orig_idx").drop(columns=["_orig_idx", "_join_ord"])
+    for col in flag_cols:
+        merged[col] = merged[col].fillna(False).astype(bool)
+    if year_col != HARVEST_YEAR:
+        merged = merged.rename(columns={HARVEST_YEAR: year_col})
+    return merged.reset_index(drop=True)
+
+
+def apply_yield_quality_filter(
+    df: pd.DataFrame,
+    crop: str,
+    country_code: str,
+    *,
+    data_dir: str | Path | None = None,
+    quality_flags: list[str] | None = None,
+) -> tuple[pd.DataFrame, int]:
+    """Drop rows flagged in ``yield_quality_*`` sidecars (runtime QC for analysis)."""
+    flag_cols = quality_flags if quality_flags is not None else filter_samples_from_target()
+    if not flag_cols or df.empty:
+        return df.copy(), 0
+
+    root = Path(data_dir or PATH_DATA_DIR)
+    quality_path = root / crop / country_code / f"yield_quality_{crop}_{country_code}.csv"
+    if not quality_path.is_file():
+        return df.copy(), 0
+
+    annotated = _attach_quality_flags(df, pd.read_csv(quality_path))
+    present = [col for col in flag_cols if col in annotated.columns]
+    if not present:
+        return df.copy(), 0
+
+    flagged = annotated[present].any(axis=1)
+    n_removed = _count_true(flagged)
+    keep = annotated.loc[~flagged].drop(
+        columns=[col for col in FLAG_COLUMNS if col in annotated.columns]
+    )
+    return keep.reset_index(drop=True), n_removed
 
 
 def build_yield_quality_file(
