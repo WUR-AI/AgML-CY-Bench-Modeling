@@ -81,7 +81,7 @@ def test_skips_crop_country_with_too_few_yield_years(
     assert "wheat SK" not in text
 
 
-def test_skips_lpjml_and_twso_without_predictor_csv(tmp_path: Path, monkeypatch, capsys):
+def test_skips_lpjml_and_twso_without_predictor_csv(tmp_path: Path, monkeypatch):
     data = tmp_path / "data"
     years = list(range(2000, 2012))
     _write_yield(data / "maize" / "US" / "yield_maize_US.csv", "maize", "US", years)

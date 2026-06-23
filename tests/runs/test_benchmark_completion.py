@@ -136,7 +136,38 @@ def test_read_write_manifest_roundtrip(tmp_path: Path):
     assert read_manifest(path) == [job]
 
 
-def test_parse_batch_name_and_expand():
+def test_merge_jobs_supplements_stale_manifest(tmp_path: Path, monkeypatch):
+    from cybench.runs.slurm.benchmark_completion_lib import JobRow, merge_jobs_for_models
+
+    repo = tmp_path / "repo"
+    data = repo / "cybench" / "data"
+    years = list(range(2000, 2012))
+    _write_yield(data / "wheat" / "US" / "yield_wheat_US.csv", "wheat", "US", years)
+    (data / "wheat" / "US" / "twso_wheat_US.csv").write_text(
+        "crop_name,adm_id,date,twso\nwheat,US-01,20010301,1.0\n",
+        encoding="utf-8",
+    )
+    slurm = repo / "cybench" / "runs" / "slurm"
+    slurm.mkdir(parents=True)
+    (slurm / "models.txt").write_text("twso_bc pandas no no no\n", encoding="utf-8")
+
+    import cybench.config as cfg
+
+    monkeypatch.setattr(cfg, "PATH_DATA_DIR", str(data))
+
+    stale = [JobRow("maize", "US", "ridge", "pandas", "yes", "yes", "no")]
+    jobs, supplemented = merge_jobs_for_models(
+        stale,
+        country="US",
+        models=["twso_bc"],
+        repo_root=repo,
+        data_dir=data,
+        models_path=slurm / "models.txt",
+    )
+    assert supplemented
+    assert len(jobs) == 1
+    assert jobs[0].model == "twso_bc"
+    assert jobs[0].crop == "wheat"
     from cybench.runs.slurm.benchmark_completion_lib import expand_target_batches
     from cybench.runs.slurm.benchmark_submit_lib import parse_batch_name
 

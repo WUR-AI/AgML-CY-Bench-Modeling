@@ -136,6 +136,12 @@ cybench/runs/slurm/orchestrate_benchmark_complete.sh \
   --batch baselines_DE_eos_v1 --phase walk_forward --submit
 
 # One model only (e.g. re-run lpjml_bc or twso_bc after a code fix)
+# Stale per-country manifests are auto-supplemented when --model is set.
+# For a model that never ran screening yet, use --phase all (not walk_forward alone):
+cybench/runs/slurm/orchestrate_benchmark_complete.sh \
+  --all-countries --horizon eos --model twso_bc \
+  --phase all --force-rerun --list
+
 cybench/runs/slurm/orchestrate_benchmark_complete.sh \
   --all-countries --horizon eos --model lpjml_bc \
   --phase walk_forward --force-rerun --list

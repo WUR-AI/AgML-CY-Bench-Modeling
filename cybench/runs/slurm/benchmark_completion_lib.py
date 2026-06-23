@@ -324,6 +324,74 @@ def filter_jobs_by_models(
     return [job for job in jobs if job.model.lower() in allowed]
 
 
+def job_row_key(job: JobRow) -> tuple[str, str, str, str, str, str, str]:
+    return (
+        job.crop,
+        job.country,
+        job.model,
+        job.framework,
+        job.hp_search,
+        job.feature_design,
+        job.needs_gpu,
+    )
+
+
+def supplement_jobs_for_models(
+    *,
+    country: str,
+    models: list[str],
+    repo_root: Path,
+    data_dir: Path | None = None,
+    models_path: Path | None = None,
+) -> list[JobRow]:
+    """Build job rows from current models.txt + on-disk data (ignores cached manifests)."""
+    from cybench.runs.slurm.generate_job_manifest import MODELS_FILE, build_jobs
+
+    path = models_path or (repo_root / "cybench" / "runs" / "slurm" / MODELS_FILE.name)
+    if not path.is_file():
+        path = MODELS_FILE
+    return build_jobs(
+        crops=["maize", "wheat"],
+        countries=[country],
+        models_path=path,
+        data_dir=data_dir,
+        model_filter=models,
+    )
+
+
+def merge_jobs_for_models(
+    jobs: list[JobRow],
+    *,
+    country: str,
+    models: list[str],
+    repo_root: Path,
+    data_dir: Path | None = None,
+    models_path: Path | None = None,
+) -> tuple[list[JobRow], bool]:
+    """Filter to ``models`` and add any rows missing from a stale cached manifest."""
+    filtered = filter_jobs_by_models(jobs, models)
+    fresh = supplement_jobs_for_models(
+        country=country,
+        models=models,
+        repo_root=repo_root,
+        data_dir=data_dir,
+        models_path=models_path,
+    )
+    if not fresh and not filtered:
+        return [], False
+
+    merged: dict[tuple[str, str, str, str, str, str, str], JobRow] = {
+        job_row_key(job): job for job in filtered
+    }
+    supplemented = False
+    for job in fresh:
+        key = job_row_key(job)
+        if key not in merged:
+            supplemented = True
+        merged[key] = job
+    return list(merged.values()), supplemented
+
+
 def jobs_for_phase(
     assessments: list[JobAssessment],
     phase: str,

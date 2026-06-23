@@ -48,6 +48,7 @@ from cybench.runs.slurm.benchmark_completion_lib import (
     expand_target_batches,
     filter_jobs_by_models,
     jobs_for_phase,
+    merge_jobs_for_models,
     resolve_country_list,
     resolve_paths,
     split_manifest_groups,
@@ -55,6 +56,7 @@ from cybench.runs.slurm.benchmark_completion_lib import (
 )
 from cybench.runs.slurm.benchmark_submit_lib import (
     gpu_partition_for_batch,
+    parse_batch_name,
     resolve_case_insensitive_child,
 )
 
@@ -228,11 +230,25 @@ def _process_batch(
         manifest_path=args.manifest,
     )
     if args.models:
-        jobs = filter_jobs_by_models(jobs, args.models)
-        manifest_source = f"{manifest_source} | models={','.join(args.models)}"
+        parsed = parse_batch_name(effective_batch)
+        if parsed:
+            jobs, supplemented = merge_jobs_for_models(
+                jobs,
+                country=parsed[0],
+                models=args.models,
+                repo_root=_REPO_ROOT,
+                data_dir=args.data_dir,
+            )
+            manifest_source = f"{manifest_source} | models={','.join(args.models)}"
+            if supplemented:
+                manifest_source += " | supplemented from generate_job_manifest.py"
+        else:
+            jobs = filter_jobs_by_models(jobs, args.models)
+            manifest_source = f"{manifest_source} | models={','.join(args.models)}"
         if not jobs:
             print(
-                f"[WARN] No manifest rows for model(s) {args.models!r} in {batch}",
+                f"[WARN] No jobs for model(s) {args.models!r} in {batch} "
+                f"(missing twso_*/lpjml_* data or too few yield years?)",
                 file=sys.stderr,
             )
             return 0
@@ -274,6 +290,14 @@ def _process_batch(
 
     if not retry_jobs:
         if args.submit:
+            if args.models and args.phase == "walk_forward":
+                need_scr = [a for a in assessments if a.needs_screening]
+                if need_scr:
+                    print(
+                        f"[HINT] {batch}: {len(need_scr)} job(s) need screening before "
+                        f"walk-forward (use --phase all or --phase screening first)",
+                        file=sys.stderr,
+                    )
             print(f"[DONE] {batch}: nothing to retry")
         return 0
 
