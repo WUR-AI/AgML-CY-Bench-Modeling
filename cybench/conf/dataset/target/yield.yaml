@@ -2,9 +2,29 @@
 
 name: yield
 
-# Optional: null or a list of criteria used for filtering
-# Note: run data_preparation/assess_yield_quality.py (see cybench/datasets/yield_quality.py)
+# Yield quality filtering — see cybench/datasets/yield_quality.py
+#
+# quality: parameters for generating yield_quality_* CSV flags
+#   Regenerate after changes:
+#     poetry run python data_preparation/assess_yield_quality.py
+#   Hydra override example:
+#     poetry run python data_preparation/assess_yield_quality.py target.quality.outlier_threshold=4.5
+#
+# filter_samples: flag columns to drop at training time and to plot in
+#   visualize_yield_quality / assess_yield_quality (visualize.enabled).
+#   null → no training filter; viz plots all flag types.
+
+quality:
+  # Polyfit outlier detection (yield: high only; area: both directions)
+  outlier_threshold: 3.0
+  polyfit_degree: 2
+
+  # Stagnant / suspiciously linear yield series within an admin unit
+  consecutive_threshold_factor: 0.005
+  consecutive_min_years: 5
+
+  # Year cutoff for usable-sample statistics in assess_yield_quality.py
+  min_usable_year: 2000
+
 filter_samples:
-  - flag_consecutive_yield
-  - flag_area_outlier
   - flag_yield_outlier

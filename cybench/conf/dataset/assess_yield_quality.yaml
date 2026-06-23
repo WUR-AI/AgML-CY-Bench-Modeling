@@ -1,0 +1,25 @@
+# Generate yield_quality_* CSV flag files.
+# Overrides: target.quality.outlier_threshold=4.5  crops=[maize]  directory=cybench/testdata
+
+defaults:
+  - target: yield
+  - _self_
+
+hydra:
+  job:
+    chdir: false
+
+# null → cybench.config.PATH_DATA_DIR
+directory: null
+
+crops:
+  - maize
+  - wheat
+
+# Optional PNG diagnostics (flag panels follow target.filter_samples)
+visualize:
+  enabled: false
+  output_dir: output/yield_quality_viz
+  max_panels: 9
+  countries: null
+  only_if_flagged: true

@@ -179,9 +179,9 @@ class TabPFNModel(BaseModel):
         self.predict_batch_size = max(1, int(predict_batch_size))
         self.allow_cpu_fallback = allow_cpu_fallback
         self.max_train_samples = max_train_samples
-        self.subsample = subsample
+        self.subsample: SubsampleMode = subsample
         self.subsample_bins = max(2, int(subsample_bins))
-        self.preprocess = preprocess
+        self.preprocess: PreprocessMode = preprocess
         self.random_state = random_state
         self.tabpfn_kwargs = tabpfn_kwargs
 

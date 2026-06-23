@@ -1,9 +1,10 @@
 """Yield data quality assessment for CY-Bench.
 
 Reads raw yield files (``yield_{crop}_{country}.csv``) and produces
-``yield_quality_{crop}_{country}.csv`` with boolean flag columns appended.
-Rows are never removed — downstream filtering is configured in
-``cybench/conf/dataset/target/yield.yaml``.
+``yield_quality_{crop}_{country}.csv`` sidecars with row keys and boolean
+flag columns only (no duplicated yield/area columns). Rows are never removed
+— downstream filtering is configured in
+``cybench/conf/dataset/target/yield.yaml`` (``quality``, ``filter_samples``).
 
 Flags
 -----
@@ -24,13 +25,16 @@ adapted for statistical crop yield forecasting.
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import yaml
+from omegaconf import DictConfig, OmegaConf
 
-from cybench.config import DATASETS, KEY_LOC, KEY_TARGET, PATH_DATA_DIR
+from cybench.config import CONF_DIR, DATASETS, KEY_LOC, KEY_TARGET, PATH_DATA_DIR
 
 try:
     from numpy.exceptions import RankWarning  # type: ignore[attr-defined]
@@ -43,7 +47,118 @@ FLAG_YIELD = "flag_yield_outlier"
 FLAG_COLUMNS = (FLAG_CONSECUTIVE, FLAG_AREA, FLAG_YIELD)
 
 HARVEST_YEAR = "harvest_year"
+QUALITY_KEY_COLUMNS = ("crop_name", "country_code", KEY_LOC, HARVEST_YEAR)
 AREA_COLUMNS = ("planted_area", "harvest_area")
+DEFAULT_OUTLIER_THRESHOLD = 3.0
+DEFAULT_POLYFIT_DEGREE = 2
+DEFAULT_CONSECUTIVE_THRESHOLD_FACTOR = 0.005
+DEFAULT_CONSECUTIVE_MIN_YEARS = 5
+DEFAULT_MIN_USABLE_YEAR = 2000
+YIELD_TARGET_CONFIG = Path(CONF_DIR) / "dataset" / "target" / "yield.yaml"
+
+
+@lru_cache(maxsize=1)
+def load_yield_target_config() -> dict:
+    """Load ``cybench/conf/dataset/target/yield.yaml``."""
+    if not YIELD_TARGET_CONFIG.is_file():
+        return {}
+    with YIELD_TARGET_CONFIG.open(encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    return data if isinstance(data, dict) else {}
+
+
+def _quality_config_section() -> dict:
+    cfg = load_yield_target_config()
+    quality = cfg.get("quality", {})
+    if isinstance(quality, dict):
+        return quality
+    return {}
+
+
+@dataclass(frozen=True)
+class YieldQualitySettings:
+    """Parameters for yield quality flag generation (from yield.yaml ``quality``)."""
+
+    outlier_threshold: float = DEFAULT_OUTLIER_THRESHOLD
+    polyfit_degree: int = DEFAULT_POLYFIT_DEGREE
+    consecutive_threshold_factor: float = DEFAULT_CONSECUTIVE_THRESHOLD_FACTOR
+    consecutive_min_years: int = DEFAULT_CONSECUTIVE_MIN_YEARS
+    min_usable_year: int = DEFAULT_MIN_USABLE_YEAR
+
+
+def _config_float(section: dict, root: dict, key: str, default: float) -> float:
+    if key in section:
+        return float(section[key])
+    if key in root:
+        return float(root[key])
+    return default
+
+
+def _config_int(section: dict, root: dict, key: str, default: int) -> int:
+    if key in section:
+        return int(section[key])
+    if key in root:
+        return int(root[key])
+    return default
+
+
+def _settings_from_quality_mapping(quality: object) -> YieldQualitySettings:
+    section: dict = {}
+    if isinstance(quality, DictConfig):
+        section = OmegaConf.to_container(quality, resolve=True)  # type: ignore[assignment]
+    elif isinstance(quality, dict):
+        section = quality
+
+    return YieldQualitySettings(
+        outlier_threshold=_config_float(section, {}, "outlier_threshold", DEFAULT_OUTLIER_THRESHOLD),
+        polyfit_degree=_config_int(section, {}, "polyfit_degree", DEFAULT_POLYFIT_DEGREE),
+        consecutive_threshold_factor=_config_float(
+            section, {}, "consecutive_threshold_factor", DEFAULT_CONSECUTIVE_THRESHOLD_FACTOR
+        ),
+        consecutive_min_years=_config_int(
+            section, {}, "consecutive_min_years", DEFAULT_CONSECUTIVE_MIN_YEARS
+        ),
+        min_usable_year=_config_int(section, {}, "min_usable_year", DEFAULT_MIN_USABLE_YEAR),
+    )
+
+
+def yield_quality_settings_from_target(cfg: DictConfig) -> YieldQualitySettings:
+    """Build settings from a Hydra config node with ``target.quality`` (or ``quality``)."""
+    quality = OmegaConf.select(cfg, "target.quality")
+    if quality is None:
+        quality = OmegaConf.select(cfg, "quality")
+    return _settings_from_quality_mapping(quality)
+
+
+def filter_samples_from_target(cfg: DictConfig | None = None) -> list[str] | None:
+    """Flag columns from ``target.filter_samples`` (training + visualization)."""
+    if cfg is not None:
+        samples = OmegaConf.select(cfg, "target.filter_samples")
+        if samples is not None:
+            return list(samples) if samples else None
+    fs = load_yield_target_config().get("filter_samples")
+    if isinstance(fs, list) and fs:
+        return list(fs)
+    return None
+
+
+def viz_flag_columns(cfg: DictConfig | None = None) -> list[str]:
+    """Which quality flag columns to include in PNG diagnostics."""
+    selected = filter_samples_from_target(cfg)
+    if selected:
+        return selected
+    return list(FLAG_COLUMNS)
+
+
+@lru_cache(maxsize=1)
+def configured_yield_quality_settings() -> YieldQualitySettings:
+    """Load flag-generation settings from yield target config (YAML file)."""
+    return _settings_from_quality_mapping(_quality_config_section())
+
+
+def configured_outlier_threshold() -> float:
+    """Outlier z-score threshold from yield target config (YAML)."""
+    return configured_yield_quality_settings().outlier_threshold
 
 
 def _count_true(mask: object) -> int:
@@ -62,6 +177,8 @@ class YieldQualitySummary:
     n_consecutive: int
     n_area_outlier: int
     n_yield_outlier: int
+    n_yield_poly_outlier: int
+    n_yield_invalid: int
 
 
 def _require_year_sorted(group: pd.DataFrame, *, caller: str) -> None:
@@ -105,7 +222,7 @@ def detect_outliers_with_polyfit(
     column: str,
     *,
     degree: int = 2,
-    threshold: float = 3.0,
+    threshold: float = DEFAULT_OUTLIER_THRESHOLD,
     direction: str = "both",
 ) -> pd.Series:
     """Flag outliers relative to a polynomial trend fit over time."""
@@ -172,12 +289,18 @@ def assess_yield_dataframe(
     df: pd.DataFrame,
     *,
     min_usable_year: int | None = None,
+    settings: YieldQualitySettings | None = None,
+    outlier_threshold: float | None = None,
 ) -> tuple[pd.DataFrame, YieldQualitySummary | None]:
     """Append quality flag columns to a yield dataframe (in place on a copy).
 
     Returns the annotated dataframe and an optional summary when crop/country
     metadata columns are present.
     """
+    quality = settings or configured_yield_quality_settings()
+    if outlier_threshold is not None:
+        quality = replace(quality, outlier_threshold=outlier_threshold)
+
     out = df.copy()
     if out.empty:
         for col in FLAG_COLUMNS:
@@ -191,6 +314,8 @@ def assess_yield_dataframe(
         out.loc[~invalid],
         flag_consecutive_values,
         column=KEY_TARGET,
+        threshold_factor=quality.consecutive_threshold_factor,
+        min_consecutive=quality.consecutive_min_years,
     ).reindex(out.index, fill_value=False)
     out.loc[invalid, FLAG_CONSECUTIVE] = True
 
@@ -201,6 +326,8 @@ def assess_yield_dataframe(
             detect_outliers_with_polyfit,
             column=area_col,
             direction="both",
+            degree=quality.polyfit_degree,
+            threshold=quality.outlier_threshold,
         ).reindex(out.index, fill_value=False)
         out[FLAG_AREA] = area_flags | invalid
     else:
@@ -211,6 +338,8 @@ def assess_yield_dataframe(
         detect_outliers_with_polyfit,
         column=KEY_TARGET,
         direction="high",
+        degree=quality.polyfit_degree,
+        threshold=quality.outlier_threshold,
     ).reindex(out.index, fill_value=False)
     out[FLAG_YIELD] = yield_flags | invalid
 
@@ -240,9 +369,73 @@ def assess_yield_dataframe(
         n_consecutive=_count_true(out[FLAG_CONSECUTIVE].astype(bool)),
         n_area_outlier=_count_true(out[FLAG_AREA].astype(bool)),
         n_yield_outlier=_count_true(out[FLAG_YIELD].astype(bool)),
+        n_yield_poly_outlier=_count_true(yield_flags),
+        n_yield_invalid=_count_true(invalid),
     )
 
     return out, summary
+
+
+def quality_merge_keys(df: pd.DataFrame) -> list[str]:
+    """Columns used to join yield data with quality sidecars."""
+    return [col for col in QUALITY_KEY_COLUMNS if col in df.columns]
+
+
+def _parse_flag_columns(df: pd.DataFrame, flag_cols: list[str] | None = None) -> pd.DataFrame:
+    out = df.copy()
+    cols = flag_cols or [col for col in FLAG_COLUMNS if col in out.columns]
+    for col in cols:
+        if out[col].dtype == bool:
+            continue
+        out[col] = out[col].astype(str).str.lower().eq("true")
+    return out
+
+
+def slim_quality_dataframe(annotated: pd.DataFrame) -> pd.DataFrame:
+    """Keep only row keys and flag columns for ``yield_quality_*`` output."""
+    keys = quality_merge_keys(annotated)
+    if KEY_LOC not in keys or HARVEST_YEAR not in keys:
+        keys = [col for col in (KEY_LOC, HARVEST_YEAR) if col in annotated.columns]
+    return annotated[keys + list(FLAG_COLUMNS)]
+
+
+def merge_yield_with_quality(
+    yield_df: pd.DataFrame,
+    quality_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Join yield values with quality flags (supports legacy full quality CSVs)."""
+    if KEY_TARGET in quality_df.columns:
+        return quality_df.copy()
+
+    keys = quality_merge_keys(quality_df)
+    if KEY_LOC not in keys or HARVEST_YEAR not in keys:
+        keys = [
+            col
+            for col in (KEY_LOC, HARVEST_YEAR)
+            if col in yield_df.columns and col in quality_df.columns
+        ]
+    flag_cols = [col for col in FLAG_COLUMNS if col in quality_df.columns]
+    flags = _parse_flag_columns(quality_df, flag_cols)
+
+    left = yield_df.copy()
+    left["_orig_idx"] = np.arange(len(left))
+    sort_cols = [col for col in (KEY_LOC, HARVEST_YEAR) if col in left.columns]
+    left = left.sort_values(sort_cols)
+    right = flags.sort_values(sort_cols)
+
+    left["_join_ord"] = left.groupby(keys, sort=False).cumcount()
+    right["_join_ord"] = right.groupby(keys, sort=False).cumcount()
+    merge_on = keys + ["_join_ord"]
+
+    merged = left.merge(
+        right[merge_on + flag_cols],
+        on=merge_on,
+        how="left",
+    )
+    merged = merged.sort_values("_orig_idx").drop(columns=["_orig_idx", "_join_ord"])
+    for col in flag_cols:
+        merged[col] = merged[col].fillna(False).astype(bool)
+    return merged.reset_index(drop=True)
 
 
 def build_yield_quality_file(
@@ -250,11 +443,18 @@ def build_yield_quality_file(
     output_file: str | Path,
     *,
     min_usable_year: int | None = None,
+    settings: YieldQualitySettings | None = None,
 ) -> YieldQualitySummary | None:
-    """Read a yield CSV, annotate flags, and write ``yield_quality_*`` output."""
+    """Read a yield CSV, annotate flags, and write a slim ``yield_quality_*`` sidecar."""
+    quality = settings or configured_yield_quality_settings()
+    stats_year = quality.min_usable_year if min_usable_year is None else min_usable_year
     df = pd.read_csv(yield_file, header=0)
-    annotated, summary = assess_yield_dataframe(df, min_usable_year=min_usable_year)
-    annotated.to_csv(output_file, index=False)
+    annotated, summary = assess_yield_dataframe(
+        df,
+        min_usable_year=stats_year,
+        settings=quality,
+    )
+    slim_quality_dataframe(annotated).to_csv(output_file, index=False)
     return summary
 
 
@@ -283,23 +483,37 @@ def process_yield_quality_files(
     data_dir: str | Path,
     crops: list[str] | None = None,
     *,
-    min_usable_year: int = 2000,
+    settings: YieldQualitySettings | None = None,
 ) -> dict[str, dict[str, int]]:
     """Generate quality files for all crops/countries under ``data_dir``."""
+    quality = settings or configured_yield_quality_settings()
+    min_usable_year = quality.min_usable_year
     totals = {
-        crop: {"org_samples": 0, "qual_samples": 0, "usable_samples": 0}
+        crop: {
+            "org_samples": 0,
+            "qual_samples": 0,
+            "usable_samples": 0,
+            "yield_poly": 0,
+            "yield_invalid": 0,
+        }
         for crop in (crops or list(DATASETS))
     }
 
     for crop, country_code, csv_path in iter_yield_files(data_dir, crops=crops):
         if crop not in totals:
-            totals[crop] = {"org_samples": 0, "qual_samples": 0, "usable_samples": 0}
+            totals[crop] = {
+                "org_samples": 0,
+                "qual_samples": 0,
+                "usable_samples": 0,
+                "yield_poly": 0,
+                "yield_invalid": 0,
+            }
 
         out_path = csv_path.with_name(f"yield_quality_{crop}_{country_code}.csv")
         summary = build_yield_quality_file(
             csv_path,
             out_path,
-            min_usable_year=min_usable_year,
+            settings=quality,
         )
         if summary is None:
             continue
@@ -307,6 +521,8 @@ def process_yield_quality_files(
         totals[crop]["org_samples"] += summary.n_samples
         totals[crop]["qual_samples"] += summary.n_unflagged
         totals[crop]["usable_samples"] += summary.n_usable
+        totals[crop]["yield_poly"] += summary.n_yield_poly_outlier
+        totals[crop]["yield_invalid"] += summary.n_yield_invalid
 
         pct = 100.0 * summary.n_flagged / summary.n_samples if summary.n_samples else 0.0
         print(
@@ -314,15 +530,23 @@ def process_yield_quality_files(
             f"flagged {pct:.2f}% "
             f"({summary.n_consecutive} consecutive | "
             f"{summary.n_area_outlier} area | "
-            f"{summary.n_yield_outlier} yield) | "
+            f"{summary.n_yield_poly_outlier} yield polyfit | "
+            f"{summary.n_yield_invalid} yield invalid ≤0) | "
             f"unflagged {summary.n_unflagged} | usable (>={min_usable_year}) {summary.n_usable}"
         )
 
     for crop, stats in totals.items():
+        if stats["org_samples"] == 0:
+            continue
         print(f"\nResults for {crop}:")
         print(f"  Total samples: {stats['org_samples']}")
         print(f"  Unflagged samples: {stats['qual_samples']}")
         print(f"  Usable samples (>={min_usable_year}): {stats['usable_samples']}")
+        print(
+            f"  Yield flags: {stats['yield_poly']} polyfit high | "
+            f"{stats['yield_invalid']} invalid ≤0 "
+            f"({stats['yield_poly'] + stats['yield_invalid']} in flag_yield_outlier)"
+        )
 
     return totals
 

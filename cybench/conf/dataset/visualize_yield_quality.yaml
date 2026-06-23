@@ -1,0 +1,20 @@
+# Visualize yield quality flags as PNG summaries (inherits target from yield.yaml).
+# Example: crop_name=maize country_code=BR target.quality.outlier_threshold=4.5
+# Flag panels follow target.filter_samples (default: flag_yield_outlier only).
+
+defaults:
+  - target: yield
+  - _self_
+
+hydra:
+  job:
+    chdir: false
+
+crop_name: maize
+country_code: ES
+
+# null → cybench.config.PATH_DATA_DIR
+directory: null
+
+output_dir: output/yield_quality_viz
+max_panels: 9

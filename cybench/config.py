@@ -46,6 +46,12 @@ CONTINENT_DICT = {
     "South America": ["AR", "BR"]
 }
 
+# Fixed color-scale bounds for yield map visualizations (t/ha).
+CROP_YIELD_RANGES = {
+    "wheat": {"min": 0, "max": 9},
+    "maize": {"min": 0, "max": 14},
+}
+
 # key used for 2-letter country code
 KEY_COUNTRY = "country_code"
 # Key used for the location index

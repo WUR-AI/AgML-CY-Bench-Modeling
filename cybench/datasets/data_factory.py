@@ -10,6 +10,7 @@ import pandas as pd
 import torch
 
 from cybench.config import DATASETS, PATH_DATA_DIR, KEY_LOC, KEY_YEAR, KEY_TARGET
+from cybench.datasets.yield_quality import merge_yield_with_quality
 from cybench.datasets.alignment import compute_crop_season_window, ensure_same_categories_union, \
     align_to_crop_season_window_numpy, restore_category_to_string, align_to_crop_season_window, align_inputs_and_labels, \
     interpolate_time_series_data, make_aligned_tensors
@@ -199,9 +200,13 @@ class DataFactory:
 
         if "filter_samples" in self.cfg.target.keys() and self.cfg.target["filter_samples"]:
             quality_flags = list(self.cfg.target["filter_samples"])
-            df_y = pd.read_csv(
-                os.path.join(path_data_cn, "_".join(["yield_quality", crop, country_code]) + ".csv"),
-                header=0,
+            yield_path = os.path.join(path_data_cn, "_".join(["yield", crop, country_code]) + ".csv")
+            quality_path = os.path.join(
+                path_data_cn, "_".join(["yield_quality", crop, country_code]) + ".csv"
+            )
+            df_y = merge_yield_with_quality(
+                pd.read_csv(yield_path, header=0),
+                pd.read_csv(quality_path, header=0),
             )
             n_before = len(df_y)
             flagged = df_y[quality_flags].any(axis=1)
