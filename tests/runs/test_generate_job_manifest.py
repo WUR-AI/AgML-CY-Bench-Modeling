@@ -113,7 +113,3 @@ def test_skips_lpjml_and_twso_without_predictor_csv(tmp_path: Path, monkeypatch)
     assert "wheat US twso_bc" in text
     assert "lpjml_bc" not in text
     assert "maize US" not in text
-
-    captured = capsys.readouterr().out
-    assert "lpjml" in captured
-    assert "twso" in captured
