@@ -536,6 +536,14 @@ def _plot_scatter_panel(
     pad = (hi - lo) * 0.02 or 1.0
     lim = (lo - pad, hi + pad)
 
+    # Limits + square axes box must be set before hexbin: bin geometry follows the
+    # data-to-display transform. set_aspect alone only equalizes data units inside
+    # the subplot slot (which is often non-square in the wide multi-panel figure).
+    ax.set_xlim(lim)
+    ax.set_ylim(lim)
+    ax.set_aspect("equal")
+    ax.set_box_aspect(1)
+
     n = len(y_true)
     if n > SCATTER_HEX_THRESHOLD:
         ax.hexbin(
@@ -546,6 +554,7 @@ def _plot_scatter_panel(
             mincnt=1,
             linewidths=0,
             alpha=0.85,
+            extent=(*lim, *lim),
         )
     else:
         alpha = min(0.75, max(0.35, 30 / np.sqrt(max(n, 1))))
@@ -560,9 +569,6 @@ def _plot_scatter_panel(
         )
 
     ax.plot([lo, hi], [lo, hi], "k--", alpha=0.55, linewidth=1.0, zorder=5)
-    ax.set_xlim(lim)
-    ax.set_ylim(lim)
-    ax.set_aspect("equal", adjustable="box")
 
     ax.set_title("Scatter (all region-years)")
     ax.set_xlabel("Actual yield")
