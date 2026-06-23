@@ -562,6 +562,7 @@ def _plot_scatter_panel(
     ax.plot([lo, hi], [lo, hi], "k--", alpha=0.55, linewidth=1.0, zorder=5)
     ax.set_xlim(lim)
     ax.set_ylim(lim)
+    ax.set_aspect("equal", adjustable="box")
 
     ax.set_title("Scatter (all region-years)")
     ax.set_xlabel("Actual yield")
