@@ -29,6 +29,9 @@ DEFAULT_START_OF_SEQUENCE = "sos-60"
 DEFAULT_END_OF_SEQUENCE = "eos"
 DEFAULT_MIN_YEAR = 2000
 DEFAULT_MAX_YEAR = 2024
+# Skip loc-years whose last in-season TWSO is more than this many days before EOS
+# (truncated files, e.g. US 2023 ending weeks before harvest).
+DEFAULT_MAX_DAYS_BEFORE_EOS = 14
 
 
 def twso_csv_path(crop: str, country: str, data_dir: str | Path = PATH_DATA_DIR) -> Path:
@@ -44,6 +47,71 @@ def crop_calendar_csv_path(
 def _aggregate_max_twso(df: pd.DataFrame, *, scale: float) -> pd.Series:
     grouped = df.groupby([KEY_LOC, KEY_YEAR], observed=True)[TWSO_COL].max()
     return (grouped * scale).sort_index()
+
+
+def _twso_loc_year_complete_mask(
+    aligned: pd.DataFrame,
+    crop_season_df: pd.DataFrame,
+    *,
+    max_days_before_eos: int,
+) -> pd.Series:
+    """True when the last in-season TWSO date is within ``max_days_before_eos`` of EOS."""
+    if aligned.empty:
+        return pd.Series(dtype=bool)
+
+    last = aligned.groupby([KEY_LOC, KEY_YEAR], observed=True)["date"].max()
+    eos = crop_season_df.set_index([KEY_LOC, KEY_YEAR])["end_of_sequence_date"]
+    complete: dict[tuple[str, int], bool] = {}
+    for key, last_dt in last.items():
+        eos_dt = eos.get(key)
+        if eos_dt is None or pd.isna(eos_dt):
+            complete[key] = False
+            continue
+        gap_days = int((pd.Timestamp(eos_dt) - pd.Timestamp(last_dt)).days)
+        complete[key] = gap_days <= max_days_before_eos
+    return pd.Series(complete, dtype=bool)
+
+
+def twso_coverage_table(
+    crop: str,
+    country: str,
+    *,
+    data_dir: str | Path = PATH_DATA_DIR,
+    start_of_sequence: str = DEFAULT_START_OF_SEQUENCE,
+    end_of_sequence: str = DEFAULT_END_OF_SEQUENCE,
+    min_year: int = DEFAULT_MIN_YEAR,
+    max_year: int = DEFAULT_MAX_YEAR,
+    max_days_before_eos: int = DEFAULT_MAX_DAYS_BEFORE_EOS,
+) -> pd.DataFrame:
+    """Per location-year TWSO season coverage relative to crop-calendar EOS."""
+    path = twso_csv_path(crop, country, data_dir=data_dir)
+    cal_path = crop_calendar_csv_path(crop, country, data_dir=data_dir)
+    if not path.is_file() or not cal_path.is_file():
+        return pd.DataFrame()
+
+    df = pd.read_csv(path)
+    df["date"] = pd.to_datetime(df["date"].astype(str), format="%Y%m%d")
+    df[KEY_YEAR] = df["date"].dt.year
+    df = df[[KEY_LOC, KEY_YEAR, "date", TWSO_COL]].copy()
+
+    crop_cal = pd.read_csv(cal_path)
+    crop_season_df = compute_crop_season_window(
+        crop_cal,
+        min_year=min_year,
+        max_year=max_year,
+        start_of_sequence=start_of_sequence,
+        end_of_sequence=end_of_sequence,
+    )
+    aligned = _align_twso_to_season(df, crop_season_df)
+    if aligned.empty:
+        return pd.DataFrame()
+
+    last = aligned.groupby([KEY_LOC, KEY_YEAR], observed=True)["date"].max().rename("last_twso_date")
+    eos = crop_season_df.set_index([KEY_LOC, KEY_YEAR])["end_of_sequence_date"].rename("eos_date")
+    out = last.to_frame().join(eos, how="left")
+    out["days_before_eos"] = (out["eos_date"] - out["last_twso_date"]).dt.days
+    out["complete"] = out["days_before_eos"] <= max_days_before_eos
+    return out.reset_index()
 
 
 def _align_twso_to_season(df: pd.DataFrame, crop_season_df: pd.DataFrame) -> pd.DataFrame:
@@ -80,12 +148,16 @@ def load_twso_yields(
     min_year: int = DEFAULT_MIN_YEAR,
     max_year: int = DEFAULT_MAX_YEAR,
     scale: float = TWSO_SCALE,
+    max_days_before_eos: int = DEFAULT_MAX_DAYS_BEFORE_EOS,
 ) -> pd.Series:
     """Load season-aligned max TWSO as a Series indexed by (adm_id, year).
 
     Daily TWSO values are aligned to the crop-season window (same defaults as
-  the benchmark dataset config), then aggregated with ``max`` per location-year
+    the benchmark dataset config), then aggregated with ``max`` per location-year
     and scaled to t/ha-compatible units (× ``scale``, default 0.001).
+
+    Location-years whose last in-season observation falls more than
+    ``max_days_before_eos`` days before EOS are returned as NaN (skipped).
     """
     path = twso_csv_path(crop, country, data_dir=data_dir)
     if not path.is_file():
@@ -108,9 +180,26 @@ def load_twso_yields(
         start_of_sequence=start_of_sequence,
         end_of_sequence=end_of_sequence,
     )
-    df = _align_twso_to_season(df, crop_season_df)
-
-    return _aggregate_max_twso(df, scale=scale)
+    aligned = _align_twso_to_season(df, crop_season_df)
+    yields = _aggregate_max_twso(aligned, scale=scale)
+    complete = _twso_loc_year_complete_mask(
+        aligned, crop_season_df, max_days_before_eos=max_days_before_eos
+    )
+    n_incomplete = 0
+    for key in yields.index:
+        if key not in complete.index or not bool(complete[key]):
+            yields[key] = np.nan
+            n_incomplete += 1
+    if n_incomplete:
+        log.info(
+            "TWSO %s/%s: skipped %d location-year(s) with last observation "
+            "more than %d day(s) before EOS",
+            crop,
+            country,
+            n_incomplete,
+            max_days_before_eos,
+        )
+    return yields
 
 
 class TwsoBiasCorrectedModel(BaseModel):
@@ -132,6 +221,7 @@ class TwsoBiasCorrectedModel(BaseModel):
         scale: float = TWSO_SCALE,
         min_location_years: int = 5,
         min_std_mod: float = 0.1,
+        max_days_before_eos: int = DEFAULT_MAX_DAYS_BEFORE_EOS,
         **_ignored,
     ):
         self.name = name
@@ -143,6 +233,7 @@ class TwsoBiasCorrectedModel(BaseModel):
         self._scale = float(scale)
         self._min_location_years = int(min_location_years)
         self._min_std_mod = float(min_std_mod)
+        self._max_days_before_eos = int(max_days_before_eos)
         self._crop: str | None = None
         self._country: str | None = None
         self._twso_yields: pd.Series | None = None
@@ -164,6 +255,7 @@ class TwsoBiasCorrectedModel(BaseModel):
             min_year=self._min_year,
             max_year=self._max_year,
             scale=self._scale,
+            max_days_before_eos=self._max_days_before_eos,
         )
 
         y = dataset.y.reset_index()

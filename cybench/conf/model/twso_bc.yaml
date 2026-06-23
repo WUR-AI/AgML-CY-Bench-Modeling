@@ -17,5 +17,8 @@ scale: 0.001
 min_location_years: 5
 min_std_mod: 0.1
 
+# Skip location-years when the last in-season TWSO is farther than this from EOS.
+max_days_before_eos: 14
+
 # Optional override for TWSO CSV root (default: cybench.config.PATH_DATA_DIR)
 # data_dir: /path/to/cybench/data
