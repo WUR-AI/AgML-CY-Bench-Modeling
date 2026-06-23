@@ -445,19 +445,20 @@ def _attach_quality_flags(
     """Attach quality flag columns to rows keyed by admin unit and harvest year."""
     flag_cols = [col for col in FLAG_COLUMNS if col in quality_df.columns]
     flags = _parse_flag_columns(quality_df, flag_cols)
-    keys = [col for col in quality_merge_keys(flags) if col in df.columns]
-    if KEY_LOC not in keys or HARVEST_YEAR not in keys:
-        keys = [
-            col
-            for col in (KEY_LOC, HARVEST_YEAR)
-            if col in df.columns
-        ]
 
     left = df.copy()
     left["_orig_idx"] = np.arange(len(left))
     year_col = KEY_YEAR if KEY_YEAR in left.columns else HARVEST_YEAR
     if year_col != HARVEST_YEAR:
         left = left.rename(columns={year_col: HARVEST_YEAR})
+
+    keys = [col for col in quality_merge_keys(flags) if col in left.columns]
+    if KEY_LOC not in keys or HARVEST_YEAR not in keys:
+        keys = [
+            col
+            for col in (KEY_LOC, HARVEST_YEAR)
+            if col in left.columns
+        ]
 
     sort_cols = [KEY_LOC, HARVEST_YEAR]
     left = left.sort_values(sort_cols)

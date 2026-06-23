@@ -270,6 +270,43 @@ def test_assess_yield_dataframe_yield_flag_split():
     assert summary.n_yield_outlier == summary.n_yield_invalid + summary.n_yield_poly_outlier
 
 
+def test_apply_yield_quality_filter_matches_year_not_row_order(tmp_path):
+    """Walk-forward preds use ``year``; flags must join on (adm_id, year), not row order."""
+    data_dir = tmp_path / "data"
+    country_dir = data_dir / "maize" / "NE"
+    country_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "crop_name": ["maize"] * 4,
+            "country_code": ["NE"] * 4,
+            KEY_LOC: ["NE-A1"] * 4,
+            "harvest_year": [2002, 2006, 2015, 2016],
+            FLAG_YIELD: [False, False, False, True],
+            FLAG_CONSECUTIVE: [False] * 4,
+            FLAG_AREA: [False] * 4,
+        }
+    ).to_csv(country_dir / "yield_quality_maize_NE.csv", index=False)
+
+    preds = pd.DataFrame(
+        {
+            KEY_LOC: ["NE-A1"] * 3,
+            KEY_YEAR: [2015, 2016, 2019],
+            KEY_TARGET: [0.5, 4.9, 0.4],
+            "TorchTrainer": [0.5, 4.0, 0.4],
+        }
+    )
+    filtered, n_removed = apply_yield_quality_filter(
+        preds,
+        "maize",
+        "NE",
+        data_dir=data_dir,
+        quality_flags=[FLAG_YIELD],
+    )
+    assert n_removed == 1
+    assert len(filtered) == 2
+    assert not ((filtered[KEY_LOC] == "NE-A1") & (filtered[KEY_YEAR] == 2016)).any()
+
+
 def test_apply_yield_quality_filter_drops_flagged_rows(tmp_path):
     data_dir = tmp_path / "data"
     country_dir = data_dir / "maize" / "XX"
