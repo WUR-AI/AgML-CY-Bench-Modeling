@@ -43,6 +43,16 @@ def evaluate_model(
     return results
 
 
+def _finite_prediction_mask(
+    y_true: npt.NDArray[Any],
+    y_pred: npt.NDArray[Any],
+) -> npt.NDArray[np.bool_]:
+    """Rows where both observed and predicted yield are finite (e.g. skip missing TWSO)."""
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    return np.isfinite(y_true) & np.isfinite(y_pred)
+
+
 def evaluate_predictions(
     y_true: npt.NDArray[Any],
     y_pred: npt.NDArray[Any],
@@ -59,6 +69,12 @@ def evaluate_predictions(
     Returns:
       A dictionary containing the calculated metrics.
     """
+    mask = _finite_prediction_mask(y_true, y_pred)
+    y_true = np.asarray(y_true, dtype=float)[mask]
+    y_pred = np.asarray(y_pred, dtype=float)[mask]
+    if y_true.size == 0:
+        return {metric_name: float("nan") for metric_name in cfg.metrics}
+
     results = {}
     for metric_name in cfg.metrics:
         metric_function = implemented_metrics.get(metric_name)

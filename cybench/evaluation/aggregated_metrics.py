@@ -83,6 +83,8 @@ def compute_report_metrics(
       - spatial: per-location means across years
       - temporal: per-year means across locations
     """
+    complete = df[target_col].notna() & df[model_col].notna()
+    df = df.loc[complete].copy()
     region_year = get_metrics_dict(df, target_col, model_col, loc_col=loc_col)
 
     spatial = df.groupby(loc_col)[[target_col, model_col]].mean()

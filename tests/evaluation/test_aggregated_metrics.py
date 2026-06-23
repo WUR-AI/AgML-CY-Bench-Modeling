@@ -46,3 +46,11 @@ def test_compute_report_metrics_views():
     assert "region_year" in out
     assert "spatial" in out
     assert "temporal" in out
+
+
+def test_compute_report_metrics_ignores_nan_predictions():
+    df = _make_df()
+    df.loc[0, "model"] = np.nan
+    out = compute_report_metrics(df, KEY_TARGET, "model")
+    assert out["n_samples"] == 8
+    assert np.isfinite(out["region_year"]["r"])
