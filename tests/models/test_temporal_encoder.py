@@ -81,6 +81,7 @@ def test_lstm_lf_with_avg_pool_tokenizer_runs_on_dataset():
         "dataset.country=NL",
         "dataset.framework=torch",
         "dataset.use_cache=false",
+        "dataset.target.filter_samples=null",
         "model=lstm_lf",
         "experiment.device=cpu",
         "model.epochs=1",
