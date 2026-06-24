@@ -20,7 +20,11 @@ from matplotlib.figure import Figure
 
 from cybench.util.geo import get_shapes_from_polygons, world_shape_path
 from cybench.config import KEY_LOC, KEY_TARGET
-from cybench.evaluation.aggregated_metrics import calc_r_r2, get_metrics_dict
+from cybench.evaluation.aggregated_metrics import (
+    calc_median_yearly_r2,
+    calc_r_r2,
+    get_metrics_dict,
+)
 
 # -----------------------------
 # Configuration
@@ -208,21 +212,21 @@ def generate_markdown_table(stats_list: List[dict]) -> str:
 
     md = (
         "| Dataset | N_regions | N_years | "
-        "Region-Year | Region-Year | Region-Year | "
+        "Region-Year | Region-Year | Region-Year | Region-Year | "
         "Spatial | Spatial | "
         "Temporal | Temporal | "
         "Anomaly | Anomaly |\n"
     )
     md += (
         "|  |  |  | "
-        "r | R² | NRMSE | "
+        "r | R² | NRMSE | med R²/yr | "
         "r | R² | "
         "r | R² | "
         "r | R² |\n"
     )
     md += (
         "| :--- | ---: | ---: | "
-        "---: | ---: | ---: | "
+        "---: | ---: | ---: | ---: | "
         "---: | ---: | "
         "---: | ---: | "
         "---: | ---: |\n"
@@ -255,6 +259,7 @@ def generate_markdown_table(stats_list: List[dict]) -> str:
             f"| {style(fmt(mod['r']))} "
             f"| {style(fmt(mod['r2']))} "
             f"| {style(fmt(mod['nrmse']))} "
+            f"| {style(fmt(s['r2_yearly_median']))} "
             f"| {style(fmt(sp['r']))} "
             f"| {style(fmt(sp['r2']))} "
             f"| {style(fmt(s['r_time_model']))} "
@@ -293,13 +298,13 @@ th.left, td.left { text-align: left; }
       <th class="left" rowspan="2">Dataset</th>
       <th rowspan="2">N_regions</th>
       <th rowspan="2">N_years</th>
-      <th colspan="3">Region-Year</th>
+      <th colspan="4">Region-Year</th>
       <th colspan="2">Spatial</th>
       <th colspan="2">Temporal</th>
       <th colspan="2">Anomaly</th>
     </tr>
     <tr>
-      <th>r</th><th>R²</th><th>NRMSE</th>
+      <th>r</th><th>R²</th><th>NRMSE</th><th>med R²/yr</th>
       <th>r</th><th>R²</th>
       <th>r</th><th>R²</th>
       <th>r</th><th>R²</th>
@@ -324,6 +329,7 @@ th.left, td.left { text-align: left; }
             f"<td>{fmt(mod['r'])}</td>"
             f"<td>{fmt(mod['r2'])}</td>"
             f"<td>{fmt(mod['nrmse'])}</td>"
+            f"<td>{fmt(s['r2_yearly_median'])}</td>"
             f"<td>{fmt(sp['r'])}</td>"
             f"<td>{fmt(sp['r2'])}</td>"
             f"<td>{fmt(s['r_time_model'])}</td>"
@@ -405,6 +411,7 @@ def generate_local_report_html(stats_list: List[dict], pdf_filename: str) -> str
         <td>{m['r']:.2f}</td>
         <td>{m['r2']:.2f}</td>
         <td>{m['nrmse']:.2f}</td>
+        <td>{s['r2_yearly_median']:.2f}</td>
         <td>{sp['r']:.2f}</td>
         <td>{sp['r2']:.2f}</td>
         <td>{s['r_time_model']:.2f}</td>
@@ -445,13 +452,13 @@ def generate_local_report_html(stats_list: List[dict], pdf_filename: str) -> str
         <th rowspan="2">Dataset</th>
         <th rowspan="2">N_regions</th>
         <th rowspan="2">N_years</th>
-        <th colspan="3">Region-Year</th>
+        <th colspan="4">Region-Year</th>
         <th colspan="2">Spatial</th>
         <th colspan="2">Temporal</th>
         <th colspan="2">Anomaly</th>
       </tr>
       <tr>
-        <th>r</th><th>R²</th><th>NRMSE</th>
+        <th>r</th><th>R²</th><th>NRMSE</th><th>med R²/yr</th>
         <th>r</th><th>R²</th>
         <th>r</th><th>R²</th>
         <th>r</th><th>R²</th>
@@ -681,6 +688,7 @@ def process_dataset(
         _as_float_array(ts[KEY_TARGET]),
         _as_float_array(ts[model]),
     )
+    r2_yearly_median = calc_median_yearly_r2(df_filtered, KEY_TARGET, model)
 
     # Spatial stats (mean over years per location)
     spatial = cast(pd.DataFrame, df_filtered.groupby(KEY_LOC)[[KEY_TARGET, model]].mean())
@@ -713,6 +721,7 @@ def process_dataset(
         "metrics_baseline": metrics_base,
         "r_time_model": r_time_model,
         "r2_time_model": r2_time_model,
+        "r2_yearly_median": r2_yearly_median,
         "r_time_base": r_time_base,
         "metrics_spatial": {"r": r_spatial_model, "r2": r2_spatial_model},
     }

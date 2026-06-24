@@ -162,6 +162,7 @@ def summary_rows_to_dashboard_records(
         ("region_year", "r", "r"),
         ("region_year", "r2", "r2"),
         ("region_year", "nrmse", "nrmse"),
+        ("region_year", "median_r2", "r2_yearly_median"),
         ("spatial", "r", "r_spatial"),
         ("spatial", "r2", "r2_spatial"),
         ("temporal", "r", "r_temporal"),

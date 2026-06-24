@@ -13,6 +13,8 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from cybench.evaluation.aggregated_metrics import calc_median_yearly_r2
+
 
 @dataclass
 class SourceConfig:
@@ -152,6 +154,7 @@ def load_records_from_runs_root(
                 ("region_year", "r", safe_float(m.get("r"))),
                 ("region_year", "r2", safe_float(m.get("r2"))),
                 ("region_year", "nrmse", safe_float(m.get("nrmse"))),
+                ("region_year", "median_r2", safe_float(s.get("r2_yearly_median"))),
                 ("spatial", "r", safe_float(sp.get("r"))),
                 ("spatial", "r2", safe_float(sp.get("r2"))),
                 ("temporal", "r", safe_float(s.get("r_time_model"))),
@@ -198,6 +201,7 @@ def load_records_from_runs_root(
 
         temporal = clean.groupby("year")[["yield", "pred"]].mean().sort_index()
         r_tm, r2_tm = calc_r_r2(temporal["yield"].values, temporal["pred"].values)
+        r2_yearly_median = calc_median_yearly_r2(clean, "yield", "pred", year_col="year")
 
         loc_means = clean.groupby("adm_id")["yield"].mean()
         y_res = clean["yield"] - clean["adm_id"].map(loc_means)
@@ -223,6 +227,7 @@ def load_records_from_runs_root(
             ("region_year", "r", safe_float(r)),
             ("region_year", "r2", safe_float(r2)),
             ("region_year", "nrmse", safe_float(nrmse)),
+            ("region_year", "median_r2", safe_float(r2_yearly_median)),
             ("spatial", "r", safe_float(r_sp)),
             ("spatial", "r2", safe_float(r2_sp)),
             ("temporal", "r", safe_float(r_tm)),
@@ -339,6 +344,7 @@ def load_records(sources: List[SourceConfig], output_dir: str) -> List[Dict]:
                 ("region_year", "r", safe_float(m.get("r"))),
                 ("region_year", "r2", safe_float(m.get("r2"))),
                 ("region_year", "nrmse", safe_float(m.get("nrmse"))),
+                ("region_year", "median_r2", safe_float(s.get("r2_yearly_median"))),
                 ("spatial", "r", safe_float(sp.get("r"))),
                 ("spatial", "r2", safe_float(sp.get("r2"))),
                 ("temporal", "r", safe_float(s.get("r_time_model"))),

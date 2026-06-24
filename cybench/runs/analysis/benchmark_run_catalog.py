@@ -20,6 +20,7 @@ METRIC_KEYS: tuple[str, ...] = (
     "r",
     "r2",
     "nrmse",
+    "r2_yearly_median",
     "r_spatial",
     "r2_spatial",
     "r_temporal",
@@ -29,7 +30,19 @@ METRIC_KEYS: tuple[str, ...] = (
 )
 
 # For deltas: higher is better vs lower is better.
-HIGHER_IS_BETTER = frozenset({"r", "r2", "r_spatial", "r2_spatial", "r_temporal", "r2_temporal", "r_res", "r2_res"})
+HIGHER_IS_BETTER = frozenset(
+    {
+        "r",
+        "r2",
+        "r_spatial",
+        "r2_spatial",
+        "r_temporal",
+        "r2_temporal",
+        "r2_yearly_median",
+        "r_res",
+        "r2_res",
+    }
+)
 LOWER_IS_BETTER = frozenset({"nrmse"})
 
 
@@ -44,6 +57,7 @@ def flatten_report_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
         "r": ry.get("r"),
         "r2": ry.get("r2"),
         "nrmse": ry.get("nrmse"),
+        "r2_yearly_median": ry.get("median_r2"),
         "r_res": ry.get("r_res"),
         "r2_res": ry.get("r2_res"),
         "r_spatial": sp.get("r"),

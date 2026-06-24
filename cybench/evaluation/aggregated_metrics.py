@@ -40,6 +40,26 @@ def calc_nrmse(y_true: npt.ArrayLike, y_pred: npt.ArrayLike) -> float:
     return float("nan") if denom == 0 else float(rmse / denom)
 
 
+def calc_median_yearly_r2(
+    df: pd.DataFrame,
+    target_col: str,
+    model_col: str,
+    *,
+    year_col: str = KEY_YEAR,
+) -> float:
+    """Median of per-year R², where each year's R² is computed across regions."""
+    yearly_r2: list[float] = []
+    for _, year_df in df.groupby(year_col):
+        _, r2 = calc_r_r2(
+            year_df[target_col].values,
+            year_df[model_col].values,
+        )
+        yearly_r2.append(r2)
+    if not yearly_r2:
+        return float("nan")
+    return float(np.nanmedian(yearly_r2))
+
+
 def get_metrics_dict(
     df: pd.DataFrame,
     target_col: str,
@@ -79,13 +99,16 @@ def compute_report_metrics(
     Metrics used by visualize_results_aggregated / build_results_dashboard.
 
     Views:
-      - region_year: pooled region-year rows (r, R², NRMSE, anomaly r/R²)
+      - region_year: pooled region-year rows (r, R², NRMSE, med per-year R², anomaly r/R²)
       - spatial: per-location means across years
-      - temporal: per-year means across locations
+      - temporal: per-year means across locations (r, R²)
     """
     complete = df[target_col].notna() & df[model_col].notna()
     df = df.loc[complete].copy()
     region_year = get_metrics_dict(df, target_col, model_col, loc_col=loc_col)
+    region_year["median_r2"] = calc_median_yearly_r2(
+        df, target_col, model_col, year_col=year_col
+    )
 
     spatial = df.groupby(loc_col)[[target_col, model_col]].mean()
     r_spatial, r2_spatial = calc_r_r2(
@@ -115,7 +138,8 @@ def format_report_metrics(metrics: dict[str, Any]) -> str:
     sp = metrics["spatial"]
     tm = metrics["temporal"]
     return (
-        f"region-year r={ry['r']:.2f} R²={ry['r2']:.2f} NRMSE={ry['nrmse']:.2f} | "
+        f"region-year r={ry['r']:.2f} R²={ry['r2']:.2f} NRMSE={ry['nrmse']:.2f} "
+        f"med-R²/yr={ry['median_r2']:.2f} | "
         f"spatial r={sp['r']:.2f} R²={sp['r2']:.2f} | "
         f"temporal r={tm['r']:.2f} R²={tm['r2']:.2f} | "
         f"anomaly r={ry['r_res']:.2f} R²={ry['r2_res']:.2f}"

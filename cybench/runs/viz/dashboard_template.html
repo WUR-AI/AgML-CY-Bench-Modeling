@@ -250,6 +250,7 @@
       { key: "region_year_r", label: "r", group: "Region-Year", higherBetter: true },
       { key: "region_year_r2", label: "R²", group: "Region-Year", higherBetter: true },
       { key: "region_year_nrmse", label: "NRMSE", group: "Region-Year", higherBetter: false },
+      { key: "region_year_median_r2", label: "med R²/yr", group: "Region-Year", higherBetter: true },
       { key: "spatial_r", label: "r", group: "Spatial", higherBetter: true },
       { key: "spatial_r2", label: "R²", group: "Spatial", higherBetter: true },
       { key: "temporal_r", label: "r", group: "Temporal", higherBetter: true },
@@ -263,6 +264,7 @@
       region_year_r: { min: 0, max: 1, higherBetter: true },
       region_year_r2: { min: 0, max: 1, higherBetter: true },
       region_year_nrmse: { min: 0, max: 0.5, higherBetter: false },
+      region_year_median_r2: { min: 0, max: 1, higherBetter: true },
       spatial_r: { min: 0, max: 1, higherBetter: true },
       spatial_r2: { min: 0, max: 1, higherBetter: true },
       temporal_r: { min: 0, max: 1, higherBetter: true },
@@ -425,7 +427,7 @@
       <th rowspan="2" class="sortable" data-sort="n_regions">Regions ${sortMark("n_regions")}</th>
       <th rowspan="2" class="sortable" data-sort="n_years">Years ${sortMark("n_years")}</th>
       <th rowspan="2" class="sortable" data-sort="n_samples">Samples ${sortMark("n_samples")}</th>
-      <th colspan="3" class="group-head">Region-Year</th>
+      <th colspan="4" class="group-head">Region-Year</th>
       <th colspan="2" class="group-head">Spatial</th>
       <th colspan="2" class="group-head">Temporal</th>
       <th colspan="2" class="group-head">Anomaly</th>

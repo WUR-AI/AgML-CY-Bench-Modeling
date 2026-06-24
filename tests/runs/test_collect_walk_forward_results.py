@@ -121,6 +121,7 @@ def test_summary_rows_to_dashboard_records(tmp_path: Path):
             "r2_spatial": -0.93,
             "r_temporal": 0.18,
             "r2_temporal": -5.10,
+            "r2_yearly_median": 0.42,
             "r_res": 0.05,
             "r2_res": -1.76,
         }
@@ -132,7 +133,7 @@ def test_summary_rows_to_dashboard_records(tmp_path: Path):
     (assets / "maize_NL_scatter.png").write_bytes(b"png")
 
     records = summary_rows_to_dashboard_records(rows, tmp_path)
-    assert len(records) == 9
+    assert len(records) == 10
     assert records[0]["view"] == "region_year"
     scatter_recs = [r for r in records if r.get("images", {}).get("scatter")]
     assert scatter_recs
