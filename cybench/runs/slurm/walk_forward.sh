@@ -55,5 +55,6 @@ EXTRA=()
 if [[ "${FEATURE_DESIGN}" == "yes" && "${FRAMEWORK}" == "pandas" ]]; then
   EXTRA+=(+feature_selection=mrmr)
 fi
+append_extra_overrides_file EXTRA
 
 poetry run python cybench/runs/run_experiments.py "${COMMON[@]}" "${EXTRA[@]}"

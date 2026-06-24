@@ -303,6 +303,20 @@ configure_hpo_extras() {
   fi
 }
 
+# Optional Hydra overrides file (one override per line). Set CYBENCH_EXTRA_OVERRIDES_FILE.
+append_extra_overrides_file() {
+  local -n _extra=$1
+  local line
+  if [[ -z "${CYBENCH_EXTRA_OVERRIDES_FILE:-}" || ! -f "${CYBENCH_EXTRA_OVERRIDES_FILE}" ]]; then
+    return 0
+  fi
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line//$'\r'/}"
+    [[ -z "${line}" || "${line}" =~ ^[[:space:]]*# ]] && continue
+    _extra+=("${line}")
+  done < "${CYBENCH_EXTRA_OVERRIDES_FILE}"
+}
+
 # Find .../<test_years>/optimal_model.yaml under the latest horizon-tagged screening run.
 find_frozen_screening_dir() {
   local crop=$1 country=$2 model_slug=$3

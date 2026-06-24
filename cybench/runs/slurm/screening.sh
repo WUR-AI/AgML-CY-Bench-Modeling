@@ -67,5 +67,6 @@ COMMON=(
 configure_parallelism COMMON
 EXTRA=()
 configure_hpo_extras EXTRA
+append_extra_overrides_file EXTRA
 
 poetry run python cybench/runs/run_experiments.py "${COMMON[@]}" "${EXTRA[@]}"
