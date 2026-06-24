@@ -91,7 +91,10 @@ def calc_r_r2(y_true: np.ndarray, y_pred: np.ndarray) -> tuple:
     r = float(np.corrcoef(y_true, y_pred)[0, 1])
     ss_res = float(np.sum((y_true - y_pred) ** 2))
     ss_tot = float(np.sum((y_true - np.mean(y_true)) ** 2))
-    r2 = np.nan if ss_tot == 0 else float(1.0 - ss_res / ss_tot)
+    if ss_tot == 0:
+        r2 = 1.0 if ss_res == 0 else np.nan
+    else:
+        r2 = float(1.0 - ss_res / ss_tot)
     return r, r2
 
 
