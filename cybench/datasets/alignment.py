@@ -518,6 +518,15 @@ def interpolate_time_series_data(
             dfs_ts.append(df_x)
     # combine time series data
     df_ts = pd.concat(dfs_ts, join="outer", axis=1).sort_index()
+    # Metadata from aggregated sources (e.g. end_of_sequence_date) is only used by
+    # the pandas tabular path; exclude before torch tensorization / interpolation.
+    meta_cols = [
+        c
+        for c in df_ts.columns
+        if c == "end_of_sequence_date" or not pd.api.types.is_numeric_dtype(df_ts[c])
+    ]
+    if meta_cols:
+        df_ts = df_ts.drop(columns=meta_cols)
     # interpolate while respecting gaps in the date column
     df_ts = df_ts.groupby([KEY_LOC, KEY_YEAR], group_keys=False).apply(
         lambda group: group.interpolate(method="linear", limit_direction="both")
@@ -559,14 +568,18 @@ def make_aligned_tensors(
         x_ts_samples = [x[-min_ts_length:] for x in x_ts_samples]
     doy_ts_samples = [[ix.timetuple().tm_yday for ix in x.index] for x in x_ts_samples]
     doy_ts = torch.tensor(np.array(doy_ts_samples), dtype=torch.int16) # (sample_size x T)
-    x_ts = torch.tensor(np.array(x_ts_samples), dtype=torch.float32) # (sample_size x T x temp_features)
+    ts_feature_cols = df_ts.select_dtypes(include=np.number).columns
+    x_ts = torch.tensor(
+        np.stack([x[ts_feature_cols].to_numpy(dtype=np.float32) for x in x_ts_samples]),
+        dtype=torch.float32,
+    )  # (sample_size x T x temp_features)
     assert not x_ts.isnan().any()
     assert not doy_ts.isnan().any()
 
     column_names = (
         df_y.columns.tolist(),
         expanded_df_non_temporal.columns.tolist(),
-        df_ts.columns.tolist(),
+        ts_feature_cols.tolist(),
     )
     return (y, x_context, x_ts), column_names, doy_ts
 
