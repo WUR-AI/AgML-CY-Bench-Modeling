@@ -9,7 +9,7 @@ from typing import List, cast
 import numpy as np
 import yaml
 from hydra import compose, initialize_config_dir
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 
 from cybench.datasets.dataset import BaseDataset
 
@@ -21,16 +21,19 @@ def adjust_model_cfg_to_dataset(model_cfg: DictConfig, dataset: BaseDataset) -> 
     temporal_in_dim = len(x_t_sample.T)
     seq_len = int(x_t_sample.shape[0])
 
-    if "input_size" in torch_model:
-        torch_model.input_size = temporal_in_dim
-    if "context_in_dim" in torch_model:
-        torch_model.context_in_dim = len(x_c_sample)
-    if "temporal_in_dim" in torch_model:
-        torch_model.temporal_in_dim = temporal_in_dim
+    # Use .keys(): ``???`` placeholders are MISSING and ``key in cfg`` is False.
+    with open_dict(torch_model):
+        if "input_size" in torch_model.keys():
+            torch_model.input_size = temporal_in_dim
+        if "context_in_dim" in torch_model.keys():
+            torch_model.context_in_dim = len(x_c_sample)
+        if "temporal_in_dim" in torch_model.keys():
+            torch_model.temporal_in_dim = temporal_in_dim
 
     temporal_encoder = torch_model.get("temporal_encoder")
     if temporal_encoder is not None and "seq_len" in temporal_encoder.keys():
-        temporal_encoder.seq_len = seq_len
+        with open_dict(temporal_encoder):
+            temporal_encoder.seq_len = seq_len
     return model_cfg
 
 
