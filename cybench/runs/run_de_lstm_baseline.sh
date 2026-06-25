@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Germany: CropBench-style LSTM baseline on CY-Bench data loading.
-# Weekly AgERA5 (5 vars) + FPAR, mid-season, no static context, no yield-outlier filter.
+# Weekly AgERA5 (5 vars) + FPAR, mid-season, no static context.
+# Non-positive yields are always dropped in DataFactory; quality outlier flags off.
 #
 # Usage (from repo root):
 #   cybench/runs/run_de_lstm_baseline.sh all
@@ -21,7 +22,7 @@ Model ${MODEL} — end-to-end LSTM (hidden=256, 2 layers, last pool), CropBench 
 Data (dataset/temporal=cropbench_lstm):
   - Weekly (7-day) AgERA5: tmin, tmax, tavg, prec, rad + FPAR
   - Middle-of-season horizon; static context dropped
-  - No yield outlier filtering (dataset.target.filter_samples=null)
+  - Non-positive yields always excluded; no quality outlier filter (filter_samples=null)
 
 Options:
   --batch NAME         experiment.name (default: baselines_de_lstm_baseline_v1)

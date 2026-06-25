@@ -266,6 +266,17 @@ class DataFactory:
         df_y = df_y.rename(columns={"harvest_year": KEY_YEAR})  # pyright: ignore[reportCallIssue]
         df_y = cast(pd.DataFrame, df_y[[KEY_LOC, KEY_YEAR, KEY_TARGET]])
         df_y = df_y.dropna(axis=0)
+        n_before = len(df_y)
+        df_y = cast(pd.DataFrame, df_y[df_y[KEY_TARGET] > 0.0])
+        n_non_positive = n_before - len(df_y)
+        if n_non_positive:
+            log.info(
+                "Removed %d/%d yield samples for %s/%s with non-positive yield.",
+                n_non_positive,
+                n_before,
+                crop,
+                country_code,
+            )
         assert not df_y.empty, f"Yield data is empty in ({country_code}, {crop})."
 
         year_mask = (df_y[KEY_YEAR] >= self.cfg.min_year) & (df_y[KEY_YEAR] <= self.cfg.max_year)
