@@ -641,6 +641,7 @@ class TabDPTModel(TabularFoundationModel):
             X,
             n_ensembles=n_ensembles,
             context_size=self._context_size,
+            seed=self.random_state,
         )
         return cast(npt.NDArray[Any], np.asarray(preds).reshape(-1))
 

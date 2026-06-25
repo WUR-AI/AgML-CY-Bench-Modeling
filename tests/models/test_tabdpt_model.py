@@ -62,13 +62,14 @@ def test_tabdpt_save_load_directory(tmp_path):
     train, test = _synthetic_dataset()
     model = TabDPTModel(device="cpu", n_ensembles=2, min_train_samples=100)
     model.fit(train)
+    expected, _ = model.predict(test)
 
     save_dir = tmp_path / "run"
     model.save(str(save_dir))
     assert (save_dir / "tabdpt.pkl").is_file()
 
     loaded = TabDPTModel.load(str(save_dir))
-    np.testing.assert_allclose(loaded.predict(test)[0], model.predict(test)[0])
+    np.testing.assert_allclose(loaded.predict(test)[0], expected)
 
 
 def test_tabdpt_integration_with_data_factory():
