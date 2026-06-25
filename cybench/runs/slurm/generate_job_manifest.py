@@ -12,8 +12,7 @@ from pathlib import Path
 
 import cybench.config as config
 from cybench.config import DATASETS
-from cybench.models.lpjml_model import lpjml_csv_path
-from cybench.models.twso_model import twso_csv_path
+from cybench.models.baseline_csv_paths import lpjml_csv_path, twso_csv_path
 from cybench.runs.slurm.benchmark_completion_lib import (
     JobRow,
     check_screening_years,

@@ -12,12 +12,12 @@ import pandas as pd
 
 from cybench.config import KEY_LOC, KEY_TARGET, KEY_YEAR, PATH_DATA_DIR
 from cybench.datasets.dataset import PandasDataset
+from cybench.models.baseline_csv_paths import lpjml_csv_path
 from cybench.models.model import BaseModel
 from cybench.models.persistence import load_pickle, save_pickle
 
 log = logging.getLogger(__name__)
 
-LPJML_FILE_STEM = "lpjml"
 LPJML_COL_RAINFED = "lpj_yield_rainfed"
 LPJML_COL_IRRIGATED = "lpj_yield_irrigated"
 LPJML_VARIANTS = ("rainfed", "irrigated")
@@ -34,10 +34,6 @@ class _MomentCalibration:
 @dataclass(frozen=True)
 class _LocationCalibration(_MomentCalibration):
     n_years: int
-
-
-def lpjml_csv_path(crop: str, country: str, data_dir: str | Path = PATH_DATA_DIR) -> Path:
-    return Path(data_dir) / crop / country / f"{LPJML_FILE_STEM}_{crop}_{country}.csv"
 
 
 def _resolve_lpj_yield_series(df: pd.DataFrame, variant: str) -> pd.Series:

@@ -11,6 +11,7 @@ import pandas as pd
 from cybench.config import CROP_CALENDAR_DATES, KEY_LOC, KEY_TARGET, KEY_YEAR, PATH_DATA_DIR
 from cybench.datasets.alignment import compute_crop_season_window
 from cybench.datasets.dataset import PandasDataset
+from cybench.models.baseline_csv_paths import twso_csv_path
 from cybench.models.lpjml_model import (
     _LocationCalibration,
     _MomentCalibration,
@@ -22,7 +23,6 @@ from cybench.models.persistence import load_pickle, save_pickle
 
 log = logging.getLogger(__name__)
 
-TWSO_FILE_STEM = "twso"
 TWSO_COL = "twso"
 TWSO_SCALE = 0.001
 DEFAULT_START_OF_SEQUENCE = "sos-60"
@@ -32,10 +32,6 @@ DEFAULT_MAX_YEAR = 2024
 # Skip loc-years whose last in-season TWSO is more than this many days before EOS
 # (truncated files, e.g. US 2023 ending weeks before harvest).
 DEFAULT_MAX_DAYS_BEFORE_EOS = 14
-
-
-def twso_csv_path(crop: str, country: str, data_dir: str | Path = PATH_DATA_DIR) -> Path:
-    return Path(data_dir) / crop / country / f"{TWSO_FILE_STEM}_{crop}_{country}.csv"
 
 
 def crop_calendar_csv_path(
