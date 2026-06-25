@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import importlib
 import re
+import site
 import sys
+from pathlib import Path
 from typing import Sequence
 
 # Models whose Hydra config uses hf_temporal_encoder.*
@@ -33,7 +35,35 @@ def _parse_version(prefix: str, version: str) -> tuple[int, int]:
     return int(match.group(1)), int(match.group(2))
 
 
+def nvidia_wheel_lib_dirs() -> list[Path]:
+    dirs: list[Path] = []
+    for root in site.getsitepackages():
+        base = Path(root) / "nvidia"
+        if not base.is_dir():
+            continue
+        for lib_dir in sorted(base.glob("*/lib")):
+            if lib_dir.is_dir():
+                dirs.append(lib_dir)
+    return dirs
+
+
+def check_nccl_wheel() -> None:
+    """PyTorch CUDA wheels need libnccl.so.2 from the nvidia-nccl-cu12 pip package."""
+    for lib_dir in nvidia_wheel_lib_dirs():
+        if lib_dir.parent.name != "nccl":
+            continue
+        libnccl = lib_dir / "libnccl.so.2"
+        if libnccl.is_file():
+            return
+        raise RuntimeError(
+            f"Incomplete nvidia-nccl-cu12 install: missing {libnccl}. "
+            "Reinstall with: poetry run pip install --force-reinstall --no-cache-dir "
+            "nvidia-nccl-cu12==2.21.5"
+        )
+
+
 def check_torch_torchvision_compat() -> None:
+    check_nccl_wheel()
     import torch
 
     torch_mm = _parse_version("", torch.__version__.split("+", 1)[0])

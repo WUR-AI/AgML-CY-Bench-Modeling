@@ -9,6 +9,7 @@ from cybench.runs.analysis.publish_pipeline_lib import (
     _write_json,
     collect_state_path,
     discover_baselines_batches,
+    filter_publish_targets,
     horizon_to_batch_suffix,
     load_targets_from_config,
     needs_collect,
@@ -105,6 +106,17 @@ def test_discover_baselines_batches(tmp_path: Path):
     targets = discover_baselines_batches(tmp_path)
     assert len(targets) == 1
     assert targets[0].country_upper == "AR"
+
+
+def test_filter_publish_targets_by_version(tmp_path: Path):
+    targets = [
+        PublishTarget(country="DE", batch_horizon="eos", version=1, output_root=tmp_path),
+        PublishTarget(country="DE", batch_horizon="eos", version=2, output_root=tmp_path),
+        PublishTarget(country="FR", batch_horizon="eos", version=2, output_root=tmp_path),
+    ]
+    filtered = filter_publish_targets(targets, countries=["DE"], version=2)
+    assert len(filtered) == 1
+    assert filtered[0].batch_name == "baselines_DE_eos_v2"
 
 
 def test_discover_baselines_batches_from_monolithic(tmp_path: Path):

@@ -221,6 +221,19 @@ slurm_setup() {
   PREDICTION_HORIZON="${PREDICTION_HORIZON:-eos}"
   export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
   cd "${REPO_ROOT}"
+  setup_pytorch_cuda_libs
+}
+
+# Pip-installed CUDA wheels (nvidia-*) are not on the default loader path.
+setup_pytorch_cuda_libs() {
+  local site_pkg="${REPO_ROOT}/.venv/lib/python3.12/site-packages"
+  local lib_dir
+  [[ -d "${site_pkg}/nvidia" ]] || return 0
+  shopt -s nullglob
+  for lib_dir in "${site_pkg}"/nvidia/*/lib; do
+    export LD_LIBRARY_PATH="${lib_dir}:${LD_LIBRARY_PATH:-}"
+  done
+  shopt -u nullglob
 }
 
 # Validate torch/torchvision/HF imports only when this task uses torch or CUDA.
@@ -234,7 +247,8 @@ slurm_validate_env() {
     check_args+=(--model "${model}")
   fi
   if ! poetry run python "${SLURM_DIR}/check_env.py" "${check_args[@]}"; then
-    echo "[FATAL] Environment check failed (torch/torchvision/HF). Run: poetry sync" >&2
+    echo "[FATAL] Environment check failed (torch/CUDA/HF). See stderr above; often:" >&2
+    echo "  poetry run pip install --force-reinstall --no-cache-dir nvidia-nccl-cu12==2.21.5" >&2
     exit 1
   fi
   if [[ "${NEEDS_GPU:-}" == "yes" ]] && ! is_force_cpu; then

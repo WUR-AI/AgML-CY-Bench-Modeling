@@ -7,7 +7,6 @@ from typing import Any, cast
 
 import numpy as np
 import pandas as pd
-import torch
 
 from cybench.config import DATASETS, PATH_DATA_DIR, KEY_LOC, KEY_YEAR, KEY_TARGET
 from cybench.datasets.yield_quality import merge_yield_with_quality
@@ -19,7 +18,6 @@ from cybench.datasets.feature_design import FEATURE_FUNCTIONS
 from omegaconf import OmegaConf
 from cybench.datasets.feature_transformation import feature_transform
 from cybench.datasets.normalizer import Normalizer
-from cybench.datasets.torch_dataset import TorchDataset
 from cybench.util.store_and_cache import cfg_to_hash
 
 log = logging.getLogger(__name__)
@@ -89,6 +87,8 @@ class DataFactory:
 
             if os.path.exists(cache_path):
                 if self.cfg.framework == "torch":
+                    import torch
+
                     return torch.load(cache_path, weights_only=False)
                 return PandasDataset.load(cache_path)
 
@@ -123,6 +123,10 @@ class DataFactory:
                 dfs_x = normalizer.normalize(dfs_x)
 
         if self.cfg.framework == "torch":
+            import torch
+
+            from cybench.datasets.torch_dataset import TorchDataset
+
             # unifies and interpolate time-series dataframes into a single dataframe
             df_ts = interpolate_time_series_data(dfs_x)
             # align datasets and cast to torch tensors

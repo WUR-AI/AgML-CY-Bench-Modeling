@@ -32,15 +32,37 @@ if [[ -z "${line}" ]]; then
   echo "No collect job for array task ${SLURM_ARRAY_TASK_ID} in ${JOB_MANIFEST}" >&2
   exit 1
 fi
-read -r COLLECT_COUNTRY COLLECT_HORIZON COLLECT_PLOT <<< "${line}"
+
+read -ra _fields <<< "${line}"
+case "${#_fields[@]}" in
+  4)
+    COLLECT_COUNTRY="${_fields[0]}"
+    COLLECT_HORIZON="${_fields[1]}"
+    COLLECT_VERSION="${_fields[2]}"
+    COLLECT_PLOT="${_fields[3]}"
+    ;;
+  3)
+    COLLECT_COUNTRY="${_fields[0]}"
+    COLLECT_HORIZON="${_fields[1]}"
+    COLLECT_VERSION=""
+    COLLECT_PLOT="${_fields[2]}"
+    ;;
+  *)
+    echo "Invalid manifest line (expected 3 or 4 fields): ${line}" >&2
+    exit 1
+    ;;
+esac
 
 job_id=$(slurm_task_job_id)
 if [[ -n "${job_id}" ]]; then
   name="cb_col_${COLLECT_COUNTRY}_${COLLECT_HORIZON}"
+  if [[ -n "${COLLECT_VERSION}" ]]; then
+    name="${name}_v${COLLECT_VERSION}"
+  fi
   scontrol update "JobId=${job_id}" "JobName=${name:0:63}" 2>/dev/null || true
 fi
 
-echo "Collect | ${COLLECT_COUNTRY} | horizon=${COLLECT_HORIZON} | plot=${COLLECT_PLOT}"
+echo "Collect | ${COLLECT_COUNTRY} | horizon=${COLLECT_HORIZON} | version=${COLLECT_VERSION:-*} | plot=${COLLECT_PLOT}"
 
 cmd=(
   poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py
@@ -50,6 +72,9 @@ cmd=(
   --stages collect
   --force collect
 )
+if [[ -n "${COLLECT_VERSION}" ]]; then
+  cmd+=(--version "${COLLECT_VERSION}")
+fi
 if [[ "${COLLECT_PLOT}" != "yes" ]]; then
   cmd+=(--no-plot)
 fi

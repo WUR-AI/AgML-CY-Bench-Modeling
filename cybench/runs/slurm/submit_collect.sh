@@ -20,10 +20,14 @@ Manifest and collect job options (forwarded to generate_collect_manifest.py):
   --mode ready|all-available|planned
   --country CC      Repeatable
   --horizon eos|mid Repeatable
+  --version N       Batch version suffix (e.g. 2 for baselines_DE_eos_v2)
   --plot            Dashboard drill-down PNGs (maps, scatter, temporal; no PDF)
   --no-plot         Metrics + preds + compare_models.html only (default)
 
 Examples:
+  # Collect v2 batches only (metrics, parallel SLURM):
+  cybench/runs/slurm/submit_collect.sh --version 2 --country DE --horizon eos --no-plot --submit
+
   # Fast parallel collect (metrics only) for everything on lustre:
   cybench/runs/slurm/submit_collect.sh --no-plot --submit
 
@@ -32,7 +36,7 @@ Examples:
 
   # After array completes, publish dashboards (login node):
   poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
-      --mode all-available --stages publish,index --no-plot
+      --version 2 --country DE --horizon eos --stages publish,index --no-plot
 EOF
 }
 

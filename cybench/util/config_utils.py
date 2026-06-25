@@ -7,24 +7,21 @@ from pathlib import Path
 from typing import List, cast
 
 import numpy as np
-import torch
 import yaml
 from hydra import compose, initialize_config_dir
 from omegaconf import DictConfig, OmegaConf
 
 from cybench.datasets.dataset import BaseDataset
-from cybench.datasets.torch_dataset import TorchDataset
 
 
 def adjust_model_cfg_to_dataset(model_cfg: DictConfig, dataset: BaseDataset) -> DictConfig:
-    if isinstance(dataset, TorchDataset):
-        # add input-dim to first layers
-        _, x_c_sample, x_t_sample, _ = dataset[0]
-        model_cfg.torch_model.context_in_dim = len(x_c_sample)
-        model_cfg.torch_model.temporal_in_dim = len(x_t_sample.T)
-        temporal_encoder = model_cfg.torch_model.get("temporal_encoder")
-        if temporal_encoder is not None and "seq_len" in temporal_encoder.keys():
-            temporal_encoder.seq_len = x_t_sample.shape[0]
+    # Only called for torch datasets (see run_experiments.py).
+    _, x_c_sample, x_t_sample, _ = dataset[0]
+    model_cfg.torch_model.context_in_dim = len(x_c_sample)
+    model_cfg.torch_model.temporal_in_dim = len(x_t_sample.T)
+    temporal_encoder = model_cfg.torch_model.get("temporal_encoder")
+    if temporal_encoder is not None and "seq_len" in temporal_encoder.keys():
+        temporal_encoder.seq_len = x_t_sample.shape[0]
     return model_cfg
 
 
@@ -81,6 +78,10 @@ def get_run_description(overrides_path: pathlib.Path) -> str:
 def set_seed(seed: int = 42):
     random.seed(seed)
     np.random.seed(seed)
+    try:
+        import torch
+    except ImportError:
+        return
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)

@@ -25,7 +25,7 @@ Examples (from repo root on anunna)::
 
     # Force republish one batch
     poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
-        --country DE --horizon eos --stages publish,index --force publish
+        --country DE --horizon eos --version 2 --stages publish,index --force publish
 """
 
 from __future__ import annotations
@@ -119,6 +119,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Limit to horizon(s): eos, mid, middle-of-season, ...",
     )
     parser.add_argument(
+        "--version",
+        type=int,
+        metavar="N",
+        help="Limit to batch version suffix (e.g. 2 for baselines_DE_eos_v2)",
+    )
+    parser.add_argument(
         "--stages",
         help="Comma-separated stages (default: collect,publish,index). Add commit via --commit",
     )
@@ -176,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
                 defaults=defaults,
                 countries=args.countries,
                 horizons=args.horizons,
+                version=args.version,
             )
         else:
             targets = resolve_targets(
@@ -184,6 +191,7 @@ def main(argv: list[str] | None = None) -> int:
                 defaults=defaults,
                 countries=args.countries,
                 horizons=args.horizons,
+                version=args.version,
             )
     except ValueError as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
@@ -264,7 +272,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.dry_run:
             print(f"\n[DRY-RUN] would rebuild index under {targets[0].publish_root}")
         else:
-            status = run_index_stage(targets[0], dry_run=False)
+            status = run_index_stage(
+                targets[0],
+                dry_run=False,
+                insights_version=args.version,
+            )
             print(f"\n[OK] index: {status.message}")
 
     if "commit" in stages and commit_once:

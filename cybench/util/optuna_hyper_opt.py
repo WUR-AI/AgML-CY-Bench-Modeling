@@ -11,7 +11,6 @@ from typing import Any, Optional, cast
 import hydra
 import numpy as np
 import optuna
-import torch
 import yaml
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf, ListConfig
@@ -173,6 +172,8 @@ class OptunaOptimizer:
         self.multi_gpu = False
         if cfg.experiment.n_jobs > 1:
             if cfg.experiment.device == "cuda":
+                import torch
+
                 # check whether there are enough GPUs for parallel trials
                 self._n_gpus = torch.cuda.device_count()
                 assert self._n_gpus >= 1, f"No GPU found. Check cuda installation or fallback to CPU: in config.yaml change experiment.device=cpu."

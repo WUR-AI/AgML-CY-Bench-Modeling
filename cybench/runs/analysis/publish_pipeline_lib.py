@@ -308,11 +308,10 @@ def discover_paper_walk_forward_targets(
     defaults: PipelineDefaults | None = None,
     countries: list[str] | None = None,
     horizons: list[str] | None = None,
+    version: int | None = None,
 ) -> list[PublishTarget]:
     """Discover targets from existing ``paper_walk_forward_*`` collect output (fast)."""
     defaults = defaults or PipelineDefaults()
-    wanted_cc = {c.upper() for c in countries} if countries else None
-    wanted_hz = {horizon_to_batch_suffix(h) for h in horizons} if horizons else None
     targets: list[PublishTarget] = []
     seen: set[tuple[str, str, int]] = set()
     if not output_root.is_dir():
@@ -325,12 +324,8 @@ def discover_paper_walk_forward_targets(
             continue
         country = match.group("country").upper()
         batch_hz = match.group("batch_hz")
-        version = int(match.group("version"))
-        if wanted_cc and country not in wanted_cc:
-            continue
-        if wanted_hz and batch_hz not in wanted_hz:
-            continue
-        key = (country, batch_hz, version)
+        ver = int(match.group("version"))
+        key = (country, batch_hz, ver)
         if key in seen:
             continue
         seen.add(key)
@@ -338,14 +333,16 @@ def discover_paper_walk_forward_targets(
             PublishTarget(
                 country=country,
                 batch_horizon=batch_hz,
-                version=version,
+                version=ver,
                 output_root=output_root,
                 repo_root=defaults.repo_root,
                 publish_root=defaults.publish_root,
                 min_run_fraction=defaults.min_run_fraction,
             )
         )
-    return targets
+    return filter_publish_targets(
+        targets, countries=countries, horizons=horizons, version=version
+    )
 
 
 def _summary_row_count(collect_dir: Path) -> int:
@@ -467,6 +464,25 @@ def horizon_to_batch_suffix(horizon: str) -> str:
     if key in {"mid", "mid_season", "middle_of_season", "middle-of-season", "mid-season"}:
         return "mid"
     raise ValueError(f"Unsupported horizon for batch naming: {horizon!r}")
+
+
+def filter_publish_targets(
+    targets: list[PublishTarget],
+    *,
+    countries: list[str] | None = None,
+    horizons: list[str] | None = None,
+    version: int | None = None,
+) -> list[PublishTarget]:
+    """Narrow targets by country, horizon (eos|mid), and optional batch version."""
+    if countries:
+        wanted = {c.upper() for c in countries}
+        targets = [t for t in targets if t.country_upper in wanted]
+    if horizons:
+        wanted_hz = {horizon_to_batch_suffix(h) for h in horizons}
+        targets = [t for t in targets if t.batch_horizon in wanted_hz]
+    if version is not None:
+        targets = [t for t in targets if t.version == version]
+    return targets
 
 
 def expected_job_count(target: PublishTarget) -> int:
@@ -736,19 +752,21 @@ def run_index_stage(
     target: PublishTarget,
     *,
     dry_run: bool = False,
+    insights_version: int | None = None,
 ) -> StageStatus:
     if dry_run:
         print(f"[DRY-RUN] rebuild index under {target.publish_root}")
         return StageStatus("index", False, "would rebuild index.html")
     entries = discover_index_entries(target.publish_root)
     index_path = update_index(target.publish_root, entries)
+    version = insights_version if insights_version is not None else target.version
     try:
         from cybench.runs.analysis.build_global_insights_dashboard import write_insights_dashboard
 
         insights_path = write_insights_dashboard(
             output_root=target.output_root,
             dest=target.publish_root / "insights.html",
-            version=target.version,
+            version=version,
         )
         msg = f"updated {index_path} and {insights_path.name}"
     except RuntimeError as exc:
@@ -874,6 +892,7 @@ def resolve_targets(
     defaults: PipelineDefaults,
     countries: list[str] | None = None,
     horizons: list[str] | None = None,
+    version: int | None = None,
 ) -> list[PublishTarget]:
     if config_path and config_path.is_file():
         import yaml
@@ -888,12 +907,9 @@ def resolve_targets(
     else:
         targets = discover_baselines_batches(defaults.output_root, defaults=defaults)
 
-    if countries:
-        wanted = {c.upper() for c in countries}
-        targets = [t for t in targets if t.country_upper in wanted]
-    if horizons:
-        wanted_hz = {horizon_to_batch_suffix(h) for h in horizons}
-        targets = [t for t in targets if t.batch_horizon in wanted_hz]
+    targets = filter_publish_targets(
+        targets, countries=countries, horizons=horizons, version=version
+    )
 
     if mode == "all-available":
         return targets

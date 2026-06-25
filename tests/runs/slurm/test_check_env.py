@@ -16,7 +16,12 @@ def test_is_cuda_recoverable_error_matches_arch_mismatch():
     assert not _is_cuda_recoverable_error(ValueError("shape mismatch"))
 
 
-def test_torch_torchvision_compat_accepts_paired_versions(monkeypatch):
+def test_torch_torchvision_compat_accepts_paired_versions(monkeypatch, tmp_path):
+    nccl_lib = tmp_path / "nvidia" / "nccl" / "lib"
+    nccl_lib.mkdir(parents=True)
+    (nccl_lib / "libnccl.so.2").write_bytes(b"x")
+    monkeypatch.setattr(check_env.site, "getsitepackages", lambda: [str(tmp_path)])
+
     class FakeTorch:
         __version__ = "2.6.0+cu124"
 
@@ -28,7 +33,28 @@ def test_torch_torchvision_compat_accepts_paired_versions(monkeypatch):
     check_env.check_torch_torchvision_compat()
 
 
-def test_torch_torchvision_compat_rejects_mismatch(monkeypatch):
+def test_check_nccl_wheel_detects_missing_lib(tmp_path, monkeypatch):
+    nccl_lib = tmp_path / "nvidia" / "nccl" / "lib"
+    nccl_lib.mkdir(parents=True)
+    monkeypatch.setattr(check_env.site, "getsitepackages", lambda: [str(tmp_path)])
+    with pytest.raises(RuntimeError, match="Incomplete nvidia-nccl-cu12"):
+        check_env.check_nccl_wheel()
+
+
+def test_check_nccl_wheel_passes_when_present(tmp_path, monkeypatch):
+    nccl_lib = tmp_path / "nvidia" / "nccl" / "lib"
+    nccl_lib.mkdir(parents=True)
+    (nccl_lib / "libnccl.so.2").write_bytes(b"x")
+    monkeypatch.setattr(check_env.site, "getsitepackages", lambda: [str(tmp_path)])
+    check_env.check_nccl_wheel()
+
+
+def test_torch_torchvision_compat_rejects_mismatch(monkeypatch, tmp_path):
+    nccl_lib = tmp_path / "nvidia" / "nccl" / "lib"
+    nccl_lib.mkdir(parents=True)
+    (nccl_lib / "libnccl.so.2").write_bytes(b"x")
+    monkeypatch.setattr(check_env.site, "getsitepackages", lambda: [str(tmp_path)])
+
     class FakeTorch:
         __version__ = "2.12.1+cu130"
 

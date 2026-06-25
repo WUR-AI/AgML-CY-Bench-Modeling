@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write a SLURM manifest for parallel walk-forward result collection.
 
-Each line: ``COUNTRY HORIZON PLOT`` where PLOT is ``yes`` or ``no``.
+Each line: ``COUNTRY HORIZON VERSION PLOT`` where PLOT is ``yes`` or ``no``.
 
 Uses a fast lustre scan (directory names only). Full readiness checks run inside
 each SLURM collect task, not here.
@@ -9,7 +9,7 @@ each SLURM collect task, not here.
 Example::
 
     poetry run python cybench/runs/analysis/generate_collect_manifest.py \\
-        --mode all-available --horizon eos --horizon mid \\
+        --mode all-available --horizon eos --version 2 \\
         -o cybench/runs/slurm/collect_jobs.txt
 """
 
@@ -23,8 +23,8 @@ from cybench.runs.analysis.publish_pipeline_lib import (
     PipelineDefaults,
     assess_readiness,
     discover_baselines_batches_fast,
+    filter_publish_targets,
     filter_ready_targets,
-    horizon_to_batch_suffix,
     load_pipeline_defaults,
 )
 from cybench.runs.slurm.benchmark_submit_lib import resolve_batch_dir
@@ -39,6 +39,7 @@ def _resolve_targets_fast(
     defaults: PipelineDefaults,
     countries: list[str] | None,
     horizons: list[str] | None,
+    version: int | None,
 ) -> list:
     if config_path and config_path.is_file():
         import yaml
@@ -55,13 +56,9 @@ def _resolve_targets_fast(
     else:
         targets = discover_baselines_batches_fast(defaults.output_root, defaults=defaults)
 
-    if countries:
-        wanted = {c.upper() for c in countries}
-        targets = [t for t in targets if t.country_upper in wanted]
-    if horizons:
-        wanted_hz = {horizon_to_batch_suffix(h) for h in horizons}
-        targets = [t for t in targets if t.batch_horizon in wanted_hz]
-    return targets
+    return filter_publish_targets(
+        targets, countries=countries, horizons=horizons, version=version
+    )
 
 
 def main() -> int:
@@ -90,6 +87,12 @@ def main() -> int:
         action="append",
         dest="horizons",
         help="Limit to horizon(s): eos, mid",
+    )
+    parser.add_argument(
+        "--version",
+        type=int,
+        metavar="N",
+        help="Limit to batch version suffix (e.g. 2 for baselines_DE_eos_v2)",
     )
     parser.add_argument(
         "--plot",
@@ -134,6 +137,7 @@ def main() -> int:
         defaults=defaults,
         countries=args.countries,
         horizons=args.horizons,
+        version=args.version,
     )
     print(
         f"[INFO] Found {len(targets)} batch folder(s) under {defaults.output_root}",
@@ -158,7 +162,7 @@ def main() -> int:
             baselines_dir, _ = resolve_batch_dir(target.output_root, target.batch_name)
             if not baselines_dir.is_dir():
                 continue
-        lines.append(f"{target.country_upper} {target.batch_horizon} {plot}")
+        lines.append(f"{target.country_upper} {target.batch_horizon} {target.version} {plot}")
 
     if args.list:
         for line in lines:
@@ -166,7 +170,7 @@ def main() -> int:
         return 0
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    header = "# COUNTRY HORIZON PLOT (yes|no)\n"
+    header = "# COUNTRY HORIZON VERSION PLOT (yes|no)\n"
     args.output.write_text(header + "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
     print(f"[DONE] Wrote {len(lines)} collect job(s) to {args.output}")
     return 0

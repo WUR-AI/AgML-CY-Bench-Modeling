@@ -20,7 +20,6 @@ OmegaConf.register_new_resolver("prediction_horizon_tag", prediction_horizon_tag
 
 from cybench.datasets.data_factory import DataFactory
 from cybench.datasets.dataset import PandasDataset
-from cybench.datasets.torch_dataset import TorchDataset
 from cybench.evaluation.eval import evaluate_predictions
 from cybench.evaluation.aggregated_metrics import compute_report_metrics, format_report_metrics
 from cybench.util.config_utils import adjust_model_cfg_to_dataset, set_seed, remove_search_keys
@@ -137,7 +136,7 @@ def main(cfg):
     log.info(f"Dataset years: {sorted(dataset.years)}")
     horizon = OmegaConf.select(cfg, "dataset.temporal.season.end_of_sequence")
     log.info("Prediction horizon (end_of_sequence): %s → tag %s", horizon, prediction_horizon_tag(str(horizon or "eos")))
-    if "process" in cfg and isinstance(dataset, TorchDataset):
+    if "process" in cfg and cfg.dataset.framework == "torch":
         dataset.process(cfg.process)
     # TODO extra function for testing config compatibility
     if cfg.dataset.framework == "pandas": assert "torch_model" not in cfg.model, "You selected a torch model but no torch dataset. Switch to torch dataset by dataset.framework=torch or select a model that operates on tabular data (PandasDataset)."

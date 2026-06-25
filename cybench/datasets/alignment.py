@@ -6,7 +6,6 @@ from typing import Any, cast
 import pandas as pd
 import numpy as np
 import numpy.typing as npt
-import torch
 
 from cybench.datasets.normalizer import Normalizer
 from cybench.config import (
@@ -532,6 +531,8 @@ def make_aligned_tensors(
         df_ts: pd.DataFrame,
         normalizer: Normalizer | None = None,
 ):
+    import torch
+
     y = torch.tensor(df_y.values, dtype=torch.float32) # (sample_size)
 
     # align the non-temporal dataset to match the indices
