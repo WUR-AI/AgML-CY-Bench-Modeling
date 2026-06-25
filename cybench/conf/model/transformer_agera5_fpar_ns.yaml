@@ -1,11 +1,11 @@
 defaults:
-  - torch_model: late_fusion_network
+  - torch_model: late_fusion_network_fixed
   - augmentation: extensive
   - optimizer: adamw
   - scheduler: cosine_warmup
   - early_stopping: val
-  - override torch_model/temporal_encoder/processor: transformer
-  - override torch_model/temporal_encoder/tokenizer: linear_pool
+  - override torch_model/temporal_encoder/processor: transformer_agera5
+  - override torch_model/temporal_encoder/tokenizer: linear_pool_agera5
   - _self_
 
 # Temporal-only transformer: AgERA5 + FPAR, no static/context predictors.
@@ -31,11 +31,3 @@ torch_model:
     pooling:
       _target_: cybench.models.torch.model_components.temporal_encoder.AttentionPooling
       embed_dim: ${model.torch_model.embed_dim}
-    processor:
-      num_layers: 2
-      nhead: 8
-      dim_feedforward: 512
-      dropout: 0.2
-    tokenizer:
-      patch_size: 7
-      use_seasonal_embedding: true

@@ -1,0 +1,9 @@
+
+_target_: cybench.models.torch.model_components.temporal_encoder.LinearPoolTokenizer
+
+in_dim: ${model.torch_model.temporal_in_dim}
+embed_dim: ${model.torch_model.embed_dim}
+
+patch_size: 7
+eos_anchor: true
+use_seasonal_embedding: true
