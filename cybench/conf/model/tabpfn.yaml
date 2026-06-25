@@ -1,4 +1,4 @@
-_target_: cybench.models.tabpfn_model.TabPFNModel
+_target_: cybench.models.tabular_foundation_model.TabPFNModel
 name: tabpfn
 framework: pandas
 

@@ -1,0 +1,24 @@
+_target_: cybench.models.tabular_foundation_model.TabDPTModel
+name: tabdpt
+framework: pandas
+
+device: auto
+predict_batch_size: 256
+allow_cpu_fallback: false
+max_train_samples: null
+min_train_samples: 100
+preprocess: none
+subsample: random
+subsample_bins: 10
+random_state: ${experiment.seed}
+verbose: false
+
+# forwarded to tabdpt.TabDPTRegressor.predict via n_ensembles
+n_ensembles: 8
+
+_search_:
+  n_ensembles:
+    type: int
+    low: 4
+    high: 16
+    step: 4

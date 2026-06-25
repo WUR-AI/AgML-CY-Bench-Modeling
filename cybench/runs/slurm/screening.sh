@@ -16,7 +16,7 @@
 #
 # Split manifests (do not mix CPU and GPU in one array):
 #   awk '$7=="no"'  benchmark_jobs.txt > benchmark_jobs_cpu.txt   # RF, ridge, ...
-#   awk '$7=="yes"' benchmark_jobs.txt > benchmark_jobs_gpu.txt   # torch + tabpfn
+#   awk '$7=="yes"' benchmark_jobs.txt > benchmark_jobs_gpu.txt   # torch + tab foundation models
 #
 #SBATCH --job-name=cybench_screen
 #SBATCH --output=output/screening/out_%A_%a.txt

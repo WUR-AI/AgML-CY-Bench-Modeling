@@ -7,7 +7,7 @@ See also [../README.md](../README.md) for the full `cybench/runs/` layout (analy
 
 | File | Purpose |
 |------|---------|
-| `models.txt` | Model catalogue (`needs_gpu=yes` for torch + TabPFN) |
+| `models.txt` | Model catalogue (`needs_gpu=yes` for torch + TabPFN/TabICL/TabDPT) |
 | `generate_job_manifest.py` | Build full `crop × country × model` job list |
 | `benchmark_jobs.txt` | **Array manifest** (one row = one SLURM task) |
 | `benchmark_jobs.example.txt` | Small test subset |
@@ -66,7 +66,7 @@ With ~16 models and ~40 countries × 2 crops, the full manifest can be **1000+ j
 awk '$7=="no" && $6=="yes"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/benchmark_jobs_cpu.txt
 # Naive / standalone baselines (average, trend, lpjml_bc, twso_bc) — no HPO, no feature_design
 awk '$5=="no" && $6=="no" && $7=="no"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/benchmark_jobs_naive.txt
-# GPU manifest (torch + TabPFN — pandas on GPU)
+# GPU manifest (torch + tabular foundation models — pandas on GPU)
 awk '$7=="yes"' cybench/runs/slurm/benchmark_jobs.txt > cybench/runs/slurm/benchmark_jobs_gpu.txt
 ```
 
@@ -199,7 +199,7 @@ export SLURM_GPU_TIME_LIMIT=2-00:00:00
 | `--cpus-per-task=8` | RF/XGB use all 8 cores **per trial** (`n_jobs=-1` in yaml) |
 | `--gpus=1` + `-p gpu` | GPU jobs (via `submit_array.sh` + GPU manifest) |
 
-**TabPFN** uses `dataset.framework=pandas` + `feature_design` but sets `model.device=cuda` (see `tabpfn.yaml`). Schedule it in the **GPU array**, not the CPU one.
+**TabPFN, TabICL, and TabDPT** use `dataset.framework=pandas` + `feature_design` but set `model.device=cuda` (see `tabpfn.yaml`, `tabicl.yaml`, `tabdpt.yaml`). Schedule them in the **GPU array**, not the CPU one.
 
 ### GPU manifest on CPU (`--cpu`)
 

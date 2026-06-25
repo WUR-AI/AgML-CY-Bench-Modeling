@@ -274,7 +274,7 @@ configure_parallelism() {
         # TabPFN on CPU (slow; use for queue bypass / pilot runs).
         _common+=(model.device=cpu model.allow_cpu_fallback=true experiment.device=cpu)
       else
-        # TabPFN: PandasDataset but inference on CUDA (see model/tabpfn.yaml).
+        # Tabular foundation models: PandasDataset but inference on CUDA.
         _common+=(model.device=cuda model.allow_cpu_fallback=false)
       fi
     else
