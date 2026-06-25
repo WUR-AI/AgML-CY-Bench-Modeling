@@ -20,6 +20,19 @@ class _FakeTorchDataset:
         return None, self._x_c, self._x_t, None
 
 
+def test_adjust_model_cfg_sets_lstm_input_size():
+    config_dir = Path(__file__).resolve().parents[2] / "cybench" / "conf"
+    with initialize_config_dir(config_dir=str(config_dir), version_base=None):
+        cfg = compose(
+            config_name="config",
+            overrides=["model=lstm_baseline", "dataset.framework=torch"],
+        )
+
+    adjusted = adjust_model_cfg_to_dataset(cfg.model, _FakeTorchDataset(n_channels=6))
+    assert adjusted.torch_model.input_size == 6
+    assert not OmegaConf.is_missing(adjusted.torch_model, "input_size")
+
+
 def test_adjust_model_cfg_sets_missing_placeholder_dims():
     config_dir = Path(__file__).resolve().parents[2] / "cybench" / "conf"
     with initialize_config_dir(config_dir=str(config_dir), version_base=None):

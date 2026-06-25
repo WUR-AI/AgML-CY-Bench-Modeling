@@ -23,12 +23,13 @@ def adjust_model_cfg_to_dataset(model_cfg: DictConfig, dataset: BaseDataset) -> 
 
     # Use .keys(): ``???`` placeholders are MISSING and ``key in cfg`` is False.
     with open_dict(torch_model):
-        if "input_size" in torch_model.keys():
-            torch_model.input_size = temporal_in_dim
-        if "context_in_dim" in torch_model.keys():
-            torch_model.context_in_dim = len(x_c_sample)
-        if "temporal_in_dim" in torch_model.keys():
-            torch_model.temporal_in_dim = temporal_in_dim
+        for name, value in (
+            ("input_size", temporal_in_dim),
+            ("context_in_dim", len(x_c_sample)),
+            ("temporal_in_dim", temporal_in_dim),
+        ):
+            if name in torch_model.keys():
+                torch_model[name] = value
 
     temporal_encoder = torch_model.get("temporal_encoder")
     if temporal_encoder is not None and "seq_len" in temporal_encoder.keys():

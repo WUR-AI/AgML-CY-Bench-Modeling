@@ -16,7 +16,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf, ListConfig
 from tqdm import tqdm
 
-from cybench.util.config_utils import set_seed, remove_search_keys
+from cybench.util.config_utils import set_seed, remove_search_keys, adjust_model_cfg_to_dataset
 from cybench.datasets.dataset import BaseDataset, PandasDataset
 from cybench.util.feature_selection import apply_mrmr_at_origin, resolved_feature_selection_cfg
 from cybench.util.screening_artifacts import save_optimal_epochs
@@ -342,6 +342,9 @@ class OptunaOptimizer:
         # Deep copy to avoid modifying the original config for other trials
         cfg_copy = copy.deepcopy(self.cfg)
 
+        if OmegaConf.select(cfg_copy, "dataset.framework") == "torch":
+            cfg_copy.model = adjust_model_cfg_to_dataset(cfg_copy.model, self.dataset)
+
         # Apply suggested parameters to the config
         self._resolve_search_space(cfg_copy, trial)
         trial_model_cfg = cfg_copy.model
@@ -507,6 +510,8 @@ class OptunaOptimizer:
         if isinstance(cfg, DictConfig):
             # Iterate over a copy of keys to allow modification
             for key in list(cfg.keys()):
+                if OmegaConf.is_missing(cfg, key):
+                    continue
                 value = cfg[key]
 
                 # Check if this node has a search definition

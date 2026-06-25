@@ -6,8 +6,10 @@
 #
 # Usage (from repo root):
 #   cybench/runs/run_de_lstm_baseline.sh all
-#   cybench/runs/run_de_lstm_baseline.sh screening --local --hp-trials 5
+#   cybench/runs/run_de_lstm_baseline.sh screening --local
 #   cybench/runs/run_de_lstm_baseline.sh all --dry-run
+#
+# Fixed hyperparams (CropBench-style): no Optuna / HPO in screening.
 #
 set -euo pipefail
 
@@ -18,6 +20,7 @@ usage() {
 Usage: run_de_lstm_baseline.sh <screening|walk_forward|all> [options]
 
 Model ${MODEL} — end-to-end LSTM (hidden=256, 2 layers, last pool), CropBench training defaults.
+Screening uses fixed hyperparams (no Optuna); same protocol as CropBench single-train setup.
 
 Data (dataset/temporal=cropbench_lstm):
   - Weekly (7-day) AgERA5: tmin, tmax, tavg, prec, rad + FPAR
@@ -29,7 +32,6 @@ Options:
   --crop CROP          wheat | maize (default: maize)
   --country CC         ISO country code (default: DE)
   --horizon H          end_of_sequence (default: middle-of-season)
-  --hp-trials N        Optuna trials in screening (default: 20)
   --local              Run poetry on this machine (default: SLURM)
   --cpu                SLURM on CPU partition
   --no-dependency      SLURM "all": walk-forward without afterok on screening
@@ -46,7 +48,6 @@ CROP="maize"
 COUNTRY="DE"
 HORIZON="middle-of-season"
 DEVICE="cuda"
-HP_TRIALS=20
 FROZEN_DIR=""
 COLLECT=false
 DRY_RUN=false
@@ -79,7 +80,6 @@ while [[ $# -gt 0 ]]; do
     --country) COUNTRY=$2; shift 2 ;;
     --horizon) HORIZON=$2; shift 2 ;;
     --device) DEVICE=$2; shift 2 ;;
-    --hp-trials) HP_TRIALS=$2; shift 2 ;;
     --frozen-dir) FROZEN_DIR=$2; shift 2 ;;
     --local) USE_SLURM=false; shift ;;
     --cpu) SLURM_CPU=true; DEVICE=cpu; shift ;;
@@ -136,8 +136,8 @@ EOF
 write_job_manifest() {
   mkdir -p "${MANIFEST_DIR}"
   cat > "${MANIFEST}" <<EOF
-# ${CROP} ${COUNTRY} CropBench-style ${MODEL} (weekly AgERA5+FPAR, no static)
-${CROP} ${COUNTRY} ${MODEL} torch yes no yes
+# ${CROP} ${COUNTRY} CropBench-style ${MODEL} (weekly AgERA5+FPAR, fixed hparams, no HPO)
+${CROP} ${COUNTRY} ${MODEL} torch no no yes
 EOF
 }
 
@@ -188,8 +188,8 @@ run_local_screening() {
   read_local_overrides
   local -a cmd=(poetry run python cybench/runs/run_experiments.py)
   cmd+=("${OVERRIDES[@]}")
-  cmd+=(validation=screening +hp_search=bayesian "hp_search.n_trials=${HP_TRIALS}")
-  echo "== Local screening | ${CROP}/${COUNTRY} | model=${MODEL} | batch=${BATCH}"
+  cmd+=(validation=screening)
+  echo "== Local screening | ${CROP}/${COUNTRY} | model=${MODEL} | batch=${BATCH} | no HPO"
   run_cmd "${cmd[@]}"
 }
 
@@ -230,7 +230,7 @@ submit_slurm_phase() {
   if [[ -n "${dependency}" ]]; then cmd+=(--dependency "${dependency}"); fi
   echo "== SLURM ${phase} | ${CROP}/${COUNTRY} | model=${MODEL} | horizon=${HORIZON}"
   if [[ "${DRY_RUN}" == true ]]; then
-    echo "  export PREDICTION_HORIZON=${HORIZON} HP_TRIALS=${HP_TRIALS}"
+    echo "  export PREDICTION_HORIZON=${HORIZON}"
     echo "  export CYBENCH_EXTRA_OVERRIDES_FILE=${OVERRIDES_FILE}"
     run_cmd "${cmd[@]}"
     SLURM_LAST_JOB_ID=""
@@ -254,7 +254,6 @@ prepare_slurm_assets() {
   write_job_manifest
   write_extra_overrides_file
   export PREDICTION_HORIZON="${HORIZON}"
-  export HP_TRIALS="${HP_TRIALS}"
   export CYBENCH_EXTRA_OVERRIDES_FILE="${OVERRIDES_FILE}"
   export CYBENCH_EXPERIMENT_NAME="${BATCH}"
   echo "Manifest:  ${MANIFEST}"
