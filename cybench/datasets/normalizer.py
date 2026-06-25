@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any
 
 import numpy as np
@@ -48,9 +47,12 @@ class Normalizer:
             }
 
         if ftype == "standard":
+            std = float(series.std())
+            if len(series) < 2 or not np.isfinite(std):
+                std = 0.0
             return {
                 "mean": float(series.mean()),
-                "std": float(series.std())
+                "std": std,
             }
 
         if ftype == "logsinh":
@@ -72,9 +74,10 @@ class Normalizer:
             return (series - max / 2 - min / 2) / (range / 2)
 
         if ftype == "standard":
-            if params["std"] == 0:
+            std = params["std"]
+            if std == 0 or not np.isfinite(std):
                 return series * 0.0
-            return (series - params["mean"]) / params["std"]
+            return (series - params["mean"]) / std
 
         if ftype == "logsinh":
             # x ↦ arcsinh(x)  (safe transform for skewed positive variables)
@@ -124,13 +127,55 @@ class Normalizer:
             return series.loc[df[KEY_YEAR].isin(fit_set)]
         return series
 
-    def fit_normalize(self, dfs, fit_years: list[int] | None = None):
+    @staticmethod
+    def _degenerate_fit_series(series: pd.Series, ftype: str) -> bool:
+        """True when aligned data cannot support a stable fit for ``ftype``."""
+        if len(series) < 1:
+            return True
+        if ftype == "standard":
+            return len(series) < 2 or not np.isfinite(float(series.std()))
+        if ftype == "minmax":
+            return len(series) < 1
+        return False
+
+    def _fit_feature_params(
+        self,
+        series: pd.Series,
+        df: pd.DataFrame,
+        ftype: str,
+        fit_years: list[int] | None,
+        *,
+        wider_series: pd.Series | None = None,
+        wider_df: pd.DataFrame | None = None,
+    ) -> dict[str, Any]:
+        """Fit on aligned data; widen to ``wider_*`` only when aligned is degenerate."""
+        fit_series = self._series_for_fit(series, df, fit_years)
+        if (
+            wider_series is not None
+            and wider_df is not None
+            and self._degenerate_fit_series(fit_series, ftype)
+        ):
+            fit_series = self._series_for_fit(wider_series, wider_df, fit_years)
+        return self._fit_feature(fit_series, ftype)
+
+    def fit_normalize(
+        self,
+        dfs,
+        fit_years: list[int] | None = None,
+        *,
+        non_temporal_fit_df: pd.DataFrame | None = None,
+    ):
         """
         Fits parameters across all DataFrames and returns
         normalized copies of the DataFrames.
 
         When ``fit_years`` is set, statistics are computed on those years only
         (e.g. screening train ∪ val); normalization is then applied to all rows.
+
+        ``non_temporal_fit_df`` is a fallback for location-only static features:
+        pre-alignment regions (e.g. full-country soil). Used only when stats from
+        the yield-aligned ``non_temporal`` slice would be degenerate (e.g. one
+        region). If still degenerate after widening, ``_fit_feature`` zeroes std.
         """
         for source_name, df in dfs.items():
             for feature, cfg in self.feature_cfg.items():
@@ -144,8 +189,24 @@ class Normalizer:
                 if feature not in df.columns:
                     continue
 
-                fit_series = self._series_for_fit(df[feature], df, fit_years)
-                params = self._fit_feature(fit_series, ftype)
+                wider_series = None
+                wider_df = None
+                if (
+                    source_name == "non_temporal"
+                    and non_temporal_fit_df is not None
+                    and feature in non_temporal_fit_df.columns
+                ):
+                    wider_series = non_temporal_fit_df[feature]
+                    wider_df = non_temporal_fit_df
+
+                params = self._fit_feature_params(
+                    df[feature],
+                    df,
+                    ftype,
+                    fit_years,
+                    wider_series=wider_series,
+                    wider_df=wider_df,
+                )
                 self.feature_cfg[feature]["params"] = params
         return self.normalize(dfs)
 

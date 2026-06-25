@@ -90,7 +90,7 @@ def _load_dfs_multi_country(factory: DataFactory, cfg, countries: list[str]):
     df_y = pd.DataFrame()
     dfs_x = {}
     for country in countries:
-        df_y_cn, dfs_x_cn = factory.load_dfs(
+        df_y_cn, dfs_x_cn, _ = factory.load_dfs(
             crop=cfg.crop,
             country_code=country,
         )

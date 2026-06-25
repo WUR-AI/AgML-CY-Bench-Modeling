@@ -92,15 +92,29 @@ class DataFactory:
                     return torch.load(cache_path, weights_only=False)
                 return PandasDataset.load(cache_path)
 
+        non_temporal_fit_df: pd.DataFrame | None = None
         if isinstance(self.cfg.country, str):
-            df_y, dfs_x = self.load_dfs(crop=self.cfg.crop, country_code=self.cfg.country, use_memory_optimization=use_memory_optimization)
+            df_y, dfs_x, non_temporal_fit_df = self.load_dfs(
+                crop=self.cfg.crop,
+                country_code=self.cfg.country,
+                use_memory_optimization=use_memory_optimization,
+            )
         else:
             df_y = pd.DataFrame()
             dfs_x = {}
             for country in self.cfg.country:
-                df_y_cn, dfs_x_cn = self.load_dfs(crop=self.cfg.crop, country_code=country, use_memory_optimization=use_memory_optimization)
+                df_y_cn, dfs_x_cn, nt_fit_cn = self.load_dfs(
+                    crop=self.cfg.crop,
+                    country_code=country,
+                    use_memory_optimization=use_memory_optimization,
+                )
 
                 df_y = pd.concat([df_y, df_y_cn], axis=0)
+
+                if non_temporal_fit_df is None:
+                    non_temporal_fit_df = nt_fit_cn
+                else:
+                    non_temporal_fit_df = pd.concat([non_temporal_fit_df, nt_fit_cn], axis=0)
 
                 if len(dfs_x) == 0:
                     dfs_x = dfs_x_cn
@@ -117,7 +131,11 @@ class DataFactory:
                         "Fitting normalizer on years %s (excluding screening test block)",
                         normalizer_fit_years,
                     )
-                dfs_x = normalizer.fit_normalize(dfs_x, fit_years=normalizer_fit_years)
+                dfs_x = normalizer.fit_normalize(
+                    dfs_x,
+                    fit_years=normalizer_fit_years,
+                    non_temporal_fit_df=non_temporal_fit_df,
+                )
                 normalizer.name = "fitted"
             else:
                 dfs_x = normalizer.normalize(dfs_x)
@@ -202,7 +220,7 @@ class DataFactory:
         crop: Any,
         country_code: str,
         use_memory_optimization: bool = True,
-    ) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
+    ) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], pd.DataFrame]:
         """Load data from CSV files for crop and country.
         Expects CSV files in PATH_DATA_DIR/<crop>/<country_code>/.
 
@@ -212,7 +230,8 @@ class DataFactory:
             use_memory_optimization (bool): use (slower) memory-optimized function for crop season alignment
 
         Returns:
-            a tripel (target DataFrame, dataframe of non-temporal data, dict of input DataFrames)
+            target DataFrame, aligned input DataFrames, and full pre-alignment non_temporal
+            (all regions) for fitting static normalizer stats.
         """
 
         # targets
@@ -220,6 +239,7 @@ class DataFactory:
 
         # non-temporal
         df_non_temporal = self.load_non_temporal(crop=crop.name, country_code=country_code)
+        non_temporal_fit_df = df_non_temporal.copy()
 
         # temporal
         dfs_x = self.load_temporal(crop=crop, country_code=country_code, use_memory_optimization=use_memory_optimization)
@@ -230,7 +250,7 @@ class DataFactory:
             dfs_x,
         )
 
-        return cast(pd.DataFrame, df_y), dfs_x
+        return cast(pd.DataFrame, df_y), dfs_x, non_temporal_fit_df
 
     def load_target(self, crop: str, country_code: str) -> pd.DataFrame:
         path_data_cn = os.path.join(PATH_DATA_DIR, crop, country_code)

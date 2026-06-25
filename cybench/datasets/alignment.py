@@ -514,6 +514,8 @@ def interpolate_time_series_data(
     # filter time-series data
     dfs_ts = []
     for source_name, df_x in dfs.items():
+        if source_name.startswith("_"):
+            continue
         if "date" in df_x.index.names:
             dfs_ts.append(df_x)
     # combine time series data
