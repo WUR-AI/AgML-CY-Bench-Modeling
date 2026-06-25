@@ -223,9 +223,12 @@ slurm_setup() {
   cd "${REPO_ROOT}"
 }
 
-# Validate torch/torchvision/HF imports; probe CUDA and fall back to CPU when unusable.
+# Validate torch/torchvision/HF imports only when this task uses torch or CUDA.
 slurm_validate_env() {
   local model=${1:-}
+  if [[ "${FRAMEWORK:-}" != "torch" && "${NEEDS_GPU:-}" != "yes" ]]; then
+    return 0
+  fi
   local check_args=(--check-torch-stack)
   if [[ -n "${model}" ]]; then
     check_args+=(--model "${model}")
