@@ -11,6 +11,9 @@ from pathlib import Path
 
 from cybench.config import DATASETS, PATH_DATA_DIR
 
+# Countries with at least this many regions use the gpu SLURM partition for torch/TabPFN.
+DEFAULT_GPU_REGION_THRESHOLD = 50
+
 _BATCH_RE = re.compile(
     r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid)_v(?P<version>\d+)$"
 )
@@ -95,7 +98,7 @@ def resolve_batch_dir(parent: Path, batch: str) -> tuple[Path, str | None]:
 def gpu_partition_for_country(
     country: str,
     *,
-    region_threshold: int = 100,
+    region_threshold: int = DEFAULT_GPU_REGION_THRESHOLD,
     data_dir: Path | None = None,
 ) -> tuple[bool, int]:
     """Return whether the torch/TabPFN group should use the gpu partition."""
@@ -106,7 +109,7 @@ def gpu_partition_for_country(
 def gpu_partition_for_batch(
     batch: str,
     *,
-    region_threshold: int = 100,
+    region_threshold: int = DEFAULT_GPU_REGION_THRESHOLD,
     data_dir: Path | None = None,
 ) -> tuple[bool | None, int, str | None]:
     """Return (use_gpu_partition, n_regions, country) for a baselines_* batch name."""
@@ -193,7 +196,7 @@ def build_submit_plans(
     countries: list[str] | None = None,
     horizons: list[str] | None = None,
     version: int = 1,
-    region_threshold: int = 100,
+    region_threshold: int = DEFAULT_GPU_REGION_THRESHOLD,
     manifest_root: Path,
     data_dir: Path | None = None,
     pending_only: bool = True,
@@ -307,8 +310,11 @@ def main() -> None:
     parser.add_argument(
         "--region-threshold",
         type=int,
-        default=100,
-        help="Countries with >= N regions use gpu partition for the torch/TabPFN group",
+        default=DEFAULT_GPU_REGION_THRESHOLD,
+        help=(
+            "Countries with >= N regions use gpu partition for the torch/TabPFN group "
+            f"(default: {DEFAULT_GPU_REGION_THRESHOLD})"
+        ),
     )
     parser.add_argument("--all", action="store_true", help="Include already-filed batches in listing")
     parser.add_argument("--force", action="store_true", help="Plan submit even if manifest exists")

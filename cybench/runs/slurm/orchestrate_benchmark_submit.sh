@@ -7,7 +7,7 @@
 #   cybench/runs/slurm/orchestrate_benchmark_submit.sh --list
 #   cybench/runs/slurm/orchestrate_benchmark_submit.sh --dry-run
 #   cybench/runs/slurm/orchestrate_benchmark_submit.sh --countries PL IT --horizon eos
-#   cybench/runs/slurm/orchestrate_benchmark_submit.sh --region-threshold 100 --max 3
+#   cybench/runs/slurm/orchestrate_benchmark_submit.sh --region-threshold 50 --max 3
 #
 set -euo pipefail
 
@@ -24,7 +24,7 @@ Options:
   --dry-run           Print submit_benchmark.sh commands without sbatch
   --countries CC ...  Limit to these countries (default: all with data on disk)
   --horizon H ...     Default: eos middle-of-season (alias mid → middle-of-season)
-  --region-threshold N  gpu partition when country has >= N regions (default: 100)
+  --region-threshold N  gpu partition when country has >= N regions (default: 50)
   --version N         Batch version suffix (default: 1)
   --phase MODE        screening | walk_forward | all (default: all)
   --force             Submit even if manifest batch dir already exists
@@ -57,7 +57,7 @@ FORCE=false
 ALL_COUNTRIES=false
 PHASE_MODE="all"
 VERSION=1
-REGION_THRESHOLD=100
+REGION_THRESHOLD=50
 MAX_BATCHES=0
 MANIFEST_ROOT="${SLURM_DIR}/manifests"
 DATA_DIR=""

@@ -55,6 +55,7 @@ from cybench.runs.slurm.benchmark_completion_lib import (
     write_manifest,
 )
 from cybench.runs.slurm.benchmark_submit_lib import (
+    DEFAULT_GPU_REGION_THRESHOLD,
     gpu_partition_for_batch,
     parse_batch_name,
     resolve_case_insensitive_child,
@@ -441,8 +442,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--region-threshold",
         type=int,
-        default=100,
-        help="Use gpu partition for torch/TabPFN when country has >= N regions (default: 100)",
+        default=DEFAULT_GPU_REGION_THRESHOLD,
+        help=(
+            "Use gpu partition for torch/TabPFN when country has >= N regions "
+            f"(default: {DEFAULT_GPU_REGION_THRESHOLD})"
+        ),
     )
     args = parser.parse_args(argv)
 
