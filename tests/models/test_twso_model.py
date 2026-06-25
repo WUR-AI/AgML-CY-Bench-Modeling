@@ -6,8 +6,10 @@ from cybench.datasets.dataset import PandasDataset
 from cybench.models.lpjml_model import bias_correct_lpj_yield
 from cybench.models.twso_model import (
     TwsoBiasCorrectedModel,
+    TwsoNotApplicableError,
     TWSO_COL,
     load_twso_yields,
+    twso_screening_viable,
 )
 from cybench.config import KEY_LOC, KEY_YEAR, KEY_TARGET
 
@@ -313,3 +315,59 @@ def test_twso_model_predict_nan_for_truncated_season(tmp_path):
     )
     preds, _ = model.predict(test_ds)
     assert np.isnan(preds[0])
+
+
+def test_twso_fit_raises_not_applicable_without_overlap(tmp_path):
+    country_dir = _season_setup(tmp_path, locs=["NL11"])
+    _write_twso_csv(
+        country_dir / "twso_maize_NL.csv",
+        {
+            "crop_name": ["maize"] * 3,
+            KEY_LOC: ["NL99"] * 3,
+            "date": [20010301, 20010401, 20010501],
+            TWSO_COL: [4000.0, 5000.0, 6000.0],
+        },
+    )
+
+    train_index = pd.MultiIndex.from_tuples([("NL11", 2001)], names=[KEY_LOC, KEY_YEAR])
+    train_y = pd.DataFrame({KEY_TARGET: [10.0]}, index=train_index)
+    cfg = {"crop": {"name": "maize"}, "country": "NL"}
+    train_ds = PandasDataset(cfg=cfg, y=train_y, x=pd.DataFrame(index=train_index))
+
+    model = TwsoBiasCorrectedModel(data_dir=str(tmp_path), max_days_before_eos=999)
+    with pytest.raises(TwsoNotApplicableError, match="No overlapping TWSO"):
+        model.fit(train_ds)
+
+
+def test_twso_screening_viable_detects_missing_overlap(tmp_path):
+    country_dir = _season_setup(tmp_path, locs=["NL11"])
+    years = list(range(2000, 2012))
+    yield_rows = {
+        "crop_name": [],
+        "country_code": [],
+        KEY_LOC: [],
+        "harvest_year": [],
+        KEY_TARGET: [],
+    }
+    for year in years:
+        yield_rows["crop_name"].append("maize")
+        yield_rows["country_code"].append("NL")
+        yield_rows[KEY_LOC].append("NL11")
+        yield_rows["harvest_year"].append(year)
+        yield_rows[KEY_TARGET].append(10.0)
+    pd.DataFrame(yield_rows).to_csv(
+        country_dir / "yield_maize_NL.csv", index=False
+    )
+    _write_twso_csv(
+        country_dir / "twso_maize_NL.csv",
+        {
+            "crop_name": ["maize"] * 3,
+            KEY_LOC: ["NL99"] * 3,
+            "date": [20010301, 20010401, 20010501],
+            TWSO_COL: [4000.0, 5000.0, 6000.0],
+        },
+    )
+
+    ok, reason = twso_screening_viable("maize", "NL", data_dir=tmp_path)
+    assert not ok
+    assert "no overlapping" in reason.lower()

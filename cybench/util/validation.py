@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
-from typing import Any
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
-from omegaconf import ListConfig
+import yaml
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 log = logging.getLogger(__name__)
+
+_SCREENING_VALIDATION_PATH = (
+    Path(__file__).resolve().parents[1] / "conf" / "validation" / "screening.yaml"
+)
 
 
 def _as_python_years(years) -> list[int]:
@@ -139,6 +146,17 @@ def get_screening_pre_test_years(
         cfg, dataset_years, seed=seed
     )
     return _as_python_years(list(train_years) + list(val_years))
+
+
+@lru_cache(maxsize=1)
+def default_screening_validation_cfg() -> DictConfig:
+    """Load ``cybench/conf/validation/screening.yaml`` (benchmark screening split)."""
+    return cast(
+        DictConfig,
+        OmegaConf.create(
+            yaml.safe_load(_SCREENING_VALIDATION_PATH.read_text(encoding="utf-8"))
+        ),
+    )
 
 
 def get_splits(

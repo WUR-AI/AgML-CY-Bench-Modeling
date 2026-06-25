@@ -177,6 +177,7 @@ split_manifests() {
 regenerate_manifest() {
   mkdir -p "${MANIFEST_ROOT}"
   local cmd=(poetry run python "${SLURM_DIR}/generate_job_manifest.py" -o "${BASE_MANIFEST}")
+  cmd+=(--horizon "${PREDICTION_HORIZON}")
   if [[ ${#COUNTRIES[@]} -gt 0 ]]; then
     cmd+=(--countries "${COUNTRIES[@]}")
   fi

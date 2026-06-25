@@ -6,7 +6,6 @@ import csv
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from types import SimpleNamespace
 
 from omegaconf import OmegaConf
 
@@ -15,6 +14,7 @@ from cybench.runs.analysis.benchmark_run_catalog import discover_benchmark_runs
 from cybench.runs.analysis.collect_walk_forward_results import load_pooled_predictions
 from cybench.runs.slurm.benchmark_submit_lib import (
     batch_name,
+    batch_suffix_to_horizon,
     countries_with_data,
     horizon_batch_suffix,
     normalize_horizon,
@@ -23,10 +23,8 @@ from cybench.runs.slurm.benchmark_submit_lib import (
     resolve_case_insensitive_child,
 )
 from cybench.util.prediction_horizon import prediction_horizon_tag
-from cybench.util.validation import get_screening_partitions
+from cybench.util.validation import default_screening_validation_cfg, get_screening_partitions
 
-SCREENING_TEST_YEARS = "5-last"
-SCREENING_VAL_YEARS = "2-last"
 DEFAULT_MIN_YEAR = 2000
 DEFAULT_MAX_YEAR = 2024
 DEFAULT_LUSTRE_OUTPUT = Path("/lustre/backup/SHARED/AIN/agml/output")
@@ -150,13 +148,10 @@ def load_yield_years(
 def check_screening_years(years: set[int]) -> tuple[bool, str]:
     if not years:
         return False, "no yield years in dataset window"
-    cfg = SimpleNamespace(
-        name="screening",
-        test_years=SCREENING_TEST_YEARS,
-        val_years=SCREENING_VAL_YEARS,
-    )
     try:
-        train, val, test = get_screening_partitions(cfg, years, seed=42)
+        train, val, test = get_screening_partitions(
+            default_screening_validation_cfg(), years, seed=42
+        )
     except (AssertionError, ValueError) as exc:
         return False, str(exc)
     if not train:
@@ -343,6 +338,7 @@ def supplement_jobs_for_models(
     repo_root: Path,
     data_dir: Path | None = None,
     models_path: Path | None = None,
+    horizon: str | None = None,
 ) -> list[JobRow]:
     """Build job rows from current models.txt + on-disk data (ignores cached manifests)."""
     from cybench.runs.slurm.generate_job_manifest import MODELS_FILE, build_jobs
@@ -356,6 +352,7 @@ def supplement_jobs_for_models(
         models_path=path,
         data_dir=data_dir,
         model_filter=models,
+        horizon=horizon,
     )
 
 
@@ -630,11 +627,15 @@ def ensure_manifest(
 
         models = slurm_dir / "models.txt"
         manifest_root.mkdir(parents=True, exist_ok=True)
+        horizon = None
+        if parsed:
+            horizon = batch_suffix_to_horizon(parsed[1])
         generate(
             crops=["maize", "wheat"],
             countries=[country],
             models_path=models,
             output=default,
+            horizon=horizon,
         )
         jobs = read_manifest(default)
         if jobs:

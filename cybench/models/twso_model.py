@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import logging
 from pathlib import Path
 from typing import Any
@@ -20,8 +21,14 @@ from cybench.models.lpjml_model import (
 )
 from cybench.models.model import BaseModel
 from cybench.models.persistence import load_pickle, save_pickle
+from cybench.util.validation import default_screening_validation_cfg, get_screening_partitions
 
 log = logging.getLogger(__name__)
+
+
+class TwsoNotApplicableError(Exception):
+    """TWSO baseline cannot be calibrated (no overlapping predictor and yields)."""
+
 
 TWSO_COL = "twso"
 TWSO_SCALE = 0.001
@@ -198,6 +205,111 @@ def load_twso_yields(
     return yields
 
 
+def _load_yield_years(
+    crop: str,
+    country: str,
+    *,
+    data_dir: str | Path,
+    min_year: int,
+    max_year: int,
+) -> set[int]:
+    path = Path(data_dir) / crop / country / f"yield_{crop}_{country}.csv"
+    if not path.is_file():
+        return set()
+    years: set[int] = set()
+    with path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        year_col = "harvest_year" if "harvest_year" in (reader.fieldnames or []) else "year"
+        for row in reader:
+            raw = row.get(year_col)
+            if raw is None or raw == "":
+                continue
+            year = int(float(raw))
+            if min_year <= year <= max_year:
+                years.add(year)
+    return years
+
+
+def _load_yield_rows_for_years(
+    crop: str,
+    country: str,
+    years: set[int],
+    *,
+    data_dir: str | Path,
+) -> pd.DataFrame:
+    path = Path(data_dir) / crop / country / f"yield_{crop}_{country}.csv"
+    df = pd.read_csv(path)
+    year_col = "harvest_year" if "harvest_year" in df.columns else "year"
+    df = df[df[year_col].isin(years)]
+    return df[[KEY_LOC, year_col, KEY_TARGET]].rename(columns={year_col: KEY_YEAR})
+
+
+def twso_training_overlap_ok(
+    y: pd.DataFrame,
+    twso_yields: pd.Series,
+) -> bool:
+    keys = list(zip(y[KEY_LOC], y[KEY_YEAR].astype(int), strict=True))
+    mod_vals = [twso_yields.get(key, np.nan) for key in keys]
+    return any(np.isfinite(val) for val in mod_vals)
+
+
+def twso_screening_viable(
+    crop: str,
+    country: str,
+    *,
+    data_dir: str | Path = PATH_DATA_DIR,
+    end_of_sequence: str = DEFAULT_END_OF_SEQUENCE,
+    min_year: int = DEFAULT_MIN_YEAR,
+    max_year: int = DEFAULT_MAX_YEAR,
+    seed: int = 42,
+    max_days_before_eos: int = DEFAULT_MAX_DAYS_BEFORE_EOS,
+) -> tuple[bool, str]:
+    """Whether twso_bc screening can fit on train+val years for this horizon."""
+    root = Path(data_dir)
+    if not twso_csv_path(crop, country, data_dir=root).is_file():
+        return False, "missing twso csv"
+    if not crop_calendar_csv_path(crop, country, data_dir=root).is_file():
+        return False, "missing crop calendar"
+
+    years = _load_yield_years(
+        crop, country, data_dir=root, min_year=min_year, max_year=max_year
+    )
+    if not years:
+        return False, "no yield years in dataset window"
+    try:
+        train_years, val_years, test_years = get_screening_partitions(
+            default_screening_validation_cfg(), years, seed=seed
+        )
+    except (AssertionError, ValueError) as exc:
+        return False, str(exc)
+
+    fit_years = set(train_years) | set(val_years)
+    y = _load_yield_rows_for_years(crop, country, fit_years, data_dir=root)
+    if y.empty:
+        return False, "no yield rows for screening train+val years"
+
+    try:
+        twso_yields = load_twso_yields(
+            crop,
+            country,
+            data_dir=root,
+            end_of_sequence=end_of_sequence,
+            min_year=min_year,
+            max_year=max_year,
+            max_days_before_eos=max_days_before_eos,
+        )
+    except FileNotFoundError as exc:
+        return False, str(exc)
+
+    if not twso_training_overlap_ok(y, twso_yields):
+        return (
+            False,
+            "no overlapping TWSO and observed yields for screening train+val years "
+            f"(horizon={end_of_sequence}, train+val={sorted(fit_years)}, test={test_years})",
+        )
+    return True, "ok"
+
+
 class TwsoBiasCorrectedModel(BaseModel):
     """Standalone TWSO baseline with per-location variance-matching bias correction.
 
@@ -346,7 +458,9 @@ class TwsoBiasCorrectedModel(BaseModel):
         mod_arr = mod_arr[mask]
 
         if obs_arr.size == 0:
-            raise ValueError("No overlapping TWSO and observed yields in training set")
+            raise TwsoNotApplicableError(
+                "No overlapping TWSO and observed yields in training set"
+            )
 
         std_obs = float(obs_arr.std(ddof=0))
         std_mod = float(mod_arr.std(ddof=0))

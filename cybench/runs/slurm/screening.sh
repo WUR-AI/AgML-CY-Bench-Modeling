@@ -54,6 +54,30 @@ slurm_validate_env "${MODEL}"
 slurm_update_task_job_name screening
 echo "Screening | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_label) | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | out=${BASELINES_DIR}"
 
+if [[ "${MODEL}" == "twso_bc" ]]; then
+  set +e
+  twso_skip_reason=$(
+    poetry run python -c "
+from cybench.models.twso_model import twso_screening_viable
+ok, msg = twso_screening_viable(
+    '${CROP}', '${COUNTRY}', end_of_sequence='${PREDICTION_HORIZON}'
+)
+if not ok:
+    print(msg)
+    raise SystemExit(2)
+"
+  )
+  twso_status=$?
+  set -e
+  if [[ ${twso_status} -eq 2 ]]; then
+    echo "[SKIP] TWSO screening | ${CROP}/${COUNTRY} | horizon=${PREDICTION_HORIZON} — ${twso_skip_reason}"
+    exit 0
+  fi
+  if [[ ${twso_status} -ne 0 ]]; then
+    exit "${twso_status}"
+  fi
+fi
+
 COMMON=(
   "dataset/crop=${CROP}"
   "dataset.country=${COUNTRY}"

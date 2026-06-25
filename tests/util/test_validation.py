@@ -2,7 +2,11 @@
 
 from hydra import compose, initialize
 
-from cybench.util.validation import get_screening_partitions, get_splits
+from cybench.util.validation import (
+    default_screening_validation_cfg,
+    get_screening_partitions,
+    get_splits,
+)
 
 
 def _screening_cfg():
@@ -15,6 +19,13 @@ def _screening_cfg():
                 "validation.val_years=2-last",
             ],
         ).validation
+
+
+def test_default_screening_validation_cfg_matches_yaml():
+    cfg = default_screening_validation_cfg()
+    assert cfg.name == "screening"
+    assert cfg.test_years == "5-last"
+    assert cfg.val_years == "2-last"
 
 
 def test_screening_partitions_fixed_layout():

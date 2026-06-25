@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import cast
-
-import yaml
 
 import hydra
 import numpy as np
@@ -35,20 +34,16 @@ from cybench.util.screening_artifacts import (
     load_optimal_epochs,
 )
 from cybench.util.validation import (
+    default_screening_validation_cfg,
     get_screening_partitions,
     get_screening_pre_test_years,
     get_splits,
 )
 from cybench.config import KEY_COUNTRY, KEY_LOC, KEY_YEAR, KEY_TARGET
+from cybench.models.twso_model import TwsoNotApplicableError
 
 # init logger
 log = logging.getLogger(__name__)
-
-
-def _default_screening_validation_cfg() -> DictConfig:
-    """Default screening.yaml rules (for walk-forward normalizer fit)."""
-    path = Path(__file__).resolve().parents[1] / "conf" / "validation" / "screening.yaml"
-    return cast(DictConfig, OmegaConf.create(yaml.safe_load(path.read_text(encoding="utf-8"))))
 
 
 def _resolve_normalizer_fit_years(cfg) -> list[int] | None:
@@ -56,7 +51,7 @@ def _resolve_normalizer_fit_years(cfg) -> list[int] | None:
     if cfg.validation.name == "screening":
         partition_cfg = cfg.validation
     elif cfg.validation.name == "walk_forward":
-        partition_cfg = _default_screening_validation_cfg()
+        partition_cfg = default_screening_validation_cfg()
     else:
         return None
     years = DataFactory.peek_dataset_years(cfg.dataset)
@@ -304,11 +299,22 @@ def main(cfg):
 
             # create, fit final model and predict test
             model = instantiate(model_cfg)
-            fit_info = _fit_model(
-                model,
-                train_dataset,
-                walk_forward_nn=is_walk_forward and _is_torch_model(model_cfg),
-            )
+            try:
+                fit_info = _fit_model(
+                    model,
+                    train_dataset,
+                    walk_forward_nn=is_walk_forward and _is_torch_model(model_cfg),
+                )
+            except TwsoNotApplicableError as exc:
+                if cfg.validation.name == "screening":
+                    log.warning(
+                        "[SKIP] TWSO screening not applicable for %s/%s: %s",
+                        cfg.dataset.crop.name,
+                        cfg.dataset.country,
+                        exc,
+                    )
+                    sys.exit(0)
+                raise
             test_preds, pred_info = model.predict(test_dataset)
 
             # save preds, model, ...

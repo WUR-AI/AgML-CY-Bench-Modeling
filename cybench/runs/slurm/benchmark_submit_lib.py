@@ -43,6 +43,18 @@ def horizon_batch_suffix(horizon: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", norm.lower()).strip("_")[:8] or "custom"
 
 
+def batch_suffix_to_horizon(batch_hz: str) -> str:
+    """Map batch folder horizon tag back to ``PREDICTION_HORIZON`` / Hydra value."""
+    key = batch_hz.strip().lower()
+    if key == "eos":
+        return "eos"
+    if key == "mid":
+        return "middle-of-season"
+    if key == "qtr":
+        return "quarter-of-season"
+    return batch_hz
+
+
 def batch_name(country: str, horizon: str, version: int = 1) -> str:
     cc = country.upper()
     hz = horizon_batch_suffix(horizon)

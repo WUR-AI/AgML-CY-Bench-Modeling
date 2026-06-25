@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cybench.runs.slurm.generate_job_manifest import generate
+from cybench.runs.slurm.generate_job_manifest import build_jobs, generate
 
 
 def _write_yield(path: Path, crop: str, country: str, years: list[int]) -> None:
@@ -113,3 +113,46 @@ def test_skips_lpjml_and_twso_without_predictor_csv(tmp_path: Path, monkeypatch)
     assert "wheat US twso_bc" in text
     assert "lpjml_bc" not in text
     assert "maize US" not in text
+
+
+def test_skips_twso_without_screening_overlap_when_horizon_set(
+    tmp_path: Path, monkeypatch
+):
+    data = tmp_path / "data"
+    years = list(range(2000, 2012))
+    country_dir = data / "maize" / "DE"
+    country_dir.mkdir(parents=True)
+    yield_lines = ["crop_name,country_code,adm_id,harvest_year,yield"]
+    for year in years:
+        yield_lines.append(f"maize,DE,R1,{year},10.0")
+    (country_dir / "yield_maize_DE.csv").write_text(
+        "\n".join(yield_lines) + "\n", encoding="utf-8"
+    )
+    (country_dir / "crop_calendar_maize_DE.csv").write_text(
+        "adm_id,sos,eos\nR1,100,280\n", encoding="utf-8"
+    )
+    (country_dir / "twso_maize_DE.csv").write_text(
+        "crop_name,adm_id,date,twso\nmaize,OTHER,20010301,4000.0\n",
+        encoding="utf-8",
+    )
+    models = tmp_path / "models.txt"
+    models.write_text("twso_bc pandas no no no\n", encoding="utf-8")
+
+    import cybench.config as cfg
+
+    monkeypatch.setattr(cfg, "PATH_DATA_DIR", str(data))
+
+    without_horizon = build_jobs(
+        crops=["maize"],
+        countries=["DE"],
+        models_path=models,
+    )
+    assert len(without_horizon) == 1
+
+    with_horizon = build_jobs(
+        crops=["maize"],
+        countries=["DE"],
+        models_path=models,
+        horizon="eos",
+    )
+    assert with_horizon == []

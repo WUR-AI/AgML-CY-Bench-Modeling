@@ -13,11 +13,13 @@ from pathlib import Path
 import cybench.config as config
 from cybench.config import DATASETS
 from cybench.models.baseline_csv_paths import lpjml_csv_path, twso_csv_path
+from cybench.models.twso_model import twso_screening_viable
 from cybench.runs.slurm.benchmark_completion_lib import (
     JobRow,
     check_screening_years,
     load_yield_years,
 )
+from cybench.runs.slurm.benchmark_submit_lib import normalize_horizon
 
 SLURM_DIR = Path(__file__).resolve().parent
 MODELS_FILE = SLURM_DIR / "models.txt"
@@ -45,6 +47,7 @@ def build_jobs(
     models_path: Path,
     data_dir: Path | None = None,
     model_filter: list[str] | None = None,
+    horizon: str | None = None,
 ) -> list[JobRow]:
     """Return manifest rows for crop/country pairs with data and enough yield years."""
     models = _read_models(models_path)
@@ -53,6 +56,7 @@ def build_jobs(
         models = [row for row in models if row[0].lower() in allowed]
 
     root = Path(data_dir or config.PATH_DATA_DIR)
+    end_of_sequence = normalize_horizon(horizon) if horizon else None
     jobs: list[JobRow] = []
     for crop in crops:
         if crop not in DATASETS:
@@ -74,10 +78,18 @@ def build_jobs(
                     crop, country, data_dir=root
                 ).is_file():
                     continue
-                if model == "twso_bc" and not twso_csv_path(
-                    crop, country, data_dir=root
-                ).is_file():
-                    continue
+                if model == "twso_bc":
+                    if not twso_csv_path(crop, country, data_dir=root).is_file():
+                        continue
+                    if end_of_sequence is not None:
+                        viable, _reason = twso_screening_viable(
+                            crop,
+                            country,
+                            data_dir=root,
+                            end_of_sequence=end_of_sequence,
+                        )
+                        if not viable:
+                            continue
                 jobs.append(
                     JobRow(
                         crop=crop,
@@ -99,12 +111,14 @@ def generate(
     models_path: Path,
     output: Path,
     data_dir: Path | None = None,
+    horizon: str | None = None,
 ) -> int:
     jobs = build_jobs(
         crops=crops,
         countries=countries,
         models_path=models_path,
         data_dir=data_dir,
+        horizon=horizon,
     )
     lines: list[str] = [
         "# crop country model framework hp_search feature_design needs_gpu",
@@ -132,12 +146,19 @@ def main() -> None:
     )
     parser.add_argument("--models", type=Path, default=MODELS_FILE)
     parser.add_argument("-o", "--output", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--horizon",
+        default=None,
+        help="Prediction horizon (eos, middle-of-season). When set, omit twso_bc "
+        "jobs with no TWSO/yield overlap for screening train+val.",
+    )
     args = parser.parse_args()
     generate(
         crops=args.crops,
         countries=args.countries or None,
         models_path=args.models,
         output=args.output,
+        horizon=args.horizon,
     )
 
 
