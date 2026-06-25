@@ -1,0 +1,41 @@
+defaults:
+  - torch_model: late_fusion_network
+  - augmentation: extensive
+  - optimizer: adamw
+  - scheduler: cosine_warmup
+  - early_stopping: val
+  - override torch_model/temporal_encoder/processor: transformer
+  - override torch_model/temporal_encoder/tokenizer: linear_pool
+  - _self_
+
+# Temporal-only transformer: AgERA5 + FPAR, no static/context predictors.
+# Weekly mean pool → linear token embed (128) → calendar PE → 2-layer / 8-head encoder.
+
+_target_: cybench.models.torch.trainer.TorchTrainer
+name: transformer_agera5_fpar_ns
+framework: torch
+epochs: 100
+seed: ${experiment.seed}
+device: ${experiment.device}
+verbose: true
+
+dataloader:
+  _target_: torch.utils.data.DataLoader
+  _partial_: true
+  batch_size: 64
+  shuffle: true
+
+torch_model:
+  embed_dim: 128
+  temporal_encoder:
+    pooling:
+      _target_: cybench.models.torch.model_components.temporal_encoder.AttentionPooling
+      embed_dim: ${model.torch_model.embed_dim}
+    processor:
+      num_layers: 2
+      nhead: 8
+      dim_feedforward: 512
+      dropout: 0.2
+    tokenizer:
+      patch_size: 7
+      use_seasonal_embedding: true

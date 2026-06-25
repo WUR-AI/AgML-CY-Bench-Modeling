@@ -11,7 +11,8 @@ Temporal Encoder Module
 This module implements a flexible temporal-encoding pipeline composed of:
 1. **Tokenizer**: Downsamples raw temporal features and maps them into a fixed
    embedding dimension (`embed_dim`). Options include a learnable Conv1d block
-   (`ConvTokenizer`) or a fixed per-channel mean pool (`AvgPoolTokenizer`).
+   (`ConvTokenizer`), fixed per-channel mean pool (`AvgPoolTokenizer`), or
+   weekly mean pool + linear projection + calendar PE (`LinearPoolTokenizer`).
 2. **Processor**: Applies temporal feature transformation without changing the
    embedding dimensionality. Two processor families are provided:
        - `CNNProcessor`: Lightweight temporal convolutions with preserved shape.
@@ -75,6 +76,22 @@ class SeasonalEmbedding(nn.Module):
 # ----------------------------------------------------------------------
 # 1. Tokenizer
 # ----------------------------------------------------------------------
+
+def _trim_to_eos_anchor(x: torch.Tensor, patch_size: int) -> torch.Tensor:
+    remainder = x.shape[1] % patch_size
+    if remainder == 0:
+        return x
+    return x[:, remainder:, :]
+
+
+def _weekly_doy_indices(seq_len: int, patch_size: int, device: torch.device) -> torch.Tensor:
+    """Index the last day of each chronological week-window (for calendar PE)."""
+    n_weeks = seq_len // patch_size
+    return torch.tensor(
+        [patch_size - 1 + i * patch_size for i in range(n_weeks)],
+        dtype=torch.long,
+        device=device,
+    )
 
 class ConvTokenizer(nn.Module):
     """
@@ -183,16 +200,10 @@ class AvgPoolTokenizer(nn.Module):
         self.pool = nn.AvgPool1d(kernel_size=patch_size, stride=patch_size)
         self.proj = _FixedChannelProjection(in_dim, embed_dim)
 
-    def _trim_to_eos_anchor(self, x: torch.Tensor) -> torch.Tensor:
-        remainder = x.shape[1] % self.patch_size
-        if remainder == 0:
-            return x
-        return x[:, remainder:, :]
-
     def forward(self, x: torch.Tensor, doys: torch.Tensor) -> torch.Tensor:
         del doys
         if self.eos_anchor:
-            x = self._trim_to_eos_anchor(x)
+            x = _trim_to_eos_anchor(x, self.patch_size)
         if x.shape[1] < self.patch_size:
             raise ValueError(
                 f"Sequence length {x.shape[1]} is shorter than patch_size "
@@ -200,6 +211,55 @@ class AvgPoolTokenizer(nn.Module):
             )
         z = self.pool(x.transpose(1, 2)).transpose(1, 2)
         return self.proj(z)
+
+
+class LinearPoolTokenizer(nn.Module):
+    """
+    Weekly (or N-day) mean pool → learnable linear token projection → calendar PE.
+
+    One token per aggregation window (e.g. patch_size=7 for weekly): fixed mean
+    over raw channels, then ``Linear(in_dim, embed_dim)``, then additive sin/cos
+    day-of-year encoding (``SeasonalEmbedding``).
+    """
+
+    def __init__(
+        self,
+        in_dim: int,
+        embed_dim: int,
+        patch_size: int = 7,
+        eos_anchor: bool = True,
+        use_seasonal_embedding: bool = True,
+    ):
+        super().__init__()
+        if patch_size < 1:
+            raise ValueError(f"patch_size must be >= 1, got {patch_size}")
+        self.patch_size = patch_size
+        self.eos_anchor = eos_anchor
+        self.pool = nn.AvgPool1d(kernel_size=patch_size, stride=patch_size)
+        self.proj = nn.Linear(in_dim, embed_dim)
+        self.seasonal_embedder = (
+            SeasonalEmbedding(embed_dim) if use_seasonal_embedding else None
+        )
+
+    def forward(self, x: torch.Tensor, doys: torch.Tensor) -> torch.Tensor:
+        if self.eos_anchor:
+            remainder = x.shape[1] % self.patch_size
+            if remainder:
+                x = x[:, remainder:, :]
+                doys = doys[:, remainder:]
+        if x.shape[1] < self.patch_size:
+            raise ValueError(
+                f"Sequence length {x.shape[1]} is shorter than patch_size "
+                f"{self.patch_size} after EOS anchoring."
+            )
+        z = self.pool(x.transpose(1, 2)).transpose(1, 2)
+        z = self.proj(z)
+        if self.seasonal_embedder is not None:
+            week_doy_idx = _weekly_doy_indices(
+                x.shape[1], self.patch_size, doys.device
+            )
+            z = z + self.seasonal_embedder(doys[:, week_doy_idx])
+        return z
 
 
 # ----------------------------------------------------------------------

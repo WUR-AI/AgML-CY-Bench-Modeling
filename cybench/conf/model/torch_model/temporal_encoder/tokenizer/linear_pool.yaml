@@ -1,0 +1,17 @@
+
+_target_: cybench.models.torch.model_components.temporal_encoder.LinearPoolTokenizer
+
+in_dim: ${model.torch_model.temporal_in_dim}
+embed_dim: ${model.torch_model.embed_dim}
+
+# One token per week: fixed mean pool + learnable linear projection + calendar PE.
+patch_size: 7
+eos_anchor: true
+use_seasonal_embedding: true
+
+_search_:
+  patch_size:
+    type: int
+    low: 5
+    high: 9
+    step: 2

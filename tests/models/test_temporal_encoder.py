@@ -7,6 +7,7 @@ from cybench.datasets.data_factory import DataFactory
 from cybench.evaluation.eval import evaluate_predictions
 from cybench.models.torch.model_components.temporal_encoder import (
     AvgPoolTokenizer,
+    LinearPoolTokenizer,
     LSTMProcessor,
     LastStepPooling,
     TemporalEncoder,
@@ -58,6 +59,36 @@ def test_avg_pool_tokenizer_rejects_short_sequence():
     x = torch.randn(1, 8, 2)
     with pytest.raises(ValueError, match="shorter than patch_size"):
         tokenizer(x, torch.zeros(1, 8, dtype=torch.int16))
+
+
+def test_linear_pool_tokenizer_weekly_mean_and_pe():
+    patch_size = 7
+    in_dim, embed_dim = 2, 4
+    tokenizer = LinearPoolTokenizer(
+        in_dim=in_dim,
+        embed_dim=embed_dim,
+        patch_size=patch_size,
+        use_seasonal_embedding=True,
+    )
+    x = torch.arange(21, dtype=torch.float32).view(1, 21, 1).expand(1, 21, in_dim)
+    doys = torch.arange(100, 121, dtype=torch.int16).view(1, 21)
+
+    out = tokenizer(x, doys)
+    assert out.shape == (1, 3, embed_dim)
+
+    with torch.no_grad():
+        pooled = x[:, :21, :].transpose(1, 2)
+        pooled = torch.nn.functional.avg_pool1d(pooled, patch_size, patch_size).transpose(1, 2)
+        expected = tokenizer.proj(pooled)
+        week_doy_idx = torch.tensor([6, 13, 20])
+        expected = expected + tokenizer.seasonal_embedder(doys[:, week_doy_idx])
+    assert torch.allclose(out, expected)
+
+
+def test_linear_pool_tokenizer_has_trainable_projection():
+    tokenizer = LinearPoolTokenizer(in_dim=8, embed_dim=16, patch_size=7)
+    n_params = sum(p.numel() for p in tokenizer.parameters())
+    assert n_params == 8 * 16 + 16 + 2 * 16 + 16  # linear + seasonal linear
 
 
 def test_avg_pool_temporal_encoder_end_to_end():
