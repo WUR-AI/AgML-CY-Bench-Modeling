@@ -39,16 +39,44 @@ class DataFactory:
             for c in self.cfg.country:
                 assert c in DATASETS[crop_name], f"Country '{self.cfg.country}' is not supported for crop type '{crop_name}'. See DATASETS in config.py"
 
-    def build(self) -> BaseDataset:
+    @staticmethod
+    def peek_dataset_years(cfg) -> set[int]:
+        """Return harvest years available in yield tables (no feature loading)."""
+        crop = cfg.crop.name
+        min_year = int(cfg.min_year)
+        max_year = int(cfg.max_year)
+        countries = [cfg.country] if isinstance(cfg.country, str) else list(cfg.country)
+        years: set[int] = set()
+        for country_code in countries:
+            path_data_cn = os.path.join(PATH_DATA_DIR, crop, country_code)
+            yield_path = os.path.join(
+                path_data_cn, "_".join(["yield", crop, country_code]) + ".csv"
+            )
+            df_y = pd.read_csv(yield_path, usecols=["harvest_year"])
+            for year in df_y["harvest_year"].dropna().astype(int):
+                if min_year <= year <= max_year:
+                    years.add(int(year))
+        return years
+
+    def build(self, *, normalizer_fit_years: list[int] | None = None) -> BaseDataset:
         # Caching Strategy: Check existing
         use_cache = getattr(self.cfg, 'use_cache', False)
         use_memory_optimization = getattr(self.cfg, 'use_memory_optimization', True)
         cache_dir = os.path.join(PATH_DATA_DIR, "cache")
 
         cache_path: str | None = None
+        if normalizer_fit_years is None:
+            normalizer_fit_years = getattr(self.cfg, "normalizer_fit_years", None)
+        if normalizer_fit_years is not None:
+            normalizer_fit_years = [int(y) for y in normalizer_fit_years]
+
         if use_cache:
             os.makedirs(cache_dir, exist_ok=True)
-            dataset_hash = cfg_to_hash(self.cfg, add_str=self.cfg.name)
+            cache_cfg = self.cfg
+            if normalizer_fit_years is not None:
+                cache_cfg = OmegaConf.create(OmegaConf.to_container(self.cfg, resolve=True))
+                cache_cfg.normalizer_fit_years = normalizer_fit_years
+            dataset_hash = cfg_to_hash(cache_cfg, add_str=self.cfg.name)
 
             if self.cfg.framework == "torch":
                 cache_path = os.path.join(cache_dir, f"{dataset_hash}.pt")
@@ -84,7 +112,12 @@ class DataFactory:
         if normalizer is not None:
             normalizer = Normalizer(self.cfg.normalizer)
             if normalizer.name == "fit":
-                dfs_x = normalizer.fit_normalize(dfs_x)
+                if normalizer_fit_years is not None:
+                    log.info(
+                        "Fitting normalizer on years %s (excluding screening test block)",
+                        normalizer_fit_years,
+                    )
+                dfs_x = normalizer.fit_normalize(dfs_x, fit_years=normalizer_fit_years)
                 normalizer.name = "fitted"
             else:
                 dfs_x = normalizer.normalize(dfs_x)

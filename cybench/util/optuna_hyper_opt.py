@@ -167,7 +167,8 @@ class OptunaOptimizer:
             cfg,
             dataset: BaseDataset,
             path: str | Path,
-            study_name: str
+            study_name: str,
+            split_dataset_years: set[Any] | list[Any] | None = None,
     ):
         self.multi_gpu = False
         if cfg.experiment.n_jobs > 1:
@@ -187,6 +188,11 @@ class OptunaOptimizer:
         self.dataset = dataset
         self.path = Path(path)
         self.study_name = study_name
+        self.split_dataset_years = (
+            set(int(y) for y in split_dataset_years)
+            if split_dataset_years is not None
+            else None
+        )
 
         # Ensure output directory exists
         self.path.mkdir(parents=True, exist_ok=True)
@@ -372,12 +378,18 @@ class OptunaOptimizer:
             for i in range(self.hp_config.repetitions):
                 set_seed(self.hp_config.seed + i)
 
-                # Get validation splits (Using the 'val' set of the current dataset)
+                # Screening HPO must resolve train/val from the full timeline; ``dataset``
+                # is already truncated to pre-test years for the final fit.
+                years_for_splits = (
+                    self.split_dataset_years
+                    if self.split_dataset_years is not None
+                    else set(self.dataset.years)
+                )
                 splits = list(
                     get_splits(
                         cfg=self.val_cfg,
                         which="val",
-                        dataset_years=self.dataset.years,
+                        dataset_years=years_for_splits,
                         seed=self.hp_config.seed,
                     )
                 )

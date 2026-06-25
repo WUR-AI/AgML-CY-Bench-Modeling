@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import cast
+
+import yaml
 
 import hydra
 import numpy as np
@@ -32,11 +35,37 @@ from cybench.util.screening_artifacts import (
     load_frozen_screening_artifacts,
     load_optimal_epochs,
 )
-from cybench.util.validation import get_screening_partitions, get_splits
+from cybench.util.validation import (
+    get_screening_partitions,
+    get_screening_pre_test_years,
+    get_splits,
+)
 from cybench.config import KEY_COUNTRY, KEY_LOC, KEY_YEAR, KEY_TARGET
 
 # init logger
 log = logging.getLogger(__name__)
+
+
+def _default_screening_validation_cfg() -> DictConfig:
+    """Default screening.yaml rules (for walk-forward normalizer fit)."""
+    path = Path(__file__).resolve().parents[1] / "conf" / "validation" / "screening.yaml"
+    return cast(DictConfig, OmegaConf.create(yaml.safe_load(path.read_text(encoding="utf-8"))))
+
+
+def _resolve_normalizer_fit_years(cfg) -> list[int] | None:
+    """Fit normalization on screening train ∪ val only (exclude test block)."""
+    if cfg.validation.name == "screening":
+        partition_cfg = cfg.validation
+    elif cfg.validation.name == "walk_forward":
+        partition_cfg = _default_screening_validation_cfg()
+    else:
+        return None
+    years = DataFactory.peek_dataset_years(cfg.dataset)
+    fit_years = get_screening_pre_test_years(
+        years, seed=cfg.experiment.seed, cfg=partition_cfg
+    )
+    log.info("Normalizer fit years (screening train+val): %s", fit_years)
+    return fit_years
 
 
 def _model_target(cfg) -> str:
@@ -103,7 +132,8 @@ def main(cfg):
     _maybe_drop_temporal_for_standalone_models(cfg)
 
     log.info("=== Create Datasets ===")
-    dataset = DataFactory(cfg.dataset).build()
+    normalizer_fit_years = _resolve_normalizer_fit_years(cfg)
+    dataset = DataFactory(cfg.dataset).build(normalizer_fit_years=normalizer_fit_years)
     log.info(f"Dataset years: {sorted(dataset.years)}")
     horizon = OmegaConf.select(cfg, "dataset.temporal.season.end_of_sequence")
     log.info("Prediction horizon (end_of_sequence): %s → tag %s", horizon, prediction_horizon_tag(str(horizon or "eos")))
@@ -201,7 +231,8 @@ def main(cfg):
                 cfg=cfg,
                 dataset=train_dataset,
                 path=split_path,
-                study_name=f"{split_path.parent.name}_{split_path.name}"
+                study_name=f"{split_path.parent.name}_{split_path.name}",
+                split_dataset_years=dataset.years,
             )
             model_cfg = cast(DictConfig, hp_optimizer.optimize())
         else:

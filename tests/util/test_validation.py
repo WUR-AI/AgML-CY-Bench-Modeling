@@ -85,6 +85,31 @@ def test_screening_hpo_maize_us_like_years():
     assert not set(hpo_val) & set(test)
 
 
+def test_screening_hpo_truncated_years_gives_wrong_val_window():
+    """Document regression: pre-test years alone must not drive HPO val selection."""
+    cfg = _screening_cfg()
+    years = set(range(2003, 2024))
+    train, val, test = get_screening_partitions(cfg, years)
+    pre_test = set(train) | set(val)
+
+    wrong_train, wrong_val = next(
+        get_splits(cfg=cfg, which="val", dataset_years=pre_test, seed=42)
+    )
+    assert wrong_val == [2012, 2013]
+    assert wrong_val != val
+
+
+def test_screening_pre_test_years_for_normalizer():
+    from cybench.util.validation import get_screening_pre_test_years
+
+    cfg = _screening_cfg()
+    years = set(range(2003, 2024))
+    train, val, test = get_screening_partitions(cfg, years)
+    fit_years = get_screening_pre_test_years(years, seed=42, cfg=cfg)
+    assert fit_years == train + val
+    assert not set(fit_years) & set(test)
+
+
 def test_screening_final_fit_pool_excludes_test():
     cfg = _screening_cfg()
     years = set(range(2000, 2025))

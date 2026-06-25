@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 from omegaconf import OmegaConf
 
+from cybench.config import KEY_YEAR
+
 
 class Normalizer:
     """
@@ -105,12 +107,31 @@ class Normalizer:
 
         raise ValueError(f"Unknown normalization type: {ftype}")
 
-    def fit_normalize(self, dfs):
+    def _series_for_fit(
+        self,
+        series: pd.Series,
+        df: pd.DataFrame,
+        fit_years: list[int] | None,
+    ) -> pd.Series:
+        """Restrict fit statistics to ``fit_years`` when the frame is year-indexed."""
+        if fit_years is None:
+            return series
+        fit_set = set(int(y) for y in fit_years)
+        if isinstance(df.index, pd.MultiIndex) and KEY_YEAR in df.index.names:
+            mask = df.index.get_level_values(KEY_YEAR).isin(fit_set)
+            return series.loc[mask]
+        if KEY_YEAR in df.columns:
+            return series.loc[df[KEY_YEAR].isin(fit_set)]
+        return series
+
+    def fit_normalize(self, dfs, fit_years: list[int] | None = None):
         """
         Fits parameters across all DataFrames and returns
         normalized copies of the DataFrames.
+
+        When ``fit_years`` is set, statistics are computed on those years only
+        (e.g. screening train ∪ val); normalization is then applied to all rows.
         """
-        # Concatenate for global statistics
         for source_name, df in dfs.items():
             for feature, cfg in self.feature_cfg.items():
                 ftype = cfg["type"]
@@ -123,7 +144,8 @@ class Normalizer:
                 if feature not in df.columns:
                     continue
 
-                params = self._fit_feature(df[feature], ftype)
+                fit_series = self._series_for_fit(df[feature], df, fit_years)
+                params = self._fit_feature(fit_series, ftype)
                 self.feature_cfg[feature]["params"] = params
         return self.normalize(dfs)
 

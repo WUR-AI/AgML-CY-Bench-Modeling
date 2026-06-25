@@ -128,6 +128,19 @@ def get_screening_partitions(
     return train_years, val_years, test_years
 
 
+def get_screening_pre_test_years(
+    dataset_years: set[Any],
+    *,
+    seed: int = 42,
+    cfg=None,
+) -> list[int]:
+    """Screening train ∪ val years — used to fit normalization (excludes test block)."""
+    train_years, val_years, _test_years = get_screening_partitions(
+        cfg, dataset_years, seed=seed
+    )
+    return _as_python_years(list(train_years) + list(val_years))
+
+
 def get_splits(
         cfg,
         which: str,
