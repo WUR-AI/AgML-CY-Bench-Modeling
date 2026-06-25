@@ -17,11 +17,20 @@ from cybench.datasets.dataset import BaseDataset
 def adjust_model_cfg_to_dataset(model_cfg: DictConfig, dataset: BaseDataset) -> DictConfig:
     # Only called for torch datasets (see run_experiments.py).
     _, x_c_sample, x_t_sample, _ = dataset[0]
-    model_cfg.torch_model.context_in_dim = len(x_c_sample)
-    model_cfg.torch_model.temporal_in_dim = len(x_t_sample.T)
-    temporal_encoder = model_cfg.torch_model.get("temporal_encoder")
+    torch_model = model_cfg.torch_model
+    temporal_in_dim = len(x_t_sample.T)
+    seq_len = int(x_t_sample.shape[0])
+
+    if "input_size" in torch_model:
+        torch_model.input_size = temporal_in_dim
+    if "context_in_dim" in torch_model:
+        torch_model.context_in_dim = len(x_c_sample)
+    if "temporal_in_dim" in torch_model:
+        torch_model.temporal_in_dim = temporal_in_dim
+
+    temporal_encoder = torch_model.get("temporal_encoder")
     if temporal_encoder is not None and "seq_len" in temporal_encoder.keys():
-        temporal_encoder.seq_len = x_t_sample.shape[0]
+        temporal_encoder.seq_len = seq_len
     return model_cfg
 
 

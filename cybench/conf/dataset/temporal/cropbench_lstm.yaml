@@ -1,0 +1,33 @@
+name: cropbench_lstm
+
+# CropBench LSTM inputs: weekly AgERA5 (5 vars) + FPAR, middle-of-season horizon.
+# Uses CY-Bench DataFactory (sos-60 … mid-season window), not CropBench spinup logic.
+
+season:
+  end_of_sequence: middle-of-season
+  start_of_sequence: sos-60
+
+aggregate: 7
+
+sources:
+  meteo:
+    name: meteo
+    select:
+      - tmin
+      - tmax
+      - tavg
+      - prec
+      - rad
+    aggregate:
+      tmin: min
+      tmax: max
+      tavg: mean
+      prec: sum
+      rad: mean
+
+  fpar:
+    name: fpar
+    select:
+      - fpar
+    aggregate:
+      fpar: mean

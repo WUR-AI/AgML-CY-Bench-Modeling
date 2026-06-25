@@ -1,0 +1,25 @@
+defaults:
+  - torch_model: lstm_baseline
+  - optimizer: adam
+  - _self_
+
+# CropBench-style LSTM: Adam, 20 epochs, no augmentation / scheduler / early stopping.
+
+_target_: cybench.models.torch.trainer.TorchTrainer
+name: lstm_baseline
+framework: torch
+epochs: 20
+seed: ${experiment.seed}
+device: ${experiment.device}
+verbose: true
+max_grad_norm: 1.0
+
+optimizer:
+  lr: 1e-3
+  weight_decay: 1.95e-5
+
+dataloader:
+  _target_: torch.utils.data.DataLoader
+  _partial_: true
+  batch_size: 128
+  shuffle: true
