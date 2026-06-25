@@ -223,6 +223,25 @@ slurm_setup() {
   cd "${REPO_ROOT}"
 }
 
+# Validate torch/torchvision/HF imports; probe CUDA and fall back to CPU when unusable.
+slurm_validate_env() {
+  local model=${1:-}
+  local check_args=(--check-torch-stack)
+  if [[ -n "${model}" ]]; then
+    check_args+=(--model "${model}")
+  fi
+  if ! poetry run python "${SLURM_DIR}/check_env.py" "${check_args[@]}"; then
+    echo "[FATAL] Environment check failed (torch/torchvision/HF). Run: poetry sync" >&2
+    exit 1
+  fi
+  if [[ "${NEEDS_GPU:-}" == "yes" ]] && ! is_force_cpu; then
+    if ! poetry run python "${SLURM_DIR}/check_env.py" --probe-cuda; then
+      echo "[WARN] CUDA probe failed on this node; forcing CPU for this task" >&2
+      export CYBENCH_FORCE_CPU=1
+    fi
+  fi
+}
+
 horizon_tag() {
   poetry run python -c "from cybench.util.prediction_horizon import prediction_horizon_tag; print(prediction_horizon_tag('${PREDICTION_HORIZON}'))"
 }
@@ -274,8 +293,8 @@ configure_parallelism() {
         # TabPFN on CPU (slow; use for queue bypass / pilot runs).
         _common+=(model.device=cpu model.allow_cpu_fallback=true experiment.device=cpu)
       else
-        # Tabular foundation models: PandasDataset but inference on CUDA.
-        _common+=(model.device=cuda model.allow_cpu_fallback=false)
+        # Tabular foundation models: try CUDA; fall back to CPU on OOM / arch mismatch.
+        _common+=(model.device=cuda model.allow_cpu_fallback=true)
       fi
     else
       _common+=(experiment.device=cpu)

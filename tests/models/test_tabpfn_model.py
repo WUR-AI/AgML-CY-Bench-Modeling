@@ -31,6 +31,9 @@ def test_is_cuda_oom_error_matches_common_variants():
     assert _is_cuda_oom_error(OutOfMemoryError("CUDA out of memory"))
     assert _is_cuda_oom_error(RuntimeError("CUDA error: out of memory"))
     assert _is_cuda_oom_error(RuntimeError("CUBLAS_STATUS_ALLOC_FAILED"))
+    assert _is_cuda_oom_error(
+        RuntimeError("CUDA error: no kernel image is available for execution on the device")
+    )
     assert not _is_cuda_oom_error(ValueError("shape mismatch"))
 
 

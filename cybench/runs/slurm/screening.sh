@@ -50,6 +50,7 @@ slurm_setup
 mkdir -p output/screening
 
 read_benchmark_job
+slurm_validate_env "${MODEL}"
 slurm_update_task_job_name screening
 echo "Screening | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_label) | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | out=${BASELINES_DIR}"
 

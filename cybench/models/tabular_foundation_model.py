@@ -43,8 +43,8 @@ def _resolve_device(device: str) -> str:
         return "cpu"
 
 
-def _is_cuda_oom_error(exc: BaseException) -> bool:
-    """Best-effort CUDA OOM detection across torch / driver error variants."""
+def _is_cuda_recoverable_error(exc: BaseException) -> bool:
+    """CUDA errors where retrying on CPU may succeed (OOM, arch mismatch, bad kernels)."""
     try:
         import torch
 
@@ -55,19 +55,26 @@ def _is_cuda_oom_error(exc: BaseException) -> bool:
 
     msg = str(exc).lower()
     name = exc.__class__.__name__.lower()
-    oom_markers = (
+    markers = (
         "out of memory",
         "outofmemory",
         "cuda error",
         "cublas_status_alloc_failed",
+        "cublas_status_arch_mismatch",
         "cudnn_status_alloc_failed",
+        "no kernel image is available for execution on the device",
+        "cudaerrornokernelimagefordevice",
         "can't allocate",
         "cannot allocate",
         "failed to allocate",
     )
-    if any(marker in msg for marker in oom_markers):
+    if any(marker in msg for marker in markers):
         return True
     return "oom" in name or "outofmemory" in name
+
+
+# Backward-compatible alias used by tests and tabpfn_model re-exports.
+_is_cuda_oom_error = _is_cuda_recoverable_error
 
 
 def _subsample_indices(
@@ -270,7 +277,15 @@ class TabularFoundationModel(BaseModel):
                 self.device,
                 self.preprocess,
             )
-        self.estimator.fit(X, y)
+        try:
+            self.estimator.fit(X, y)
+        except Exception as exc:
+            if not self.allow_cpu_fallback or not _is_cuda_recoverable_error(exc):
+                raise
+            log.warning("%s GPU fit failed (%s); falling back to CPU", self.name, exc)
+            self.device = "cpu"
+            self.estimator = self._make_estimator(device="cpu")
+            self.estimator.fit(X, y)
         return self, {}
 
     def predict(  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -318,7 +333,7 @@ class TabularFoundationModel(BaseModel):
             self._maybe_empty_cuda_cache()
             return self._call_predict(self.estimator, X)
         except Exception as exc:
-            if not _is_cuda_oom_error(exc):
+            if not _is_cuda_recoverable_error(exc):
                 raise
             log.warning(
                 "%s GPU OOM during full-batch predict (n=%d); retrying in batches",
@@ -332,7 +347,7 @@ class TabularFoundationModel(BaseModel):
                 self._maybe_empty_cuda_cache()
                 return self._predict_in_batches(X, batch_size)
             except Exception as exc:
-                if not _is_cuda_oom_error(exc):
+                if not _is_cuda_recoverable_error(exc):
                     raise
                 if batch_size == 1:
                     if not self.allow_cpu_fallback:

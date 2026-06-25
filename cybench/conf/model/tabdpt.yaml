@@ -4,7 +4,7 @@ framework: pandas
 
 device: auto
 predict_batch_size: 256
-allow_cpu_fallback: false
+allow_cpu_fallback: true
 max_train_samples: null
 min_train_samples: 100
 preprocess: none

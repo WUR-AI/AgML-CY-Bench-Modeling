@@ -34,8 +34,12 @@ slurm_setup
 mkdir -p output/walk_forward
 
 read_benchmark_job
+slurm_validate_env "${MODEL}"
 slurm_update_task_job_name walk_forward
-FROZEN_DIR=$(find_frozen_screening_dir "${CROP}" "${COUNTRY}" "${MODEL}")
+if ! FROZEN_DIR=$(find_frozen_screening_dir "${CROP}" "${COUNTRY}" "${MODEL}"); then
+  echo "[SKIP] Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} — no successful screening artifact"
+  exit 0
+fi
 echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_label) | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | frozen=${FROZEN_DIR}"
 
 COMMON=(
