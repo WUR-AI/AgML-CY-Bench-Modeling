@@ -64,6 +64,8 @@ def _is_cuda_recoverable_error(exc: BaseException) -> bool:
         "cudnn_status_alloc_failed",
         "no kernel image is available for execution on the device",
         "cudaerrornokernelimagefordevice",
+        "no available kernel",  # TabDPT flash-attn / custom CUDA ops on unsupported SM
+        "aborting execution",
         "can't allocate",
         "cannot allocate",
         "failed to allocate",
@@ -71,6 +73,21 @@ def _is_cuda_recoverable_error(exc: BaseException) -> bool:
     if any(marker in msg for marker in markers):
         return True
     return "oom" in name or "outofmemory" in name
+
+
+def _is_cuda_kernel_error(exc: BaseException) -> bool:
+    """CUDA kernel/arch mismatch (retrying smaller batches will not help)."""
+    if not _is_cuda_recoverable_error(exc):
+        return False
+    msg = str(exc).lower()
+    kernel_markers = (
+        "no available kernel",
+        "no kernel image is available for execution on the device",
+        "cublas_status_arch_mismatch",
+        "cudaerrornokernelimagefordevice",
+        "aborting execution",
+    )
+    return any(marker in msg for marker in kernel_markers)
 
 
 # Backward-compatible alias used by tests and tabpfn_model re-exports.
@@ -335,6 +352,13 @@ class TabularFoundationModel(BaseModel):
         except Exception as exc:
             if not _is_cuda_recoverable_error(exc):
                 raise
+            if self.allow_cpu_fallback and _is_cuda_kernel_error(exc):
+                log.warning(
+                    "%s GPU kernel error during predict (%s); falling back to CPU",
+                    self.name,
+                    exc,
+                )
+                return self._predict_on_cpu(X)
             log.warning(
                 "%s GPU OOM during full-batch predict (n=%d); retrying in batches",
                 self.name,
@@ -349,6 +373,13 @@ class TabularFoundationModel(BaseModel):
             except Exception as exc:
                 if not _is_cuda_recoverable_error(exc):
                     raise
+                if self.allow_cpu_fallback and _is_cuda_kernel_error(exc):
+                    log.warning(
+                        "%s GPU kernel error during batched predict (%s); falling back to CPU",
+                        self.name,
+                        exc,
+                    )
+                    return self._predict_on_cpu(X)
                 if batch_size == 1:
                     if not self.allow_cpu_fallback:
                         raise RuntimeError(

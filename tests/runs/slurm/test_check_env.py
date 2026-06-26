@@ -13,6 +13,9 @@ def test_is_cuda_recoverable_error_matches_arch_mismatch():
         RuntimeError("CUDA error: no kernel image is available for execution on the device")
     )
     assert _is_cuda_recoverable_error(RuntimeError("CUBLAS_STATUS_ARCH_MISMATCH"))
+    assert _is_cuda_recoverable_error(
+        RuntimeError("No available kernel. Aborting execution.")
+    )
     assert not _is_cuda_recoverable_error(ValueError("shape mismatch"))
 
 

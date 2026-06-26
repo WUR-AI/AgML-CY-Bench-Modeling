@@ -16,6 +16,9 @@ HF_TEMPORAL_MODELS = frozenset(
     {"patchtst_lf", "autoformer_lf", "informer_lf", "tst_lf"}
 )
 
+# Tabular foundation models probed for custom CUDA kernel support on the compute node.
+TABULAR_FM_CUDA_PROBE_MODELS = frozenset({"tabdpt"})
+
 # (torch major.minor, torchvision major.minor) pairs from PyTorch release notes.
 _TORCH_TV_PAIRS: Sequence[tuple[tuple[int, int], tuple[int, int]]] = (
     ((2, 6), (0, 21)),
@@ -106,6 +109,33 @@ def probe_cuda() -> None:
     float(y.sum().item())
 
 
+def probe_tabular_foundation_cuda(model: str) -> None:
+    """Run a tiny TabDPT CUDA fit/predict.
+
+    Catches ``RuntimeError: No available kernel`` on GPUs whose SM arch is not
+    supported by bundled flash-attn / custom ops (common on shared clusters).
+    """
+    if model not in TABULAR_FM_CUDA_PROBE_MODELS:
+        return
+
+    import numpy as np
+    import torch
+
+    if not torch.cuda.is_available():
+        return
+
+    from tabdpt import TabDPTRegressor
+
+    rng = np.random.default_rng(0)
+    n, n_features = 32, 4
+    X = rng.standard_normal((n, n_features), dtype=np.float32)
+    y = rng.standard_normal(n, dtype=np.float32)
+    est = TabDPTRegressor(device="cuda")
+    est.fit(X, y)
+    _ = est.predict(X[:4])
+    torch.cuda.synchronize()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -116,6 +146,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--probe-cuda",
         action="store_true",
         help="Run a small CUDA matmul; exit 1 on arch/driver errors",
+    )
+    parser.add_argument(
+        "--probe-tabular-fm",
+        metavar="MODEL",
+        help="Run a tiny CUDA fit/predict for tabdpt (catches kernel arch errors)",
     )
     parser.add_argument(
         "--check-torch-stack",
@@ -143,6 +178,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             check_hf_temporal_encoders()
         if args.probe_cuda:
             probe_cuda()
+        if args.probe_tabular_fm:
+            probe_tabular_foundation_cuda(args.probe_tabular_fm)
     except Exception as exc:
         print(f"[check_env] {exc}", file=sys.stderr)
         return 1
