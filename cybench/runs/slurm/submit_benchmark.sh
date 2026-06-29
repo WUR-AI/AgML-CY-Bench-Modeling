@@ -33,6 +33,7 @@ Options:
   --cpu             GPU group on main partition (torch/TabPFN on CPU; slow)
   --force-cpu       Alias for --cpu
   --no-dependency   For "all": submit walk-forward without afterok
+  --repetitions N   Walk-forward: experiment.n_repetitions (default: 1; seeds 42..42+N-1)
   --skip-naive      Omit naive (average, trend) manifests
   -n, --dry-run     Print commands without sbatch
 
@@ -90,6 +91,7 @@ USE_DEPENDENCY=true
 SKIP_NAIVE=false
 DRY_RUN=false
 COUNTRIES=()
+WF_REPETITIONS="${WF_REPETITIONS:-1}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -128,6 +130,10 @@ while [[ $# -gt 0 ]]; do
       USE_DEPENDENCY=false
       shift
       ;;
+    --repetitions)
+      WF_REPETITIONS=$2
+      shift 2
+      ;;
     --skip-naive)
       SKIP_NAIVE=true
       shift
@@ -147,6 +153,9 @@ done
 # shellcheck source=/dev/null
 source "${SLURM_DIR}/slurm_common.sh"
 validate_experiment_name "${CYBENCH_EXPERIMENT_NAME}"
+if [[ "${PHASE_MODE}" == walk_forward || "${PHASE_MODE}" == all ]]; then
+  validate_wf_repetitions "${WF_REPETITIONS}"
+fi
 export PREDICTION_HORIZON
 export CYBENCH_EXPERIMENT_NAME
 
@@ -248,9 +257,16 @@ submit_one() {
     echo "[SKIP] ${phase} ${manifest}: no jobs"
     return 0
   fi
-  local cmd=(env PREDICTION_HORIZON="${PREDICTION_HORIZON}" CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME}" "${SUBMIT_ARRAY}" "${phase}" "${manifest}")
+  local -a cmd=(env PREDICTION_HORIZON="${PREDICTION_HORIZON}" CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME}")
+  if [[ "${phase}" == walk_forward ]]; then
+    cmd+=(WF_REPETITIONS="${WF_REPETITIONS}")
+  fi
+  cmd+=("${SUBMIT_ARRAY}" "${phase}" "${manifest}")
   if [[ -n "${group}" ]]; then
     cmd+=(--group "${group}")
+  fi
+  if [[ "${phase}" == walk_forward ]]; then
+    cmd+=(--repetitions "${WF_REPETITIONS}")
   fi
   if [[ ${#ARRAY_ARG[@]} -gt 0 ]]; then
     cmd+=("${ARRAY_ARG[@]}")
@@ -294,7 +310,7 @@ run_screening() {
 run_walk_forward() {
   local group manifest dep job_id
   echo ""
-  echo "=== Walk-forward | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} ==="
+  echo "=== Walk-forward | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | repetitions=${WF_REPETITIONS} ==="
   while read -r group; do
     manifest=$(manifest_for_group "${group}")
     dep=""

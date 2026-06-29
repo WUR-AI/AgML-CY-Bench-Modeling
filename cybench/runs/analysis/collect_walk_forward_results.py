@@ -5,6 +5,12 @@ Walk-forward writes one split folder per forecast year. For the paper we pool
 those years and compute the same report metrics / plots as screening, but each
 year uses its own refit model (true walk-forward).
 
+When a run has multiple seed repetitions (``experiment.n_repetitions`` > 1),
+metrics are computed per seed and summarized as mean ± sample std in
+``walk_forward_summary.csv`` (primary columns are means; ``*_std`` columns hold
+spread). Per-seed rows go to ``walk_forward_by_seed.csv``. Prediction CSVs and
+plots use the lowest seed only (illustrative, not an ensemble).
+
 Rows flagged in ``yield_quality_*`` sidecars are dropped at collect time using
 ``target.filter_samples`` from ``cybench/conf/dataset/target/yield.yaml`` (same
 flags as training). Re-run collect after updating sidecars — no benchmark rerun
@@ -25,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -36,11 +43,9 @@ from omegaconf import OmegaConf
 
 from cybench.config import KEY_COUNTRY, KEY_LOC, KEY_TARGET, KEY_YEAR, PATH_DATA_DIR, REPO_DIR
 from cybench.datasets.yield_quality import apply_yield_quality_filter, filter_samples_from_target
-from cybench.evaluation.aggregated_metrics import (
-    compute_report_metrics,
-    format_report_metrics,
-)
+from cybench.evaluation.aggregated_metrics import compute_report_metrics
 from cybench.runs.analysis.benchmark_run_catalog import (
+    METRIC_KEYS,
     BenchmarkRun,
     discover_benchmark_runs,
     flatten_report_metrics,
@@ -86,15 +91,82 @@ def resolve_model_column(run_dir: Path, model_slug: str) -> str:
     )
 
 
-def _load_split_preds(run_dir: Path, model_col: str) -> pd.DataFrame | None:
+COUNT_METRIC_KEYS: tuple[str, ...] = ("n_regions", "n_years", "n_samples")
+
+
+def discover_run_seeds(run_dir: Path) -> list[int]:
+    """Seed subfolders under walk-forward year splits (e.g. 2016/42/test_preds.csv)."""
+    seeds: set[int] = set()
+    for split_dir in run_dir.iterdir():
+        if not split_dir.is_dir() or not re.fullmatch(r"\d{4}", split_dir.name):
+            continue
+        for child in split_dir.iterdir():
+            if not child.is_dir() or not child.name.isdigit():
+                continue
+            if (child / "test_preds.csv").exists():
+                seeds.add(int(child.name))
+    return sorted(seeds)
+
+
+def aggregate_flat_metrics_across_seeds(
+    per_seed_flat: list[dict[str, Any]],
+    seeds: list[int],
+) -> dict[str, Any]:
+    """Mean and sample std per metric; primary keys (r, r2, …) hold the mean."""
+    out: dict[str, Any] = {"n_seeds": len(seeds), "seeds": seeds}
+    if not per_seed_flat:
+        return out
+    for key in COUNT_METRIC_KEYS:
+        out[key] = per_seed_flat[0].get(key)
+    for key in METRIC_KEYS:
+        values = [
+            float(row[key])
+            for row in per_seed_flat
+            if row.get(key) is not None and not pd.isna(row[key])
+        ]
+        if not values:
+            out[key] = None
+            out[f"{key}_std"] = None
+            continue
+        series = pd.Series(values, dtype=float)
+        out[key] = float(series.mean())
+        out[f"{key}_std"] = (
+            float(series.std(ddof=1)) if len(values) > 1 else float("nan")
+        )
+    return out
+
+
+def format_aggregated_metrics(summary: dict[str, Any]) -> str:
+    """Human-readable line for logs: mean ± std when multiple seeds."""
+    n_seeds = int(summary.get("n_seeds") or 1)
+
+    def _fmt(key: str, *, decimals: int = 3) -> str | None:
+        mean = summary.get(key)
+        if mean is None or (isinstance(mean, float) and pd.isna(mean)):
+            return None
+        std = summary.get(f"{key}_std")
+        if n_seeds > 1 and std is not None and not (isinstance(std, float) and pd.isna(std)):
+            return f"{key}={float(mean):.{decimals}f}±{float(std):.{decimals}f}"
+        return f"{key}={float(mean):.{decimals}f}"
+
+    parts = [_fmt("r"), _fmt("r2"), _fmt("nrmse")]
+    parts = [p for p in parts if p]
+    if n_seeds > 1:
+        parts.append(f"n_seeds={n_seeds}")
+    return " | ".join(parts)
+
+
+def _load_split_preds(
+    run_dir: Path, model_col: str, *, seed: int
+) -> pd.DataFrame | None:
     frames: list[pd.DataFrame] = []
     for split_dir in sorted(run_dir.iterdir()):
         if not split_dir.is_dir() or not split_dir.name.isdigit():
             continue
-        pred_paths = sorted(split_dir.glob("*/test_preds.csv"))
-        if not pred_paths:
+        pred_path = split_dir / str(seed) / "test_preds.csv"
+        if not pred_path.exists():
             continue
-        raw = pd.read_csv(pred_paths[0])
+        raw = pd.read_csv(pred_path)
         if "targets" not in raw.columns or "preds" not in raw.columns:
             continue
         out = raw.copy()
@@ -113,12 +185,122 @@ def _load_split_preds(run_dir: Path, model_col: str) -> pd.DataFrame | None:
     return pd.concat(frames, ignore_index=True)
 
 
-def load_pooled_predictions(run_dir: Path, *, model_slug: str) -> tuple[pd.DataFrame, str]:
+def load_pooled_predictions(
+    run_dir: Path, *, model_slug: str, seed: int | None = None
+) -> tuple[pd.DataFrame, str]:
     model_col = resolve_model_column(run_dir, model_slug)
-    df = _load_split_preds(run_dir, model_col)
-    if df is None:
+    seeds = discover_run_seeds(run_dir)
+    if not seeds:
         raise ValueError(f"No walk-forward predictions found in {run_dir}")
+    use_seed = seed if seed is not None else seeds[0]
+    if use_seed not in seeds:
+        raise ValueError(
+            f"Seed {use_seed} not found in {run_dir}; available seeds: {seeds}"
+        )
+    df = _load_split_preds(run_dir, model_col, seed=use_seed)
+    if df is None:
+        raise ValueError(
+            f"No walk-forward predictions for seed {use_seed} in {run_dir}"
+        )
     return df, model_col
+
+
+def _apply_quality_filter(
+    df: pd.DataFrame,
+    run: BenchmarkRun,
+    *,
+    data_dir: Path,
+    quality_flags: list[str] | None,
+    apply_qc: bool,
+) -> pd.DataFrame:
+    if not apply_qc or not quality_flags:
+        return df
+    n_before = len(df)
+    filtered, n_removed = apply_yield_quality_filter(
+        df,
+        run.crop,
+        run.country,
+        data_dir=data_dir,
+        quality_flags=quality_flags,
+    )
+    if n_removed:
+        print(
+            f"[QC] {run.dataset} | {run.model}: removed {n_removed}/{n_before} "
+            f"flagged sample(s)"
+        )
+    return filtered
+
+
+def collect_walk_forward_run(
+    run: BenchmarkRun,
+    *,
+    data_dir: Path,
+    quality_flags: list[str] | None,
+    apply_qc: bool,
+) -> tuple[dict[str, Any], list[dict[str, Any]], pd.DataFrame, str, int] | None:
+    """Per-run collect: summary (mean±std), per-seed rows, plot preds, model_col, plot_seed."""
+    model_col = resolve_model_column(run.path, run.model)
+    seeds = discover_run_seeds(run.path)
+    if not seeds:
+        return None
+
+    per_seed_flat: list[dict[str, Any]] = []
+    per_seed_rows: list[dict[str, Any]] = []
+    plot_df: pd.DataFrame | None = None
+    plot_seed = seeds[0]
+
+    for seed in seeds:
+        df = _load_split_preds(run.path, model_col, seed=seed)
+        if df is None:
+            print(f"[SKIP] {run.path.name}: missing predictions for seed {seed}")
+            return None
+        df = _apply_quality_filter(
+            df, run, data_dir=data_dir, quality_flags=quality_flags, apply_qc=apply_qc
+        )
+        metrics = compute_report_metrics(df, target_col=KEY_TARGET, model_col=model_col)
+        flat = flatten_report_metrics(metrics)
+        per_seed_flat.append(flat)
+        per_seed_rows.append(
+            {
+                "crop": run.crop,
+                "country": run.country,
+                "model": run.model,
+                "horizon": run.horizon,
+                "dataset": run.dataset,
+                "timestamp": run.timestamp,
+                "run_dir": str(run.path),
+                "seed": seed,
+                **flat,
+            }
+        )
+        if seed == plot_seed:
+            plot_df = df
+
+    assert plot_df is not None
+    summary = aggregate_flat_metrics_across_seeds(per_seed_flat, seeds)
+    return summary, per_seed_rows, plot_df, model_col, plot_seed
+
+
+def load_walk_forward_summary_metrics(
+    run: BenchmarkRun,
+    *,
+    data_dir: Path | None = None,
+    apply_qc: bool = True,
+) -> dict[str, Any] | None:
+    """Pooled walk-forward metrics; mean across seeds when multiple repetitions exist."""
+    quality_flags = None if not apply_qc else filter_samples_from_target()
+    if quality_flags == []:
+        quality_flags = None
+    result = collect_walk_forward_run(
+        run,
+        data_dir=data_dir or Path(PATH_DATA_DIR),
+        quality_flags=quality_flags,
+        apply_qc=apply_qc,
+    )
+    if result is None:
+        return None
+    summary, _, _, _, _ = result
+    return summary
 
 
 def _panel_search_dirs(output_dir: Path, row: dict[str, Any]) -> list[Path]:
@@ -371,6 +553,7 @@ def main() -> None:
         return
 
     summary_rows: list[dict[str, Any]] = []
+    per_seed_rows: list[dict[str, Any]] = []
     # Key by model slug — torch models all use prediction column "TorchTrainer".
     models_to_plot: dict[str, tuple[Path, str]] = {}
     apply_qc = not args.no_quality_filter
@@ -383,29 +566,19 @@ def main() -> None:
             print("[QC] No target.filter_samples configured — keeping all rows")
 
     for run in runs:
-        try:
-            df, model_col = load_pooled_predictions(run.path, model_slug=run.model)
-        except ValueError as exc:
-            print(f"[SKIP] {run.path.name}: {exc}")
+        collected = collect_walk_forward_run(
+            run,
+            data_dir=args.data_dir,
+            quality_flags=quality_flags,
+            apply_qc=apply_qc,
+        )
+        if collected is None:
+            print(f"[SKIP] {run.path.name}: no walk-forward predictions")
             continue
 
-        n_before = len(df)
-        if apply_qc and quality_flags:
-            df, n_removed = apply_yield_quality_filter(
-                df,
-                run.crop,
-                run.country,
-                data_dir=args.data_dir,
-                quality_flags=quality_flags,
-            )
-            if n_removed:
-                print(
-                    f"[QC] {run.dataset} | {run.model}: removed {n_removed}/{n_before} "
-                    f"flagged sample(s)"
-                )
+        summary, run_seed_rows, plot_df, model_col, plot_seed = collected
+        per_seed_rows.extend(run_seed_rows)
 
-        metrics = compute_report_metrics(df, target_col=KEY_TARGET, model_col=model_col)
-        flat = flatten_report_metrics(metrics)
         row = {
             "crop": run.crop,
             "country": run.country,
@@ -415,28 +588,39 @@ def main() -> None:
             "dataset": run.dataset,
             "timestamp": run.timestamp,
             "run_dir": str(run.path),
-            **flat,
+            "plot_seed": plot_seed,
+            **summary,
         }
         summary_rows.append(row)
 
         model_preds_dir = preds_root / f"{run.model}_{run.horizon}"
-        export_year_csvs(df, run, model_preds_dir)
+        export_year_csvs(plot_df, run, model_preds_dir)
         plot_key = f"{run.model}_{run.horizon}"
         models_to_plot[plot_key] = (model_preds_dir, model_col)
 
         metrics_path = output_dir / "metrics" / f"{run.dataset}_{run.model}.yaml"
         metrics_path.parent.mkdir(parents=True, exist_ok=True)
         with metrics_path.open("w") as f:
-            yaml.safe_dump(metrics, f, sort_keys=False)
+            yaml.safe_dump(
+                {
+                    "summary": summary,
+                    "per_seed": {str(r["seed"]): r for r in run_seed_rows},
+                },
+                f,
+                sort_keys=False,
+            )
 
-        print(
-            f"[OK] {run.dataset} | {run.model} | "
-            f"{format_report_metrics(metrics)}"
-        )
+        print(f"[OK] {run.dataset} | {run.model} | {format_aggregated_metrics(summary)}")
+        if int(summary.get("n_seeds") or 1) > 1:
+            print(f"     plot preds from seed {plot_seed} (representative, not an ensemble)")
 
     summary_path = output_dir / "walk_forward_summary.csv"
     pd.DataFrame(summary_rows).to_csv(summary_path, index=False, float_format="%.4f")
     print(f"\n[DONE] Summary: {summary_path} ({len(summary_rows)} rows)")
+    if per_seed_rows:
+        by_seed_path = output_dir / "walk_forward_by_seed.csv"
+        pd.DataFrame(per_seed_rows).to_csv(by_seed_path, index=False, float_format="%.4f")
+        print(f"[DONE] Per-seed metrics: {by_seed_path} ({len(per_seed_rows)} rows)")
     print(f"[DONE] Pooled year CSVs: {preds_root}")
 
     manifest = {

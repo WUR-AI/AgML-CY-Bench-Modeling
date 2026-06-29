@@ -11,7 +11,10 @@ from omegaconf import OmegaConf
 
 import cybench.config as config
 from cybench.runs.analysis.benchmark_run_catalog import discover_benchmark_runs
-from cybench.runs.analysis.collect_walk_forward_results import load_pooled_predictions
+from cybench.runs.analysis.collect_walk_forward_results import (
+    discover_run_seeds,
+    load_pooled_predictions,
+)
 from cybench.runs.slurm.benchmark_submit_lib import (
     batch_name,
     batch_suffix_to_horizon,
@@ -231,10 +234,14 @@ def walk_forward_complete(
     )
     if run_dir is None:
         return False, "no walk-forward run"
-    try:
-        load_pooled_predictions(run_dir, model_slug=job.model)
-    except ValueError as exc:
-        return False, str(exc)
+    seeds = discover_run_seeds(run_dir)
+    if not seeds:
+        return False, "no walk-forward predictions"
+    for seed in seeds:
+        try:
+            load_pooled_predictions(run_dir, model_slug=job.model, seed=seed)
+        except ValueError as exc:
+            return False, str(exc)
     return True, run_dir.name
 
 

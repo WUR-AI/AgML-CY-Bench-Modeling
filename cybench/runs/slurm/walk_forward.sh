@@ -40,7 +40,9 @@ if ! FROZEN_DIR=$(find_frozen_screening_dir "${CROP}" "${COUNTRY}" "${MODEL}"); 
   echo "[SKIP] Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} — no successful screening artifact"
   exit 0
 fi
-echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_label) | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | frozen=${FROZEN_DIR}"
+WF_REPETITIONS="${WF_REPETITIONS:-1}"
+validate_wf_repetitions "${WF_REPETITIONS}"
+echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_label) | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | repetitions=${WF_REPETITIONS} | frozen=${FROZEN_DIR}"
 
 COMMON=(
   "dataset/crop=${CROP}"
@@ -49,7 +51,7 @@ COMMON=(
   validation=walk_forward
   "validation.frozen_screening_dir=${FROZEN_DIR}"
   "experiment.name=${CYBENCH_EXPERIMENT_NAME}"
-  experiment.n_repetitions=1
+  "experiment.n_repetitions=${WF_REPETITIONS}"
   experiment.seed=42
   "model=${MODEL}"
 )

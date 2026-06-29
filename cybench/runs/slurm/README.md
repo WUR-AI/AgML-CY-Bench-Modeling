@@ -329,6 +329,10 @@ PREDICTION_HORIZON=middle-of-season cybench/runs/slurm/submit_array.sh screening
 # walk-forward must use the same horizon as its screening run:
 PREDICTION_HORIZON=eos cybench/runs/slurm/submit_array.sh walk_forward ...
 PREDICTION_HORIZON=middle-of-season cybench/runs/slurm/submit_array.sh walk_forward ...
+
+# Multi-seed walk-forward (seeds 42..46; screening stays at 1 repetition):
+cybench/runs/slurm/submit_array.sh walk_forward cybench/runs/slurm/benchmark_jobs_gpu.txt --repetitions 5
+cybench/runs/slurm/submit_benchmark.sh walk_forward --horizon eos --repetitions 5 --batch my_batch
 ```
 
 `submit_array.sh` prints `horizon: ...` on submit. In the job log, confirm
@@ -369,7 +373,8 @@ Copy `compare_models.html` + `assets/` to your laptop to view offline.
 
 Outputs:
 
-- `walk_forward_summary.csv` — one row per crop/country/model (pooled region-year metrics)
+- `walk_forward_summary.csv` — one row per crop/country/model (pooled region-year metrics; mean ± std across seeds when `n_repetitions` > 1)
+- `walk_forward_by_seed.csv` — one row per crop/country/model/seed (when multiple repetitions)
 - `compare_models.html` — **all models side-by-side** (use `--dashboard`)
 - `preds/<model>_<horizon>/` — year CSVs for `visualize_results_aggregated.py`
 - `plots/<model>/report.html` — per-model interactive report (when `--plot`)

@@ -7,6 +7,8 @@ from cybench.config import KEY_LOC, KEY_TARGET, KEY_YEAR
 from cybench.datasets.yield_quality import FLAG_YIELD
 from cybench.runs.analysis.collect_walk_forward_results import (
     _filter_runs,
+    aggregate_flat_metrics_across_seeds,
+    discover_run_seeds,
     load_pooled_predictions,
     resolve_model_column,
     summary_rows_to_dashboard_records,
@@ -32,6 +34,92 @@ def test_filter_runs_by_country_and_horizon():
 def test_resolve_model_column_from_repo_config():
     assert resolve_model_column(Path("/nonexistent"), "ridge") == "Ridge"
     assert resolve_model_column(Path("/nonexistent"), "xgboost") == "XGBoostModel"
+
+
+def test_discover_run_seeds(tmp_path: Path):
+    run_dir = tmp_path / "maize_NL_ridge_walk_forward_eos_20260615_135937"
+    for year, seed, pred in ((2016, 42, 9.5), (2016, 43, 9.6), (2017, 42, 8.5)):
+        split = run_dir / str(year) / str(seed)
+        split.mkdir(parents=True)
+        pd.DataFrame(
+            {
+                "adm_id": ["NL-01"],
+                "year": [year],
+                "targets": [10.0],
+                "preds": [pred],
+            }
+        ).to_csv(split / "test_preds.csv", index=False)
+    assert discover_run_seeds(run_dir) == [42, 43]
+
+
+def test_load_pooled_predictions_selects_seed(tmp_path: Path):
+    run = parse_benchmark_run_dir(
+        "maize_NL_ridge_walk_forward_eos_20260615_135937",
+        tmp_path,
+    )
+    assert run is not None
+    for seed, pred in ((42, 9.5), (43, 9.0)):
+        split = tmp_path / "2016" / str(seed)
+        split.mkdir(parents=True)
+        pd.DataFrame(
+            {
+                "adm_id": ["NL-01"],
+                "year": [2016],
+                "targets": [10.0],
+                "preds": [pred],
+            }
+        ).to_csv(split / "test_preds.csv", index=False)
+
+    df, model_col = load_pooled_predictions(tmp_path, model_slug=run.model, seed=43)
+    assert model_col == "Ridge"
+    assert df["Ridge"].iloc[0] == 9.0
+
+
+def test_aggregate_flat_metrics_across_seeds():
+    per_seed = [
+        {"r": 0.80, "r2": 0.60, "nrmse": 0.10, "n_regions": 5, "n_years": 2, "n_samples": 10},
+        {"r": 0.70, "r2": 0.50, "nrmse": 0.12, "n_regions": 5, "n_years": 2, "n_samples": 10},
+    ]
+    summary = aggregate_flat_metrics_across_seeds(per_seed, [42, 43])
+    assert summary["n_seeds"] == 2
+    assert summary["r"] == 0.75
+    assert abs(summary["r_std"] - 0.070710678) < 1e-6
+    assert summary["n_regions"] == 5
+
+
+def test_collect_walk_forward_run_multi_seed(tmp_path: Path):
+    from cybench.runs.analysis.collect_walk_forward_results import collect_walk_forward_run
+
+    run_dir = tmp_path / "maize_NL_ridge_walk_forward_eos_20260615_135937"
+    run_dir.mkdir()
+    run = parse_benchmark_run_dir(run_dir.name, run_dir)
+    assert run is not None
+    for seed, pred in ((42, 9.0), (43, 11.0)):
+        split = run_dir / "2016" / str(seed)
+        split.mkdir(parents=True)
+        pd.DataFrame(
+            {
+                "adm_id": ["NL-01", "NL-02"],
+                "year": [2016, 2016],
+                "targets": [10.0, 10.0],
+                "preds": [pred, pred],
+            }
+        ).to_csv(split / "test_preds.csv", index=False)
+
+    result = collect_walk_forward_run(
+        run,
+        data_dir=tmp_path / "data",
+        quality_flags=[],
+        apply_qc=False,
+    )
+    assert result is not None
+    summary, per_seed_rows, plot_df, model_col, plot_seed = result
+    assert model_col == "Ridge"
+    assert plot_seed == 42
+    assert summary["n_seeds"] == 2
+    assert len(per_seed_rows) == 2
+    assert summary["r_std"] is not None
+    assert len(plot_df) == 2
 
 
 def test_load_pooled_predictions_from_test_preds(tmp_path: Path):

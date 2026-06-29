@@ -43,6 +43,15 @@ validate_experiment_name() {
   fi
 }
 
+# Walk-forward seed repetitions (experiment.n_repetitions). Seeds are experiment.seed + i.
+validate_wf_repetitions() {
+  local n=$1
+  if [[ ! "${n}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Invalid walk-forward repetitions '${n}': must be a positive integer" >&2
+    exit 1
+  fi
+}
+
 # Per-batch working manifests (regenerate / split). Not passed to SLURM directly.
 manifest_batch_dir() {
   local slurm_dir=$1 batch=$2

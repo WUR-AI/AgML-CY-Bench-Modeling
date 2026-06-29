@@ -11,13 +11,14 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: submit_array.sh <screening|walk_forward> [manifest] [--array RANGE] [--batch NAME] [--group GROUP] [--gpu|--cpu] [--dependency SPEC]
+Usage: submit_array.sh <screening|walk_forward> [manifest] [--array RANGE] [--batch NAME] [--group GROUP] [--gpu|--cpu] [--dependency SPEC] [--repetitions N]
 
   manifest     Job list (default: cybench/runs/slurm/benchmark_jobs.txt)
   --array      SLURM array range (default: 0-(N-1); use 0 for first job only)
   --batch NAME Hydra experiment.name → ../output/NAME (default: baselines)
   --group GROUP  cpu | naive | gpu — used in SLURM job name (default: infer from manifest)
   --dependency SLURM dependency, e.g. afterok:12345 or afterok:111:222
+  --repetitions N  Walk-forward only: experiment.n_repetitions (default: 1; seeds 42..42+N-1)
   --gpu     Force GPU partition + CUDA (even for mixed manifests)
   --cpu     Override GPU manifest: main partition, no GPU, CYBENCH_FORCE_CPU=1
 
@@ -67,6 +68,7 @@ FORCE_CPU=false
 DEPENDENCY=""
 JOB_GROUP=""
 CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME:-baselines}"
+WF_REPETITIONS="${WF_REPETITIONS:-1}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -95,6 +97,10 @@ while [[ $# -gt 0 ]]; do
       DEPENDENCY=$2
       shift 2
       ;;
+    --repetitions)
+      WF_REPETITIONS=$2
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -115,6 +121,9 @@ if is_force_cpu; then
 fi
 
 validate_experiment_name "${CYBENCH_EXPERIMENT_NAME}"
+if [[ "${PHASE}" == walk_forward ]]; then
+  validate_wf_repetitions "${WF_REPETITIONS}"
+fi
 export CYBENCH_EXPERIMENT_NAME
 
 if [[ ! -f "${MANIFEST}" ]]; then
@@ -171,6 +180,9 @@ echo "  snapshot: ${JOB_MANIFEST}"
 echo "  script:   ${SLURM_DIR}/${JOB_SCRIPT}"
 echo "  horizon:  ${PREDICTION_HORIZON}"
 echo "  batch:    ${CYBENCH_EXPERIMENT_NAME} (../output/${CYBENCH_EXPERIMENT_NAME})"
+if [[ "${PHASE}" == walk_forward ]]; then
+  echo "  repetitions: ${WF_REPETITIONS} (seeds 42..$((42 + WF_REPETITIONS - 1)))"
+fi
 echo "  gpu:      ${GPU_MODE} ($([[ ${#SBATCH_EXTRA[@]} -gt 0 ]] && gpu_sbatch_summary || echo no))"
 if [[ "${FORCE_CPU}" == true ]]; then
   echo "  device:   CYBENCH_FORCE_CPU=1 (torch + TabPFN on CPU)"
@@ -192,6 +204,9 @@ if [[ -n "${HP_TRIALS:-}" ]]; then
 fi
 if [[ -n "${CYBENCH_EXTRA_OVERRIDES_FILE:-}" ]]; then
   SBATCH_EXPORT+=",CYBENCH_EXTRA_OVERRIDES_FILE=${CYBENCH_EXTRA_OVERRIDES_FILE}"
+fi
+if [[ "${PHASE}" == walk_forward ]]; then
+  SBATCH_EXPORT+=",WF_REPETITIONS=${WF_REPETITIONS}"
 fi
 if [[ "${FORCE_CPU}" == true ]]; then
   SBATCH_EXPORT+=",CYBENCH_FORCE_CPU=1"

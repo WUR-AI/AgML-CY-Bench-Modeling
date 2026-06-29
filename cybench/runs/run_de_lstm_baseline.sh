@@ -36,6 +36,7 @@ Options:
   --cpu                SLURM on CPU partition
   --no-dependency      SLURM "all": walk-forward without afterok on screening
   --frozen-dir PATH    Walk-forward only (--local): screening artifact folder
+  --repetitions N      Walk-forward: experiment.n_repetitions (default: 1; seeds 42..42+N-1)
   --collect            After walk-forward (--local): collect results
   --dry-run            Print commands without executing
   -h, --help           Show this help
@@ -50,6 +51,7 @@ HORIZON="middle-of-season"
 DEVICE="cuda"
 FROZEN_DIR=""
 COLLECT=false
+REPETITIONS=1
 DRY_RUN=false
 USE_SLURM=true
 SLURM_CPU=false
@@ -81,6 +83,7 @@ while [[ $# -gt 0 ]]; do
     --horizon) HORIZON=$2; shift 2 ;;
     --device) DEVICE=$2; shift 2 ;;
     --frozen-dir) FROZEN_DIR=$2; shift 2 ;;
+    --repetitions) REPETITIONS=$2; shift 2 ;;
     --local) USE_SLURM=false; shift ;;
     --cpu) SLURM_CPU=true; DEVICE=cpu; shift ;;
     --no-dependency) SLURM_NO_DEPENDENCY=true; shift ;;
@@ -153,7 +156,7 @@ dataset.target.filter_samples=null
 model=${MODEL}
 +process={name:select_context,drop:[year,sos_sin,sos_cos,eos_sin,eos_cos,loc_x,loc_y,loc_z,awc,bulk_density,drainage_class_1,drainage_class_2,drainage_class_3,drainage_class_4,drainage_class_5,drainage_class_6],keep:null}
 experiment.name=${BATCH}
-experiment.n_repetitions=1
+experiment.n_repetitions=${REPETITIONS}
 experiment.device=${DEVICE}
 EOF
 }
@@ -227,8 +230,12 @@ submit_slurm_phase() {
     --batch "${BATCH}" --array 0 --group gpu
   )
   if [[ "${SLURM_CPU}" == true ]]; then cmd+=(--cpu); else cmd+=(--gpu); fi
+  if [[ "${phase}" == walk_forward ]]; then cmd+=(--repetitions "${REPETITIONS}"); fi
   if [[ -n "${dependency}" ]]; then cmd+=(--dependency "${dependency}"); fi
   echo "== SLURM ${phase} | ${CROP}/${COUNTRY} | model=${MODEL} | horizon=${HORIZON}"
+  if [[ "${phase}" == walk_forward ]]; then
+    echo "  repetitions=${REPETITIONS} (seeds 42..$((42 + REPETITIONS - 1)))"
+  fi
   if [[ "${DRY_RUN}" == true ]]; then
     echo "  export PREDICTION_HORIZON=${HORIZON}"
     echo "  export CYBENCH_EXTRA_OVERRIDES_FILE=${OVERRIDES_FILE}"
