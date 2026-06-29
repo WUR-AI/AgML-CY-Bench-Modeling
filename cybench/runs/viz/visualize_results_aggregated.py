@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+import argparse
+import json
+import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
