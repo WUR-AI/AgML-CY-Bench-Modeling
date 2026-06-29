@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CY-Bench Model Families</title>
+  <style>
+    :root {
+      --bg: #f6f8fa;
+      --card: #fff;
+      --border: #d8dee4;
+      --text: #1f2328;
+      --muted: #656d76;
+      --accent: #0969da;
+      --accent-soft: #ddf4ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1.25rem;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    .page { max-width: 1100px; margin: 0 auto; }
+    h1 { margin: 0 0 0.35rem; font-size: 1.5rem; }
+    h2 { margin: 0 0 0.75rem; font-size: 1.1rem; }
+    .lead { color: var(--muted); margin: 0 0 1rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.1rem;
+      box-shadow: 0 1px 2px rgba(31, 35, 40, 0.06);
+      margin-bottom: 1rem;
+    }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.25rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+    .controls label {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+    .controls select {
+      padding: 0.35rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font: inherit;
+      background: #fff;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) minmax(260px, 360px);
+      gap: 1rem;
+      align-items: start;
+    }
+    @media (max-width: 820px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    #radar-wrap svg { display: block; width: 100%; height: auto; }
+    .view-list { margin: 0; padding: 0; list-style: none; }
+    .view-list li {
+      padding: 0.55rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .view-list li:last-child { border-bottom: none; }
+    .view-list strong { display: block; font-size: 0.95rem; }
+    .legend { display: flex; flex-direction: column; gap: 0.45rem; margin-top: 0.5rem; }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.88rem;
+    }
+    .swatch {
+      width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0;
+    }
+    .table-scroll {
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+      font-variant-numeric: tabular-nums;
+    }
+    th, td {
+      padding: 0.45rem 0.6rem;
+      border-bottom: 1px solid var(--border);
+      text-align: right;
+    }
+    th:first-child, td:first-child { text-align: left; }
+    th { background: #f9fafb; font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    .back { margin-bottom: 0.75rem; }
+    .back a { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
+    .back a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <p class="back"><a href="index.html">← All dashboards</a></p>
+    <header>
+      <h1>Model family comparison</h1>
+      <p class="lead">Relative performance across evaluation views (one representative per model family).</p>
+    </header>
+
+    <div class="card">
+      <div class="controls">
+        <label>Horizon
+          <select id="horizon-select"></select>
+        </label>
+        <label>Crop
+          <select id="crop-select"></select>
+        </label>
+      </div>
+      <p class="muted" id="norm-note"></p>
+    </div>
+
+    <div class="layout">
+      <div class="card">
+        <h2>Radar chart</h2>
+        <div id="radar-wrap"></div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="card">
+        <h2>Evaluation views</h2>
+        <ul class="view-list" id="view-list"></ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Raw metrics (median across datasets)</h2>
+      <div class="table-scroll">
+        <table id="metrics-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const DATA = __DATA_JSON__;
+
+    const horizonSelect = document.getElementById("horizon-select");
+    const cropSelect = document.getElementById("crop-select");
+    const normNote = document.getElementById("norm-note");
+    const radarWrap = document.getElementById("radar-wrap");
+    const legendEl = document.getElementById("legend");
+    const viewList = document.getElementById("view-list");
+    const metricsTable = document.getElementById("metrics-table");
+
+    normNote.textContent = DATA.normalization_note || "";
+
+    const horizonLabels = { eos: "End of season", mid: "Mid-season" };
+    Object.keys(DATA.by_horizon).forEach(hz => {
+      const opt = document.createElement("option");
+      opt.value = hz;
+      opt.textContent = horizonLabels[hz] || hz;
+      horizonSelect.appendChild(opt);
+    });
+
+    function populateCropOptions() {
+      const hz = horizonSelect.value;
+      const crops = Object.keys(DATA.by_horizon[hz] || {});
+      cropSelect.innerHTML = "";
+      const order = ["all", ...DATA.crops.filter(c => crops.includes(c))];
+      order.filter(c => crops.includes(c)).forEach(crop => {
+        const opt = document.createElement("option");
+        opt.value = crop;
+        opt.textContent = crop === "all" ? "All crops" : crop.charAt(0).toUpperCase() + crop.slice(1);
+        cropSelect.appendChild(opt);
+      });
+    }
+
+    function currentSlice() {
+      const hz = horizonSelect.value;
+      const crop = cropSelect.value;
+      return (DATA.by_horizon[hz] || {})[crop] || { families: [] };
+    }
+
+    function renderViewList() {
+      viewList.innerHTML = DATA.views.map(v => `
+        <li>
+          <strong>${v.label}</strong>
+          <span class="muted">${v.question}</span>
+        </li>
+      `).join("");
+    }
+
+    function polarPoint(cx, cy, radius, angleRad) {
+      return [cx + radius * Math.sin(angleRad), cy - radius * Math.cos(angleRad)];
+    }
+
+    function renderRadar(families) {
+      const labels = DATA.views.map(v => v.label);
+      const n = labels.length;
+      if (!n || !families.length) {
+        radarWrap.innerHTML = '<p class="muted">No family data for this selection.</p>';
+        return;
+      }
+
+      const size = 420;
+      const cx = size / 2;
+      const cy = size / 2;
+      const maxR = size * 0.36;
+      const angles = labels.map((_, i) => (2 * Math.PI * i) / n);
+
+      let svg = `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Model family radar chart">`;
+
+      for (let ring = 0.25; ring <= 1.001; ring += 0.25) {
+        const r = maxR * ring;
+        const pts = angles.map(a => polarPoint(cx, cy, r, a).join(",")).join(" ");
+        svg += `<polygon points="${pts}" fill="none" stroke="#e6eaef" stroke-width="1"/>`;
+        if (ring < 1) {
+          const [lx, ly] = polarPoint(cx, cy, r, -0.08);
+          svg += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="10" fill="#656d76">${ring.toFixed(2)}</text>`;
+        }
+      }
+
+      angles.forEach((a, i) => {
+        const [x2, y2] = polarPoint(cx, cy, maxR, a);
+        svg += `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" stroke="#e6eaef" stroke-width="1"/>`;
+        const [lx, ly] = polarPoint(cx, cy, maxR + 22, a);
+        svg += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="600" fill="#1f2328">${labels[i]}</text>`;
+      });
+
+      families.forEach(fam => {
+        const vals = labels.map(l => fam.relative[l] ?? 0);
+        const pts = vals.map((v, i) => polarPoint(cx, cy, maxR * v, angles[i]).join(",")).join(" ");
+        svg += `<polygon points="${pts}" fill="${fam.color}" fill-opacity="0.12" stroke="${fam.color}" stroke-width="2.2" stroke-linejoin="round"/>`;
+      });
+
+      svg += "</svg>";
+      radarWrap.innerHTML = svg;
+    }
+
+    function renderLegend(families) {
+      legendEl.innerHTML = families.map(fam => `
+        <div class="legend-item">
+          <span class="swatch" style="background:${fam.color}"></span>
+          <span><strong>${fam.family}</strong> · ${fam.display_name}</span>
+        </div>
+      `).join("");
+    }
+
+    function renderTable(families) {
+      const metricByLabel = Object.fromEntries(DATA.views.map(v => [v.label, v.metric]));
+      const headers = ["Family", "Representative", ...DATA.views.map(v => v.label)];
+      metricsTable.querySelector("thead").innerHTML =
+        `<tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
+
+      metricsTable.querySelector("tbody").innerHTML = families.map(fam => {
+        const cells = DATA.views.map(v => {
+          const raw = fam.raw[v.metric];
+          return raw == null ? "—" : raw.toFixed(3);
+        });
+        return `<tr>
+          <td>${fam.family}</td>
+          <td>${fam.display_name}</td>
+          ${cells.map(c => `<td>${c}</td>`).join("")}
+        </tr>`;
+      }).join("");
+    }
+
+    function render() {
+      const slice = currentSlice();
+      const families = slice.families || [];
+      renderRadar(families);
+      renderLegend(families);
+      renderTable(families);
+    }
+
+    horizonSelect.addEventListener("change", () => {
+      populateCropOptions();
+      render();
+    });
+    cropSelect.addEventListener("change", render);
+
+    renderViewList();
+    populateCropOptions();
+    render();
+  </script>
+</body>
+</html>

@@ -760,6 +760,7 @@ def run_index_stage(
     entries = discover_index_entries(target.publish_root)
     index_path = update_index(target.publish_root, entries)
     version = insights_version if insights_version is not None else target.version
+    extras: list[str] = []
     try:
         from cybench.runs.analysis.build_global_insights_dashboard import write_insights_dashboard
 
@@ -768,9 +769,25 @@ def run_index_stage(
             dest=target.publish_root / "insights.html",
             version=version,
         )
-        msg = f"updated {index_path} and {insights_path.name}"
+        extras.append(insights_path.name)
     except RuntimeError as exc:
-        msg = f"updated {index_path} (insights skipped: {exc})"
+        extras.append(f"insights skipped ({exc})")
+
+    try:
+        from cybench.runs.analysis.build_model_family_radar_dashboard import (
+            write_model_family_radar_dashboard,
+        )
+
+        radar_path = write_model_family_radar_dashboard(
+            output_root=target.output_root,
+            dest=target.publish_root / "model_families.html",
+            version=version,
+        )
+        extras.append(radar_path.name)
+    except RuntimeError as exc:
+        extras.append(f"model_families skipped ({exc})")
+
+    msg = f"updated {index_path}" + (f" and {', '.join(extras)}" if extras else "")
     return StageStatus("index", False, msg)
 
 
@@ -785,9 +802,9 @@ def run_commit_stage(
         return StageStatus("commit", True, f"not a git repo: {publish_root}")
 
     rel_paths = [target.publish_slug, "index.html"]
-    insights = publish_root / "insights.html"
-    if insights.is_file():
-        rel_paths.append("insights.html")
+    for global_page in ("insights.html", "model_families.html"):
+        if (publish_root / global_page).is_file():
+            rel_paths.append(global_page)
 
     message = f"Update {target.publish_slug} dashboard"
     return git_commit_paths(

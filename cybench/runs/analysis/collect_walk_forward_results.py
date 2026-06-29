@@ -371,7 +371,21 @@ def summary_rows_to_dashboard_records(
                 value = None
             else:
                 value = float(raw)
-            records.append({**common, "view": view, "metric": metric, "value": value})
+            std_raw = row.get(f"{key}_std")
+            value_std: float | None
+            if std_raw is None or (isinstance(std_raw, float) and pd.isna(std_raw)):
+                value_std = None
+            else:
+                value_std = float(std_raw)
+            records.append(
+                {
+                    **common,
+                    "view": view,
+                    "metric": metric,
+                    "value": value,
+                    "value_std": value_std,
+                }
+            )
     return records
 
 

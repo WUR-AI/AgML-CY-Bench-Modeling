@@ -97,8 +97,17 @@ def main() -> int:
             dest=publish_root / "insights.html",
             version=args.version,
         )
+        from cybench.runs.analysis.build_model_family_radar_dashboard import (
+            write_model_family_radar_dashboard,
+        )
+
+        write_model_family_radar_dashboard(
+            output_root=output_root,
+            dest=publish_root / "model_families.html",
+            version=args.version,
+        )
         update_index(publish_root, discover_index_entries(publish_root))
-        print(f"[OK] insights.html + index.html")
+        print(f"[OK] insights.html, model_families.html, index.html")
 
     return 0
 

@@ -121,8 +121,9 @@
       color: transparent;
       user-select: none;
     }
-    td.metric-cell { font-variant-numeric: tabular-nums; }
+    td.metric-cell { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 0.88rem; }
     td.metric-cell.missing { color: #9a9a9a; }
+    td.metric-cell .metric-std { color: var(--muted); font-size: 0.92em; }
     .dataset-parts {
       display: flex;
       gap: 0.35rem;
@@ -290,6 +291,19 @@
       return (v === null || v === undefined || Number.isNaN(v)) ? "-" : v.toFixed(3);
     }
 
+    function metricStd(row, key) {
+      const v = row.metrics[`${key}_std`];
+      return (v === null || v === undefined || Number.isNaN(v)) ? null : v;
+    }
+
+    function formatMetricCell(row, key) {
+      const v = metricValue(row, key);
+      if (v === null) return "-";
+      const std = metricStd(row, key);
+      if (std === null) return formatValue(v);
+      return `${formatValue(v)}<span class="metric-std">±${formatValue(std)}</span>`;
+    }
+
     function metricValue(row, key) {
       const v = row.metrics[key];
       return (v === null || v === undefined || Number.isNaN(v)) ? null : v;
@@ -361,7 +375,11 @@
             metrics: {},
           });
         }
-        grouped.get(key).metrics[`${rec.view}_${rec.metric}`] = rec.value;
+        const metricKey = `${rec.view}_${rec.metric}`;
+        grouped.get(key).metrics[metricKey] = rec.value;
+        if (rec.value_std !== null && rec.value_std !== undefined && !Number.isNaN(rec.value_std)) {
+          grouped.get(key).metrics[`${metricKey}_std`] = rec.value_std;
+        }
       }
       allRows = Array.from(grouped.values());
     }
@@ -453,7 +471,7 @@
           const bg = heatColor(v, scale.min, scale.max, scale.higherBetter);
           const style = bg ? ` style="background-color:${bg}"` : "";
           const cls = v === null ? "metric-cell missing" : "metric-cell";
-          html += `<td class="${cls}"${style}>${formatValue(v)}</td>`;
+          html += `<td class="${cls}"${style}>${formatMetricCell(row, col.key)}</td>`;
         }
         html += `</tr>`;
       });

@@ -263,7 +263,15 @@ def build_index_html_cards(entries: list[IndexEntry], *, publish_root: Path | No
         <div class="link-card-top"><span class="badge badge-neutral">ALL</span><span class="arrow" aria-hidden="true">→</span></div>
         <h3>Cross-country model ranking</h3>
         <p class="muted">NRMSE leaderboard and end-of-season vs mid-season comparison</p>
-      </a>
+      </a>"""
+        if (publish_root / "model_families.html").is_file():
+            insights_card += """
+      <a class="link-card" href="model_families.html">
+        <div class="link-card-top"><span class="badge badge-neutral">ALL</span><span class="arrow" aria-hidden="true">→</span></div>
+        <h3>Model family radar</h3>
+        <p class="muted">Relative performance across overall, spatial, temporal, and anomaly views</p>
+      </a>"""
+        insights_card += """
     </div>
   </section>"""
     screening_section = ""
