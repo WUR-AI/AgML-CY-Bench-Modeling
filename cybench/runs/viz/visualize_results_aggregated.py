@@ -21,6 +21,7 @@ from matplotlib.figure import Figure
 from cybench.util.geo import get_shapes_from_polygons, world_shape_path
 from cybench.config import KEY_LOC, KEY_TARGET
 from cybench.evaluation.aggregated_metrics import (
+    MIN_SLICE_REGIONS,
     calc_r_r2,
     compute_report_metrics,
     get_metrics_dict,
@@ -520,6 +521,64 @@ def generate_local_report_html(stats_list: List[dict], pdf_filename: str) -> str
 # -----------------------------
 # Plotting
 # -----------------------------
+def _yearly_cross_region_stats(
+    df: pd.DataFrame,
+    value_col: str,
+    *,
+    year_col: str = "year",
+    min_regions: int = MIN_SLICE_REGIONS,
+) -> pd.DataFrame:
+    """Per-year mean and std of *value_col* across regions."""
+    grouped = df.groupby(year_col)[value_col]
+    out = pd.DataFrame(
+        {
+            "mean": grouped.mean(),
+            "std": grouped.std(ddof=1),
+            "n_regions": grouped.count(),
+        }
+    ).sort_index()
+    out.loc[out["n_regions"] < min_regions, "std"] = np.nan
+    return out
+
+
+def _plot_mean_std_band(
+    ax: Axes,
+    stats: pd.DataFrame,
+    *,
+    color: str,
+    mean_linestyle: str,
+    label: str,
+    zorder: int = 2,
+) -> None:
+    years = stats.index.to_numpy()
+    mean = stats["mean"].to_numpy(dtype=float)
+    std = stats["std"].to_numpy(dtype=float)
+    ax.plot(
+        years,
+        mean,
+        mean_linestyle,
+        color=color,
+        linewidth=2.0,
+        markersize=5,
+        marker="o",
+        label=label,
+        zorder=zorder + 1,
+    )
+    lower = mean - std
+    upper = mean + std
+    has_band = np.isfinite(std)
+    if np.any(has_band):
+        ax.fill_between(
+            years,
+            lower,
+            upper,
+            color=color,
+            alpha=0.18,
+            linewidth=0,
+            zorder=zorder,
+        )
+
+
 def _plot_scatter_panel(
     ax: Axes,
     df_filtered: pd.DataFrame,
@@ -575,17 +634,12 @@ def _plot_scatter_panel(
     ax.set_xlabel("Actual yield")
     ax.set_ylabel("Predicted yield")
 
-    def fmt_line(label, m):
-        return (
-            f"{label}: r = {m['r']:.2f}, R² = {m['r2']:.2f} | "
-            f"r_res = {m['r_res']:.2f}, R²_res = {m['r2_res']:.2f}"
-        )
+    def fmt_region_year(m: dict) -> str:
+        return f"r = {m['r']:.2f}, R² = {m['r2']:.2f}, NRMSE = {m['nrmse']:.2f}"
 
-    txt_lines = [f"N = {n_samples:,}", fmt_line("Model", metrics_model)]
+    txt_lines = [f"N = {n_samples:,}", f"Model: {fmt_region_year(metrics_model)}"]
     if metrics_base:
-        txt_lines.append(fmt_line("Base", metrics_base))
-    else:
-        txt_lines.append("(Baseline not found)")
+        txt_lines.append(f"Baseline: {fmt_region_year(metrics_base)}")
 
     ax.text(
         0.05,
@@ -751,27 +805,53 @@ def process_dataset(
                 n_samples=n_samples,
             )
         elif panel_name == "temporal":
-            ax.plot(ts.index, ts[KEY_TARGET], "-o", linewidth=2, label="Actual")
-            ax.plot(
-                ts.index,
-                ts[model],
-                "--o",
-                linewidth=2,
-                label=f"Model ($r={r_time_model:.2f}$)",
+            r2_med_reg = report["temporal"]["r2_typical_region"]
+            actual_yr = _yearly_cross_region_stats(df_filtered, KEY_TARGET)
+            model_yr = _yearly_cross_region_stats(df_filtered, model)
+            _plot_mean_std_band(
+                ax,
+                actual_yr,
+                color="#1f2328",
+                mean_linestyle="-",
+                label="Actual (mean ± std across regions)",
+            )
+            model_label = (
+                f"Model (mean ± std, R² med/reg = {r2_med_reg:.2f})"
+                if pd.notnull(r2_med_reg)
+                else "Model (mean ± std across regions)"
+            )
+            _plot_mean_std_band(
+                ax,
+                model_yr,
+                color="#2166ac",
+                mean_linestyle="--",
+                label=model_label,
             )
             if has_baseline:
-                ax.plot(
-                    ts.index,
-                    ts[base_col_name],
-                    ":o",
-                    color="green",
-                    alpha=0.7,
-                    label=f"Base ($r={r_time_base:.2f}$)",
+                base_yr = _yearly_cross_region_stats(df_filtered, BASELINE_MODEL)
+                _plot_mean_std_band(
+                    ax,
+                    base_yr,
+                    color="#1a7f37",
+                    mean_linestyle=":",
+                    label="Baseline (mean ± std)",
                 )
-            ax.set_title(f"Spatial Mean over Time ($N_{{yrs}}={n_years}$)")
-            ax.legend()
+            ax.set_title(
+                f"Cross-region spread by year ($N_{{reg}}$={n_regions}, "
+                f"$N_{{yrs}}$={n_years})"
+            )
+            ax.legend(fontsize=9)
             ax.grid(alpha=0.3)
             ax.set_xlabel("Year")
+            ax.text(
+                0.02,
+                0.02,
+                f"Band: ±1 std across regions (years with ≥{MIN_SLICE_REGIONS} regions)",
+                transform=ax.transAxes,
+                fontsize=8,
+                color="#555555",
+                verticalalignment="bottom",
+            )
 
     return fig, stats, panel_axes
 

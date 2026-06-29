@@ -10,6 +10,10 @@ import pandas as pd
 
 from cybench.config import KEY_LOC, KEY_TARGET, KEY_YEAR
 
+# Minimum points per slice for median view metrics (and temporal panel regional lines).
+MIN_SLICE_YEARS = 3
+MIN_SLICE_REGIONS = 3
+
 
 def calc_r_r2(
     y_true: npt.ArrayLike,
@@ -50,7 +54,7 @@ def calc_median_yearly_r2(
     *,
     loc_col: str = KEY_LOC,
     year_col: str = KEY_YEAR,
-    min_regions: int = 3,
+    min_regions: int = MIN_SLICE_REGIONS,
 ) -> float:
     """Median of per-year R², where each year's R² is computed across regions."""
     yearly_r2: list[float] = []
@@ -74,7 +78,7 @@ def calc_median_regional_r2(
     *,
     loc_col: str = KEY_LOC,
     year_col: str = KEY_YEAR,
-    min_years: int = 3,
+    min_years: int = MIN_SLICE_YEARS,
 ) -> float:
     """Median of per-region R², where each region's R² is computed across years."""
     del year_col  # API symmetry with yearly helper; years come from row groups.
@@ -98,7 +102,7 @@ def calc_median_regional_r2_res(
     model_col: str,
     *,
     loc_col: str = KEY_LOC,
-    min_years: int = 3,
+    min_years: int = MIN_SLICE_YEARS,
 ) -> float:
     """Median of per-region R² on location-de-meaned yields (anomaly view)."""
     loc_means = df.groupby(loc_col)[target_col].mean()
