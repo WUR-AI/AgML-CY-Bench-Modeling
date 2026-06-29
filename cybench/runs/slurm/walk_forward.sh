@@ -40,9 +40,23 @@ if ! FROZEN_DIR=$(find_frozen_screening_dir "${CROP}" "${COUNTRY}" "${MODEL}"); 
   echo "[SKIP] Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} — no successful screening artifact"
   exit 0
 fi
+
 WF_REPETITIONS="${WF_REPETITIONS:-1}"
-validate_wf_repetitions "${WF_REPETITIONS}"
-echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_label) | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | repetitions=${WF_REPETITIONS} | frozen=${FROZEN_DIR}"
+WF_BASE_SEED="${WF_BASE_SEED:-42}"
+WF_RESUME="${WF_RESUME:-no}"
+WF_RUN_DIR=""
+WF_START_SEED="${WF_BASE_SEED}"
+WF_RUN_REPS="${WF_REPETITIONS}"
+
+if ! plan_walk_forward_seeds "${CROP}" "${COUNTRY}" "${MODEL}"; then
+  exit 0
+fi
+
+resume_note=""
+if [[ -n "${WF_RUN_DIR}" ]]; then
+  resume_note=" | resume=${WF_RUN_DIR} | seeds=${WF_START_SEED}..$((WF_START_SEED + WF_RUN_REPS - 1))"
+fi
+echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_label) | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | target_repetitions=${WF_REPETITIONS}${resume_note} | frozen=${FROZEN_DIR}"
 
 COMMON=(
   "dataset/crop=${CROP}"
@@ -51,13 +65,16 @@ COMMON=(
   validation=walk_forward
   "validation.frozen_screening_dir=${FROZEN_DIR}"
   "experiment.name=${CYBENCH_EXPERIMENT_NAME}"
-  "experiment.n_repetitions=${WF_REPETITIONS}"
-  experiment.seed=42
+  "experiment.n_repetitions=${WF_RUN_REPS}"
+  "experiment.seed=${WF_START_SEED}"
   "model=${MODEL}"
 )
 
 configure_parallelism COMMON
 EXTRA=()
+if [[ -n "${WF_RUN_DIR}" ]]; then
+  EXTRA+=("hydra.run.dir=${WF_RUN_DIR}")
+fi
 if [[ "${FEATURE_DESIGN}" == "yes" && "${FRAMEWORK}" == "pandas" ]]; then
   EXTRA+=(+feature_selection=mrmr)
 fi

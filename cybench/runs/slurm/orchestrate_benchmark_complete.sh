@@ -27,7 +27,9 @@ Options:
   --max N             Process at most N batch×horizon targets (0 = unlimited)
   --manifest PATH     Explicit job list
   --model MODEL       Limit to model slug (repeatable, e.g. --model lpjml_bc or twso_bc)
-  --force-rerun       Include complete jobs in retry manifest (after code fixes)
+  --force-rerun       Include complete jobs in retry manifest (use with --resume)
+  --repetitions N     Walk-forward: total target seeds (42..42+N-1)
+  --resume            Walk-forward: append missing seeds into latest run dirs
   --output-root DIR   Parent of baselines_* (default: lustre output or ../output)
   --baselines-dir DIR Override output dir for one batch
   --data-dir DIR      Override cybench/data for year preflight
@@ -68,6 +70,8 @@ MAX=""
 MANIFEST=""
 MODELS=()
 FORCE_RERUN=false
+WF_REPETITIONS=""
+WF_RESUME=false
 BASELINES_DIR=""
 OUTPUT_ROOT=""
 DATA_DIR=""
@@ -131,6 +135,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --force-rerun)
       FORCE_RERUN=true
+      shift
+      ;;
+    --repetitions)
+      WF_REPETITIONS=$2
+      shift 2
+      ;;
+    --resume)
+      WF_RESUME=true
       shift
       ;;
     --output-root)
@@ -204,6 +216,8 @@ for _model in "${MODELS[@]}"; do
   cmd+=(--model "${_model}")
 done
 [[ "${FORCE_RERUN}" == true ]] && cmd+=(--force-rerun)
+[[ -n "${WF_REPETITIONS}" ]] && cmd+=(--repetitions "${WF_REPETITIONS}")
+[[ "${WF_RESUME}" == true ]] && cmd+=(--resume)
 [[ -n "${OUTPUT_ROOT}" ]] && cmd+=(--output-root "${OUTPUT_ROOT}")
 [[ -n "${BASELINES_DIR}" ]] && cmd+=(--baselines-dir "${BASELINES_DIR}")
 [[ -n "${DATA_DIR}" ]] && cmd+=(--data-dir "${DATA_DIR}")

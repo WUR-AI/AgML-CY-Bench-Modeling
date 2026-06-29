@@ -387,3 +387,86 @@ find_frozen_screening_dir() {
   echo "No optimal_model.yaml in ${run_dir}" >&2
   return 1
 }
+
+# Latest walk-forward Hydra run folder for a crop/country/model (horizon-tagged).
+find_latest_walk_forward_run_dir() {
+  local crop=$1 country=$2 model_slug=$3
+  local htag model_name
+  htag=$(horizon_tag)
+  model_name=$(model_run_name "${model_slug}")
+  ls -td "${BASELINES_DIR}/${crop}_${country}_${model_name}_walk_forward_${htag}_"* 2>/dev/null | head -1 || true
+}
+
+discover_run_seeds_py() {
+  local run_dir=$1
+  poetry run python -c "
+from pathlib import Path
+from cybench.runs.analysis.collect_walk_forward_results import discover_run_seeds
+for seed in discover_run_seeds(Path('${run_dir}')):
+    print(seed)
+"
+}
+
+# Plan seed schedule for walk-forward. Sets WF_RUN_DIR, WF_START_SEED, WF_RUN_REPS.
+# Returns 0 run, 1 skip (all target seeds present), 2 error.
+plan_walk_forward_seeds() {
+  local crop=$1 country=$2 model_slug=$3
+  local total=${WF_REPETITIONS:-1}
+  local base=${WF_BASE_SEED:-42}
+  local resume=${WF_RESUME:-no}
+
+  validate_wf_repetitions "${total}"
+
+  local -a target=()
+  local i
+  for ((i = 0; i < total; i++)); do
+    target+=($((base + i)))
+  done
+
+  local run_dir=""
+  local -a existing=()
+  if [[ "${resume}" != "no" ]]; then
+    run_dir=$(find_latest_walk_forward_run_dir "${crop}" "${country}" "${model_slug}")
+    if [[ -n "${run_dir}" && -d "${run_dir}" ]]; then
+      mapfile -t existing < <(discover_run_seeds_py "${run_dir}")
+    fi
+  fi
+
+  local -a missing=()
+  local s e found
+  for s in "${target[@]}"; do
+    found=false
+    for e in "${existing[@]}"; do
+      if [[ "${s}" == "${e}" ]]; then
+        found=true
+        break
+      fi
+    done
+    if [[ "${found}" == false ]]; then
+      missing+=("${s}")
+    fi
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    if [[ ${#existing[@]} -gt 0 && "${resume}" != "no" ]]; then
+      echo "[SKIP] Walk-forward seeds complete | target=${target[*]} | run=${run_dir}" >&2
+      return 1
+    fi
+    WF_RUN_DIR=""
+    WF_START_SEED="${base}"
+    WF_RUN_REPS="${total}"
+    return 0
+  fi
+
+  if [[ "${resume}" == "no" || -z "${run_dir}" ]]; then
+    WF_RUN_DIR=""
+    WF_START_SEED="${base}"
+    WF_RUN_REPS="${total}"
+    return 0
+  fi
+
+  WF_RUN_DIR="$(cd "${run_dir}" && pwd)"
+  WF_START_SEED="${missing[0]}"
+  WF_RUN_REPS="${#missing[@]}"
+  return 0
+}

@@ -11,14 +11,15 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: submit_array.sh <screening|walk_forward> [manifest] [--array RANGE] [--batch NAME] [--group GROUP] [--gpu|--cpu] [--dependency SPEC] [--repetitions N]
+Usage: submit_array.sh <screening|walk_forward> [manifest] [--array RANGE] [--batch NAME] [--group GROUP] [--gpu|--cpu] [--dependency SPEC] [--repetitions N] [--resume]
 
   manifest     Job list (default: cybench/runs/slurm/benchmark_jobs.txt)
   --array      SLURM array range (default: 0-(N-1); use 0 for first job only)
   --batch NAME Hydra experiment.name → ../output/NAME (default: baselines)
   --group GROUP  cpu | naive | gpu — used in SLURM job name (default: infer from manifest)
   --dependency SLURM dependency, e.g. afterok:12345 or afterok:111:222
-  --repetitions N  Walk-forward only: experiment.n_repetitions (default: 1; seeds 42..42+N-1)
+  --repetitions N  Walk-forward: total seeds from base (default: 1; seeds 42..42+N-1)
+  --resume     Walk-forward: append missing seeds into latest run dir (skip if complete)
   --gpu     Force GPU partition + CUDA (even for mixed manifests)
   --cpu     Override GPU manifest: main partition, no GPU, CYBENCH_FORCE_CPU=1
 
@@ -69,6 +70,7 @@ DEPENDENCY=""
 JOB_GROUP=""
 CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME:-baselines}"
 WF_REPETITIONS="${WF_REPETITIONS:-1}"
+WF_RESUME="${WF_RESUME:-no}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -100,6 +102,10 @@ while [[ $# -gt 0 ]]; do
     --repetitions)
       WF_REPETITIONS=$2
       shift 2
+      ;;
+    --resume)
+      WF_RESUME=yes
+      shift
       ;;
     -h|--help)
       usage
@@ -181,7 +187,10 @@ echo "  script:   ${SLURM_DIR}/${JOB_SCRIPT}"
 echo "  horizon:  ${PREDICTION_HORIZON}"
 echo "  batch:    ${CYBENCH_EXPERIMENT_NAME} (../output/${CYBENCH_EXPERIMENT_NAME})"
 if [[ "${PHASE}" == walk_forward ]]; then
-  echo "  repetitions: ${WF_REPETITIONS} (seeds 42..$((42 + WF_REPETITIONS - 1)))"
+  echo "  repetitions: ${WF_REPETITIONS} (target seeds 42..$((42 + WF_REPETITIONS - 1)))"
+  if [[ "${WF_RESUME}" == yes ]]; then
+    echo "  resume:     yes (append missing seeds into latest walk-forward run)"
+  fi
 fi
 echo "  gpu:      ${GPU_MODE} ($([[ ${#SBATCH_EXTRA[@]} -gt 0 ]] && gpu_sbatch_summary || echo no))"
 if [[ "${FORCE_CPU}" == true ]]; then
@@ -206,7 +215,7 @@ if [[ -n "${CYBENCH_EXTRA_OVERRIDES_FILE:-}" ]]; then
   SBATCH_EXPORT+=",CYBENCH_EXTRA_OVERRIDES_FILE=${CYBENCH_EXTRA_OVERRIDES_FILE}"
 fi
 if [[ "${PHASE}" == walk_forward ]]; then
-  SBATCH_EXPORT+=",WF_REPETITIONS=${WF_REPETITIONS}"
+  SBATCH_EXPORT+=",WF_REPETITIONS=${WF_REPETITIONS},WF_RESUME=${WF_RESUME}"
 fi
 if [[ "${FORCE_CPU}" == true ]]; then
   SBATCH_EXPORT+=",CYBENCH_FORCE_CPU=1"

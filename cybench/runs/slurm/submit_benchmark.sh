@@ -34,6 +34,8 @@ Options:
   --force-cpu       Alias for --cpu
   --no-dependency   For "all": submit walk-forward without afterok
   --repetitions N   Walk-forward: experiment.n_repetitions (default: 1; seeds 42..42+N-1)
+  --repetitions N   Walk-forward: total seeds from base 42 (default: 1)
+  --resume          Walk-forward: append missing seeds into latest run (no re-run of 42)
   --skip-naive      Omit naive (average, trend) manifests
   -n, --dry-run     Print commands without sbatch
 
@@ -92,6 +94,7 @@ SKIP_NAIVE=false
 DRY_RUN=false
 COUNTRIES=()
 WF_REPETITIONS="${WF_REPETITIONS:-1}"
+WF_RESUME="${WF_RESUME:-no}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -133,6 +136,10 @@ while [[ $# -gt 0 ]]; do
     --repetitions)
       WF_REPETITIONS=$2
       shift 2
+      ;;
+    --resume)
+      WF_RESUME=yes
+      shift
       ;;
     --skip-naive)
       SKIP_NAIVE=true
@@ -259,7 +266,7 @@ submit_one() {
   fi
   local -a cmd=(env PREDICTION_HORIZON="${PREDICTION_HORIZON}" CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME}")
   if [[ "${phase}" == walk_forward ]]; then
-    cmd+=(WF_REPETITIONS="${WF_REPETITIONS}")
+    cmd+=(WF_REPETITIONS="${WF_REPETITIONS}" WF_RESUME="${WF_RESUME}")
   fi
   cmd+=("${SUBMIT_ARRAY}" "${phase}" "${manifest}")
   if [[ -n "${group}" ]]; then
@@ -267,6 +274,9 @@ submit_one() {
   fi
   if [[ "${phase}" == walk_forward ]]; then
     cmd+=(--repetitions "${WF_REPETITIONS}")
+    if [[ "${WF_RESUME}" == yes ]]; then
+      cmd+=(--resume)
+    fi
   fi
   if [[ ${#ARRAY_ARG[@]} -gt 0 ]]; then
     cmd+=("${ARRAY_ARG[@]}")
@@ -310,7 +320,7 @@ run_screening() {
 run_walk_forward() {
   local group manifest dep job_id
   echo ""
-  echo "=== Walk-forward | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | repetitions=${WF_REPETITIONS} ==="
+  echo "=== Walk-forward | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | repetitions=${WF_REPETITIONS} | resume=${WF_RESUME} ==="
   while read -r group; do
     manifest=$(manifest_for_group "${group}")
     dep=""

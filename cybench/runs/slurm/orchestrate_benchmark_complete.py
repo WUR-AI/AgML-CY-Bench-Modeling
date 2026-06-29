@@ -145,6 +145,8 @@ def _submit_retry(
     force_cpu: bool,
     force_cpu_reason: str | None = None,
     force_rerun: bool = False,
+    wf_repetitions: int | None = None,
+    wf_resume: bool = False,
 ) -> int:
     submit = _SLURM_DIR / "submit_benchmark.sh"
     if not submit.is_file():
@@ -163,6 +165,10 @@ def _submit_retry(
             target.write_text(retry_path.read_text(encoding="utf-8"), encoding="utf-8")
 
         cmd = [str(submit), submit_phase, "--horizon", horizon, "--batch", batch]
+        if wf_repetitions is not None and submit_phase == "walk_forward":
+            cmd.extend(["--repetitions", str(wf_repetitions)])
+        if wf_resume and submit_phase == "walk_forward":
+            cmd.append("--resume")
         if force_cpu:
             cmd.append("--cpu")
             if force_cpu_reason:
@@ -320,6 +326,8 @@ def _process_batch(
             force_cpu=force_cpu,
             force_cpu_reason=force_cpu_reason,
             force_rerun=args.force_rerun,
+            wf_repetitions=args.wf_repetitions,
+            wf_resume=args.wf_resume,
         )
 
     return 0
@@ -385,7 +393,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--force-rerun",
         action="store_true",
-        help="Include complete jobs in retry manifest (use with --model after code fixes)",
+        help="Include complete jobs in retry manifest (required with --resume for extra seeds)",
+    )
+    parser.add_argument(
+        "--repetitions",
+        type=int,
+        metavar="N",
+        help="Walk-forward: total target seeds from 42 (passed to submit_benchmark.sh)",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Walk-forward: append missing seeds into existing run dirs",
     )
     parser.add_argument(
         "--baselines-dir",

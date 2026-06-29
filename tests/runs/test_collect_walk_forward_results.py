@@ -94,15 +94,15 @@ def test_collect_walk_forward_run_multi_seed(tmp_path: Path):
     run_dir.mkdir()
     run = parse_benchmark_run_dir(run_dir.name, run_dir)
     assert run is not None
-    for seed, pred in ((42, 9.0), (43, 11.0)):
+    for seed, preds in ((42, (9.0, 11.0)), (43, (8.5, 11.5))):
         split = run_dir / "2016" / str(seed)
         split.mkdir(parents=True)
         pd.DataFrame(
             {
                 "adm_id": ["NL-01", "NL-02"],
                 "year": [2016, 2016],
-                "targets": [10.0, 10.0],
-                "preds": [pred, pred],
+                "targets": [10.0, 12.0],
+                "preds": list(preds),
             }
         ).to_csv(split / "test_preds.csv", index=False)
 
@@ -118,7 +118,8 @@ def test_collect_walk_forward_run_multi_seed(tmp_path: Path):
     assert plot_seed == 42
     assert summary["n_seeds"] == 2
     assert len(per_seed_rows) == 2
-    assert summary["r_std"] is not None
+    assert summary["nrmse_std"] is not None
+    assert not pd.isna(summary["nrmse_std"])
     assert len(plot_df) == 2
 
 

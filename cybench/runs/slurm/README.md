@@ -333,6 +333,9 @@ PREDICTION_HORIZON=middle-of-season cybench/runs/slurm/submit_array.sh walk_forw
 # Multi-seed walk-forward (seeds 42..46; screening stays at 1 repetition):
 cybench/runs/slurm/submit_array.sh walk_forward cybench/runs/slurm/benchmark_jobs_gpu.txt --repetitions 5
 cybench/runs/slurm/submit_benchmark.sh walk_forward --horizon eos --repetitions 5 --batch my_batch
+
+# Add seeds 43..46 into an existing v2 run that already has seed 42:
+cybench/runs/slurm/submit_benchmark.sh walk_forward --horizon eos --batch baselines_DE_eos_v2 --repetitions 5 --resume
 ```
 
 `submit_array.sh` prints `horizon: ...` on submit. In the job log, confirm
