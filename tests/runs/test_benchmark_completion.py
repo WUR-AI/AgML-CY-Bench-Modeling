@@ -262,3 +262,40 @@ def test_resolve_batch_dir_case_insensitive(tmp_path: Path):
     resolved, note = resolve_batch_dir(output, "baselines_DE_eos_v1")
     assert resolved.name == "baselines_de_eos_v1"
     assert note is not None
+
+
+def test_expand_walk_forward_gpu_per_seed(tmp_path: Path):
+    from cybench.runs.analysis.collect_walk_forward_results import discover_run_seeds
+    from cybench.runs.slurm.benchmark_completion_lib import (
+        JobRow,
+        expand_walk_forward_manifest_lines,
+    )
+
+    repo = tmp_path / "repo"
+    baselines = tmp_path / "output" / "baselines_DE_eos_v2"
+    run_dir = baselines / "maize_DE_lstm_lf_walk_forward_eos_20260101_120000"
+    (run_dir / "2016" / "42").mkdir(parents=True)
+    (run_dir / "2016" / "42" / "test_preds.csv").write_text(
+        "adm_id,year,targets,preds\nDE-01,2016,10,9\n", encoding="utf-8"
+    )
+    assert discover_run_seeds(run_dir) == [42]
+
+    gpu_job = JobRow("maize", "DE", "lstm_lf", "torch", "yes", "no", "yes")
+    cpu_job = JobRow("maize", "DE", "ridge", "pandas", "yes", "yes", "no")
+
+    lines = expand_walk_forward_manifest_lines(
+        [gpu_job, cpu_job],
+        baselines_dir=baselines,
+        horizon="eos",
+        repo_root=repo,
+        base_seed=42,
+        total_repetitions=5,
+        resume=True,
+        per_seed_for_gpu=True,
+    )
+    assert "maize DE lstm_lf torch yes no yes 43" in lines
+    assert "maize DE lstm_lf torch yes no yes 46" in lines
+    assert not any(line.endswith(" 42") for line in lines)
+    assert sum(1 for line in lines if "lstm_lf" in line) == 4
+    assert sum(1 for line in lines if "ridge" in line) == 1
+    assert all("ridge" not in line or line.count(" ") == 6 for line in lines if "ridge" in line)

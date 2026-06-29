@@ -137,9 +137,46 @@ if [[ ! -f "${MANIFEST}" ]]; then
   exit 1
 fi
 
-N=$(awk '!/^#/ && NF >= 7 {print}' "${MANIFEST}" | wc -l)
+if [[ -z "${JOB_GROUP}" ]]; then
+  JOB_GROUP=$(infer_manifest_group "${MANIFEST}")
+fi
+
+SUBMIT_MANIFEST="${MANIFEST}"
+EXPANDED_MANIFEST=""
+should_expand_wf_per_seed() {
+  [[ "${PHASE}" == walk_forward ]] || return 1
+  [[ "$(basename "${MANIFEST}" .txt)" == *gpu* ]] || return 1
+  [[ "${WF_REPETITIONS}" -gt 1 || "${WF_RESUME}" == yes ]] || return 1
+  return 0
+}
+
+if should_expand_wf_per_seed; then
+  EXPANDED_MANIFEST=$(mktemp "${TMPDIR:-/tmp}/cybench_wf_manifest.XXXXXX")
+  EXPAND_ARGS=(
+    poetry run python "${SLURM_DIR}/expand_walk_forward_manifest.py"
+    --input "${MANIFEST}"
+    --output "${EXPANDED_MANIFEST}"
+    --batch "${CYBENCH_EXPERIMENT_NAME}"
+    --horizon "${PREDICTION_HORIZON:-eos}"
+    --repetitions "${WF_REPETITIONS}"
+    --per-seed
+  )
+  if [[ "${WF_RESUME}" == yes ]]; then
+    EXPAND_ARGS+=(--resume)
+  fi
+  "${EXPAND_ARGS[@]}"
+  SUBMIT_MANIFEST="${EXPANDED_MANIFEST}"
+fi
+
+N=$(awk '!/^#/ && NF >= 7 {print}' "${SUBMIT_MANIFEST}" | wc -l)
 if [[ "${N}" -lt 1 ]]; then
+  if should_expand_wf_per_seed; then
+    echo "[WARN] No walk-forward GPU tasks after seed expansion (all seeds complete?)" >&2
+    [[ -n "${EXPANDED_MANIFEST}" ]] && rm -f "${EXPANDED_MANIFEST}"
+    exit 0
+  fi
   echo "No jobs in manifest: ${MANIFEST}" >&2
+  [[ -n "${EXPANDED_MANIFEST}" ]] && rm -f "${EXPANDED_MANIFEST}"
   exit 1
 fi
 
@@ -171,12 +208,10 @@ mkdir -p "output/${PHASE}"
 PREDICTION_HORIZON="${PREDICTION_HORIZON:-eos}"
 export PREDICTION_HORIZON
 
-JOB_MANIFEST=$(snapshot_job_manifest "${MANIFEST}" "${PHASE}" "${CYBENCH_EXPERIMENT_NAME}" "${SLURM_DIR}")
+JOB_MANIFEST=$(snapshot_job_manifest "${SUBMIT_MANIFEST}" "${PHASE}" "${CYBENCH_EXPERIMENT_NAME}" "${SLURM_DIR}")
 export JOB_MANIFEST
+[[ -n "${EXPANDED_MANIFEST}" ]] && rm -f "${EXPANDED_MANIFEST}"
 
-if [[ -z "${JOB_GROUP}" ]]; then
-  JOB_GROUP=$(infer_manifest_group "${MANIFEST}")
-fi
 SLURM_JOB_NAME=$(build_slurm_job_name "${PHASE}" "${JOB_GROUP}")
 
 FIRST_JOB=$(awk '!/^#/ && NF >= 7 {print; exit}' "${JOB_MANIFEST}")
@@ -188,8 +223,11 @@ echo "  horizon:  ${PREDICTION_HORIZON}"
 echo "  batch:    ${CYBENCH_EXPERIMENT_NAME} (../output/${CYBENCH_EXPERIMENT_NAME})"
 if [[ "${PHASE}" == walk_forward ]]; then
   echo "  repetitions: ${WF_REPETITIONS} (target seeds 42..$((42 + WF_REPETITIONS - 1)))"
+  if [[ "$(basename "${MANIFEST}" .txt)" == *gpu* ]]; then
+    echo "  gpu seeds:  one SLURM task per seed (${N} tasks from $(basename "${MANIFEST}"))"
+  fi
   if [[ "${WF_RESUME}" == yes ]]; then
-    echo "  resume:     yes (append missing seeds into latest walk-forward run)"
+    echo "  resume:     yes (skip seeds already on disk)"
   fi
 fi
 echo "  gpu:      ${GPU_MODE} ($([[ ${#SBATCH_EXTRA[@]} -gt 0 ]] && gpu_sbatch_summary || echo no))"

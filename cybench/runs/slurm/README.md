@@ -330,11 +330,10 @@ PREDICTION_HORIZON=middle-of-season cybench/runs/slurm/submit_array.sh screening
 PREDICTION_HORIZON=eos cybench/runs/slurm/submit_array.sh walk_forward ...
 PREDICTION_HORIZON=middle-of-season cybench/runs/slurm/submit_array.sh walk_forward ...
 
-# Multi-seed walk-forward (seeds 42..46; screening stays at 1 repetition):
-cybench/runs/slurm/submit_array.sh walk_forward cybench/runs/slurm/benchmark_jobs_gpu.txt --repetitions 5
-cybench/runs/slurm/submit_benchmark.sh walk_forward --horizon eos --repetitions 5 --batch my_batch
-
-# Add seeds 43..46 into an existing v2 run that already has seed 42:
+# Multi-seed walk-forward:
+#   GPU manifest  → one SLURM task per seed (parallel; seeds 42..46 with --repetitions 5)
+#   CPU/naive     → one task runs all seeds sequentially in run_experiments.py
+# Add missing seeds into existing v2 runs (--resume skips seeds already on disk):
 cybench/runs/slurm/submit_benchmark.sh walk_forward --horizon eos --batch baselines_DE_eos_v2 --repetitions 5 --resume
 ```
 
