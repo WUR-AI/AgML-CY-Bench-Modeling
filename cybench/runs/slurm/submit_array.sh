@@ -180,7 +180,7 @@ if [[ "${N}" -lt 1 ]]; then
   exit 1
 fi
 
-N_GPU=$(awk '!/^#/ && NF >= 7 && $7 == "yes" { n++ } END { print n + 0 }' "${MANIFEST}")
+N_GPU=$(awk '!/^#/ && NF >= 7 && $7 == "yes" { n++ } END { print n + 0 }' "${SUBMIT_MANIFEST}")
 if [[ "${FORCE_CPU}" == true ]]; then
   GPU_MODE=no
 elif [[ "${GPU_MODE}" == auto ]]; then
