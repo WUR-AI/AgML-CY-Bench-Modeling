@@ -520,10 +520,14 @@ def main(argv: list[str] | None = None) -> int:
 
     args._targets = targets  # type: ignore[attr-defined]
     exit_code = 0
-    for batch, horizon in targets:
+    n_targets = len(targets)
+    for idx, (batch, horizon) in enumerate(targets, start=1):
+        print(f"\n[INFO] ({idx}/{n_targets}) {batch} | horizon={horizon}")
         code = _process_batch(batch=batch, horizon=horizon, args=args)
         if code != 0:
             exit_code = code
+    if n_targets:
+        print(f"\n[DONE] Processed {n_targets} batch×horizon target(s)")
     return exit_code
 
 

@@ -141,7 +141,11 @@ slurm_task_job_name() {
     *) p=$(echo "${phase}" | cut -c1-2) ;;
   esac
   crop_s=$(slurm_crop_short "${CROP}")
-  echo "cb_${p}_${MODEL}_${crop_s}${COUNTRY}"
+  if [[ -n "${WF_SEED:-}" ]]; then
+    echo "cb_${p}_${MODEL}_${crop_s}${COUNTRY}_s${WF_SEED}"
+  else
+    echo "cb_${p}_${MODEL}_${crop_s}${COUNTRY}"
+  fi
 }
 
 # JobId for scontrol update: must be ArrayJobId_ArrayTaskId, not ArrayJobId alone
@@ -301,7 +305,12 @@ read_benchmark_job() {
     echo "No job for array task ${SLURM_ARRAY_TASK_ID} in ${JOB_MANIFEST}" >&2
     exit 1
   fi
-  read -r CROP COUNTRY MODEL FRAMEWORK HP_SEARCH FEATURE_DESIGN NEEDS_GPU <<< "${line}"
+  read -r CROP COUNTRY MODEL FRAMEWORK HP_SEARCH FEATURE_DESIGN NEEDS_GPU _extra <<< "${line}"
+  WF_SEED=""
+  if [[ $(awk '{print NF}' <<< "${line}") -ge 8 ]]; then
+    WF_SEED=$(awk '{print $NF}' <<< "${line}")
+  fi
+  export WF_SEED
 }
 
 # CPU tabular: one Optuna trial at a time, sklearn uses all SLURM CPUs.
@@ -468,5 +477,36 @@ plan_walk_forward_seeds() {
   WF_RUN_DIR="$(cd "${run_dir}" && pwd)"
   WF_START_SEED="${missing[0]}"
   WF_RUN_REPS="${#missing[@]}"
+  return 0
+}
+
+# Single-seed walk-forward task (GPU manifest with 8th column). Sets WF_RUN_DIR, WF_START_SEED, WF_RUN_REPS=1.
+# Returns 0 run, 1 skip (seed present), 2 error (seed>base without run dir).
+plan_walk_forward_single_seed() {
+  local crop=$1 country=$2 model_slug=$3 seed=$4
+  local base=${WF_BASE_SEED:-42}
+  local run_dir=""
+
+  run_dir=$(find_latest_walk_forward_run_dir "${crop}" "${country}" "${model_slug}")
+  if [[ -n "${run_dir}" && -d "${run_dir}" ]]; then
+    local -a existing=()
+    mapfile -t existing < <(discover_run_seeds_py "${run_dir}")
+    local e
+    for e in "${existing[@]}"; do
+      if [[ "${e}" == "${seed}" ]]; then
+        echo "[SKIP] Walk-forward seed ${seed} already in ${run_dir}" >&2
+        return 1
+      fi
+    done
+    WF_RUN_DIR="$(cd "${run_dir}" && pwd)"
+  elif [[ "${seed}" != "${base}" ]]; then
+    echo "[ERROR] Seed ${seed} requires existing walk-forward run (run seed ${base} first)" >&2
+    return 2
+  else
+    WF_RUN_DIR=""
+  fi
+
+  WF_START_SEED="${seed}"
+  WF_RUN_REPS=1
   return 0
 }

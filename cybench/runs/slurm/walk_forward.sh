@@ -1,8 +1,11 @@
 #!/bin/bash
 #
-# Walk-forward: one array task = one (crop, country, model), using frozen screening artifacts.
+# Walk-forward: one array task = one (crop, country, model) [× seed for GPU manifest].
 # Auto-discovers the latest screening run under CYBENCH_EXPERIMENT_NAME (default: baselines):
 #   ../output/<batch>/<crop>_<country>_<model>_screening_<horizon>_<timestamp>/<test_years>/optimal_model.yaml
+#
+# GPU manifest rows with an 8th column (seed) run one seed per SLURM task.
+# CPU/naive manifests bundle seeds in one task (experiment.n_repetitions).
 #
 # Submit after screening jobs finished:
 #   sbatch cybench/runs/slurm/walk_forward.sh
@@ -48,15 +51,25 @@ WF_RUN_DIR=""
 WF_START_SEED="${WF_BASE_SEED}"
 WF_RUN_REPS="${WF_REPETITIONS}"
 
-if ! plan_walk_forward_seeds "${CROP}" "${COUNTRY}" "${MODEL}"; then
+if [[ -n "${WF_SEED:-}" ]]; then
+  if ! plan_walk_forward_single_seed "${CROP}" "${COUNTRY}" "${MODEL}" "${WF_SEED}"; then
+    exit 0
+  fi
+elif ! plan_walk_forward_seeds "${CROP}" "${COUNTRY}" "${MODEL}"; then
   exit 0
 fi
 
 resume_note=""
 if [[ -n "${WF_RUN_DIR}" ]]; then
-  resume_note=" | resume=${WF_RUN_DIR} | seeds=${WF_START_SEED}..$((WF_START_SEED + WF_RUN_REPS - 1))"
+  resume_note=" | resume=${WF_RUN_DIR}"
 fi
-echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_label) | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | target_repetitions=${WF_REPETITIONS}${resume_note} | frozen=${FROZEN_DIR}"
+seed_note=" | seed=${WF_START_SEED}"
+if [[ -n "${WF_SEED:-}" ]]; then
+  seed_note=" | task_seed=${WF_SEED}"
+elif [[ "${WF_RUN_REPS}" != "1" ]]; then
+  seed_note=" | seeds=${WF_START_SEED}..$((WF_START_SEED + WF_RUN_REPS - 1))"
+fi
+echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_label) | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | target_repetitions=${WF_REPETITIONS}${seed_note}${resume_note} | frozen=${FROZEN_DIR}"
 
 COMMON=(
   "dataset/crop=${CROP}"

@@ -109,6 +109,88 @@ def write_manifest(path: Path, jobs: list[JobRow], *, header: str | None = None)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def target_walk_forward_seeds(*, base_seed: int, total_repetitions: int) -> list[int]:
+    if total_repetitions < 1:
+        raise ValueError(f"total_repetitions must be >= 1, got {total_repetitions}")
+    return list(range(base_seed, base_seed + total_repetitions))
+
+
+def walk_forward_seeds_for_job(
+    job: JobRow,
+    *,
+    baselines_dir: Path,
+    horizon_tag_value: str,
+    repo_root: Path,
+    base_seed: int,
+    total_repetitions: int,
+    resume: bool,
+) -> list[int]:
+    """Seeds to run for one job (full target list, or missing only when resume)."""
+    targets = target_walk_forward_seeds(
+        base_seed=base_seed, total_repetitions=total_repetitions
+    )
+    if not resume:
+        return targets
+    run_dir = _latest_run(
+        baselines_dir,
+        crop=job.crop,
+        country=job.country,
+        model_slug=job.model,
+        phase="walk_forward",
+        horizon_tag_value=horizon_tag_value,
+        repo_root=repo_root,
+    )
+    if run_dir is None:
+        return targets
+    existing = set(discover_run_seeds(run_dir))
+    return [seed for seed in targets if seed not in existing]
+
+
+def expand_walk_forward_manifest_lines(
+    jobs: list[JobRow],
+    *,
+    baselines_dir: Path,
+    horizon: str,
+    repo_root: Path,
+    base_seed: int = 42,
+    total_repetitions: int = 1,
+    resume: bool = False,
+    per_seed_for_gpu: bool = True,
+) -> list[str]:
+    """Expand manifest lines. GPU rows become one SLURM task per seed; CPU/naive stay bundled."""
+    hz_tag = horizon_tag(horizon)
+    lines: list[str] = []
+    for job in jobs:
+        if per_seed_for_gpu and job.needs_gpu == "yes":
+            seeds = walk_forward_seeds_for_job(
+                job,
+                baselines_dir=baselines_dir,
+                horizon_tag_value=hz_tag,
+                repo_root=repo_root,
+                base_seed=base_seed,
+                total_repetitions=total_repetitions,
+                resume=resume,
+            )
+            for seed in seeds:
+                lines.append(f"{job.to_line()} {seed}")
+            continue
+
+        if resume:
+            seeds = walk_forward_seeds_for_job(
+                job,
+                baselines_dir=baselines_dir,
+                horizon_tag_value=hz_tag,
+                repo_root=repo_root,
+                base_seed=base_seed,
+                total_repetitions=total_repetitions,
+                resume=True,
+            )
+            if not seeds:
+                continue
+        lines.append(job.to_line())
+    return lines
+
+
 def horizon_tag(end_of_sequence: str) -> str:
     return prediction_horizon_tag(normalize_horizon(end_of_sequence))
 
