@@ -155,6 +155,13 @@ def _family_records(
     representatives: dict[str, str],
 ) -> list[dict[str, Any]]:
     view_labels = [v["label"] for v in EVALUATION_VIEWS]
+    rep_models = [model for model in representatives.values() if model in medians.index]
+    rel_all = (
+        relative_scores(medians.loc[rep_models].copy())
+        if rep_models
+        else pd.DataFrame()
+    )
+
     rows: list[dict[str, Any]] = []
     for family, model in representatives.items():
         if model not in medians.index:
@@ -164,10 +171,12 @@ def _family_records(
         for view in EVALUATION_VIEWS:
             val = raw_row.get(view["metric"])
             raw[view["metric"]] = None if pd.isna(val) else round(float(val), 4)
-        frame = medians.loc[[model]].copy()
-        rel = relative_scores(frame)
         relative = {
-            label: round(float(rel[label].iloc[0]), 4) if label in rel.columns else None
+            label: (
+                round(float(rel_all[label].loc[model]), 4)
+                if label in rel_all.columns and model in rel_all.index
+                else None
+            )
             for label in view_labels
         }
         rows.append(
