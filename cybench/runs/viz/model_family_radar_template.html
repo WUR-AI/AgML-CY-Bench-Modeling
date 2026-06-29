@@ -106,6 +106,43 @@
     .back { margin-bottom: 0.75rem; }
     .back a { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
     .back a:hover { text-decoration: underline; }
+    .scatter-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+    @media (max-width: 720px) {
+      .scatter-grid { grid-template-columns: 1fr; }
+    }
+    .scatter-panel {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem;
+      background: #fcfcfd;
+    }
+    .scatter-panel h3 {
+      margin: 0 0 0.35rem;
+      font-size: 0.95rem;
+    }
+    .scatter-panel svg { display: block; width: 100%; height: auto; }
+    .scatter-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.65rem;
+      margin-top: 0.35rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .scatter-legend span::before {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 0.25rem;
+      background: currentColor;
+      vertical-align: middle;
+    }
   </style>
 </head>
 <body>
@@ -149,6 +186,17 @@
         </table>
       </div>
     </div>
+
+    <div class="card">
+      <h2>Performance vs test samples</h2>
+      <p class="muted">Each point is one crop×country dataset. X-axis: pooled walk-forward test rows (region-years).</p>
+      <div class="controls">
+        <label>Metric
+          <select id="scatter-metric-select"></select>
+        </label>
+      </div>
+      <div class="scatter-grid" id="scatter-grid"></div>
+    </div>
   </div>
 
   <script>
@@ -161,8 +209,29 @@
     const legendEl = document.getElementById("legend");
     const viewList = document.getElementById("view-list");
     const metricsTable = document.getElementById("metrics-table");
+    const scatterMetricSelect = document.getElementById("scatter-metric-select");
+    const scatterGrid = document.getElementById("scatter-grid");
+
+    const MODEL_COLORS = [
+      "#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51",
+      "#6d597a", "#b56576", "#355070", "#0081a7", "#00afb9",
+      "#8338ec", "#3a86ff",
+    ];
 
     normNote.textContent = DATA.normalization_note || "";
+
+    (DATA.sample_scatter_metrics || []).forEach(m => {
+      const opt = document.createElement("option");
+      opt.value = m.key;
+      opt.textContent = m.label;
+      scatterMetricSelect.appendChild(opt);
+    });
+    if (!scatterMetricSelect.options.length) {
+      const opt = document.createElement("option");
+      opt.value = "r2";
+      opt.textContent = "Overall R²";
+      scatterMetricSelect.appendChild(opt);
+    }
 
     const horizonLabels = { eos: "End of season", mid: "Mid-season" };
     Object.keys(DATA.by_horizon).forEach(hz => {
@@ -256,6 +325,85 @@
       `).join("");
     }
 
+    function currentScatterFamilies() {
+      const hz = horizonSelect.value;
+      const crop = cropSelect.value;
+      return ((DATA.sample_scatter || {})[hz] || {})[crop] || [];
+    }
+
+    function modelColor(model, idx) {
+      return MODEL_COLORS[idx % MODEL_COLORS.length];
+    }
+
+    function renderScatterFamilies() {
+      const metricKey = scatterMetricSelect.value || "r2";
+      const families = currentScatterFamilies();
+      if (!families.length) {
+        scatterGrid.innerHTML = '<p class="muted">No scatter data for this selection.</p>';
+        return;
+      }
+
+      scatterGrid.innerHTML = families.map(fam => {
+        const points = (fam.points || []).filter(
+          p => p.metrics && p.metrics[metricKey] !== null && p.metrics[metricKey] !== undefined
+        );
+        if (!points.length) {
+          return `<div class="scatter-panel"><h3>${fam.family}</h3><p class="muted">No data</p></div>`;
+        }
+
+        const width = 360;
+        const height = 260;
+        const pad = { l: 48, r: 12, t: 16, b: 40 };
+        const innerW = width - pad.l - pad.r;
+        const innerH = height - pad.t - pad.b;
+
+        const xs = points.map(p => p.n_samples);
+        const ys = points.map(p => p.metrics[metricKey]);
+        const xMin = Math.min(...xs);
+        const xMax = Math.max(...xs);
+        const yMin = Math.min(-0.2, ...ys);
+        const yMax = Math.max(1.0, ...ys);
+        const xScale = v => pad.l + ((v - xMin) / (xMax - xMin || 1)) * innerW;
+        const yScale = v => pad.t + innerH - ((v - yMin) / (yMax - yMin || 1)) * innerH;
+
+        const models = [...new Set(points.map(p => p.model))];
+        const modelIdx = Object.fromEntries(models.map((m, i) => [m, i]));
+
+        let svg = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${fam.family} scatter">`;
+        svg += `<rect x="${pad.l}" y="${pad.t}" width="${innerW}" height="${innerH}" fill="#fff" stroke="#e6eaef"/>`;
+        if (yMin < 0 && yMax > 0) {
+          const y0 = yScale(0);
+          svg += `<line x1="${pad.l}" y1="${y0}" x2="${pad.l + innerW}" y2="${y0}" stroke="#bbb" stroke-dasharray="4 3"/>`;
+        }
+        for (let i = 0; i <= 4; i++) {
+          const tx = xMin + (i / 4) * (xMax - xMin);
+          const ty = yMin + (i / 4) * (yMax - yMin);
+          svg += `<text x="${xScale(tx)}" y="${height - 8}" text-anchor="middle" font-size="10" fill="#656d76">${Math.round(tx)}</text>`;
+          svg += `<text x="8" y="${yScale(ty) + 3}" text-anchor="start" font-size="10" fill="#656d76">${ty.toFixed(2)}</text>`;
+        }
+        svg += `<text x="${pad.l + innerW / 2}" y="${height - 2}" text-anchor="middle" font-size="11" fill="#1f2328">Test samples</text>`;
+        svg += `<text x="14" y="${pad.t + innerH / 2}" text-anchor="middle" font-size="11" fill="#1f2328" transform="rotate(-90 14 ${pad.t + innerH / 2})">R²</text>`;
+
+        points.forEach(p => {
+          const cx = xScale(p.n_samples);
+          const cy = yScale(p.metrics[metricKey]);
+          const col = modelColor(p.model, modelIdx[p.model]);
+          svg += `<circle cx="${cx}" cy="${cy}" r="5" fill="${col}" fill-opacity="0.85" stroke="#fff" stroke-width="1">
+            <title>${p.display_name} · ${p.dataset}\nN=${p.n_samples}, ${metricKey}=${p.metrics[metricKey]}</title>
+          </circle>`;
+        });
+        svg += "</svg>";
+
+        const legend = models.map(m => {
+          const label = points.find(p => p.model === m)?.display_name || m;
+          const col = modelColor(m, modelIdx[m]);
+          return `<span style="color:${col}">${label}</span>`;
+        }).join("");
+
+        return `<div class="scatter-panel"><h3>${fam.family}</h3>${svg}<div class="scatter-legend">${legend}</div></div>`;
+      }).join("");
+    }
+
     function renderTable(families) {
       const metricByLabel = Object.fromEntries(DATA.views.map(v => [v.label, v.metric]));
       const headers = ["Family", "Representative", ...DATA.views.map(v => v.label)];
@@ -281,6 +429,7 @@
       renderRadar(families);
       renderLegend(families);
       renderTable(families);
+      renderScatterFamilies();
     }
 
     horizonSelect.addEventListener("change", () => {
@@ -288,6 +437,7 @@
       render();
     });
     cropSelect.addEventListener("change", render);
+    scatterMetricSelect.addEventListener("change", renderScatterFamilies);
 
     renderViewList();
     populateCropOptions();

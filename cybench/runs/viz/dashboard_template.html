@@ -251,8 +251,10 @@
       { key: "region_year_r", label: "r", group: "Region-Year", higherBetter: true, title: "Pearson r on all region-year rows" },
       { key: "region_year_r2", label: "R²", group: "Region-Year", higherBetter: true, title: "R² on all region-year rows" },
       { key: "region_year_nrmse", label: "NRMSE", group: "Region-Year", higherBetter: false, title: "Normalized RMSE on absolute yields" },
-      { key: "spatial_r2", label: "R² (med/yr)", group: "Spatial", higherBetter: true, title: "Median across years of within-year cross-region R²" },
-      { key: "temporal_r2", label: "R² (med/reg)", group: "Temporal", higherBetter: true, title: "Median across regions of within-region cross-year R²" },
+      { key: "spatial_r2", label: "R² (med/yr)", group: "Spatial", higherBetter: true, title: "Median across years of within-year cross-region R² (years with ≥3 regions)" },
+      { key: "spatial_r2_agg", label: "R² (agg)", group: "Spatial", higherBetter: true, title: "R² on regional mean yields (mean across years per region)" },
+      { key: "temporal_r2", label: "R² (med/reg)", group: "Temporal", higherBetter: true, title: "Median across regions of within-region cross-year R² (regions with ≥3 years)" },
+      { key: "temporal_r2_agg", label: "R² (agg)", group: "Temporal", higherBetter: true, title: "R² on national mean yield series across years" },
       { key: "anomaly_r2", label: "R² (med/reg)", group: "Anomaly", higherBetter: true, title: "Median across regions of R² on yield minus regional mean" },
     ];
 
@@ -262,7 +264,9 @@
       region_year_r2: { min: 0, max: 1, higherBetter: true },
       region_year_nrmse: { min: 0, max: 0.5, higherBetter: false },
       spatial_r2: { min: 0, max: 1, higherBetter: true },
+      spatial_r2_agg: { min: 0, max: 1, higherBetter: true },
       temporal_r2: { min: 0, max: 1, higherBetter: true },
+      temporal_r2_agg: { min: 0, max: 1, higherBetter: true },
       anomaly_r2: { min: 0, max: 1, higherBetter: true },
     };
 

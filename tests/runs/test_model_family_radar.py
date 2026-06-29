@@ -9,6 +9,7 @@ import pandas as pd
 from cybench.runs.analysis.build_model_family_radar_dashboard import build_radar_html
 from cybench.runs.analysis.model_family_radar_lib import (
     build_radar_payload,
+    build_sample_scatter_slice,
     pick_representatives,
     relative_scores,
 )
@@ -20,9 +21,12 @@ def _summary_row(model: str, **metrics: float) -> dict:
         "country": "DE",
         "model": model,
         "batch_horizon": "eos",
+        "n_samples": 500,
         "r2": 0.5,
         "r2_spatial": 0.4,
+        "r2_spatial_agg": 0.45,
         "r2_temporal": 0.3,
+        "r2_temporal_agg": 0.35,
         "r2_anomaly": 0.2,
     }
     base.update(metrics)
@@ -82,6 +86,25 @@ def test_build_radar_payload_structure(tmp_path: Path):
     }
     assert families["Feature-Engineered ML"]["relative"]["Overall"] == 1.0
     assert families["Process-Based"]["relative"]["Overall"] == 0.0
+    assert "sample_scatter" in payload
+    eos_scatter = payload["sample_scatter"]["eos"]["all"]
+    assert any(f["family"] == "Tabular Foundation" for f in eos_scatter)
+
+
+def test_build_sample_scatter_slice_groups_by_family():
+    df = pd.DataFrame(
+        [
+            _summary_row("lightgbm", n_samples=400, r2=0.8, batch_horizon="eos"),
+            _summary_row("tabpfn", n_samples=600, r2=0.75, batch_horizon="eos"),
+            _summary_row("lightgbm", n_samples=300, r2=0.7, batch_horizon="mid", country="FR"),
+        ]
+    )
+    eos = build_sample_scatter_slice(df, batch_horizon="eos")
+    ml = next(f for f in eos if f["family"] == "Feature-Engineered ML")
+    assert len(ml["points"]) == 1
+    assert ml["points"][0]["n_samples"] == 400
+    tab = next(f for f in eos if f["family"] == "Tabular Foundation")
+    assert tab["points"][0]["metrics"]["r2"] == 0.75
 
 
 def test_build_radar_html_embeds_payload(tmp_path: Path):

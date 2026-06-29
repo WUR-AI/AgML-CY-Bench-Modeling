@@ -187,6 +187,93 @@ def _family_records(
     return rows
 
 
+def family_for_model(model: str) -> str | None:
+    for family, models in MODEL_FAMILIES.items():
+        if model in models:
+            return family
+    return None
+
+
+SAMPLE_SCATTER_METRICS: tuple[dict[str, str], ...] = (
+    {"key": "r2", "label": "Overall R²"},
+    {"key": "r2_spatial", "label": "Spatial R² (med/yr)"},
+    {"key": "r2_spatial_agg", "label": "Spatial R² (agg)"},
+    {"key": "r2_temporal", "label": "Temporal R² (med/reg)"},
+    {"key": "r2_temporal_agg", "label": "Temporal R² (agg)"},
+    {"key": "r2_anomaly", "label": "Anomaly R² (med/reg)"},
+)
+
+
+def build_sample_scatter_slice(
+    df: pd.DataFrame,
+    *,
+    batch_horizon: str,
+    crop: str | None = None,
+) -> list[dict[str, Any]]:
+    """Per-family points for performance vs pooled test sample count."""
+    work = df[df["batch_horizon"] == batch_horizon].copy() if "batch_horizon" in df.columns else df
+    if crop:
+        work = work[work["crop"] == crop]
+    if work.empty:
+        return []
+
+    metric_keys = [m["key"] for m in SAMPLE_SCATTER_METRICS]
+    for key in metric_keys + ["n_samples"]:
+        if key in work.columns:
+            work[key] = pd.to_numeric(work[key], errors="coerce")
+
+    families_out: list[dict[str, Any]] = []
+    for family, members in MODEL_FAMILIES.items():
+        sub = work[work["model"].isin(members)].copy()
+        if sub.empty:
+            continue
+        points: list[dict[str, Any]] = []
+        for _, row in sub.iterrows():
+            n_samples = row.get("n_samples")
+            if pd.isna(n_samples) or int(n_samples) <= 0:
+                continue
+            model = str(row["model"])
+            point: dict[str, Any] = {
+                "model": model,
+                "display_name": MODEL_DISPLAY_NAMES.get(model, model),
+                "country": str(row.get("country", "")),
+                "crop": str(row.get("crop", "")),
+                "dataset": f"{row.get('crop', '')}_{row.get('country', '')}",
+                "n_samples": int(n_samples),
+                "metrics": {},
+            }
+            for metric in metric_keys:
+                val = row.get(metric)
+                point["metrics"][metric] = (
+                    None if val is None or pd.isna(val) else round(float(val), 4)
+                )
+            points.append(point)
+        if points:
+            families_out.append(
+                {
+                    "family": family,
+                    "color": FAMILY_COLORS.get(family, "#666"),
+                    "points": points,
+                }
+            )
+    return families_out
+
+
+def build_sample_scatter_payload(df: pd.DataFrame) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    by_horizon: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for hz in ("eos", "mid"):
+        if "batch_horizon" in df.columns and hz not in set(df["batch_horizon"].astype(str)):
+            continue
+        by_crop: dict[str, list[dict[str, Any]]] = {
+            "all": build_sample_scatter_slice(df, batch_horizon=hz),
+        }
+        if "crop" in df.columns:
+            for crop in sorted({str(c) for c in df["crop"].dropna().unique()}):
+                by_crop[crop] = build_sample_scatter_slice(df, batch_horizon=hz, crop=crop)
+        by_horizon[hz] = by_crop
+    return by_horizon
+
+
 def build_radar_slice(
     df: pd.DataFrame,
     *,
@@ -250,6 +337,8 @@ def build_radar_payload(
             for family, models in MODEL_FAMILIES.items()
         },
         "by_horizon": by_horizon,
+        "sample_scatter_metrics": list(SAMPLE_SCATTER_METRICS),
+        "sample_scatter": build_sample_scatter_payload(df),
         "normalization_note": (
             "Each axis is min–max normalized across all models in the selected horizon "
             "and crop filter. Radar vertices show one representative per family; radii "

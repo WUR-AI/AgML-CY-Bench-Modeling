@@ -11,6 +11,9 @@ import pandas as pd
 from cybench.config import KEY_LOC, KEY_TARGET, KEY_YEAR
 
 # Minimum points per slice for median view metrics (and temporal panel regional lines).
+# R² with fewer than three points is unstable (two points always fit a line; one is
+# undefined). Aggregate-then-R² metrics intentionally use all slices and only need
+# two aggregate points — slice counts are reported separately for transparency.
 MIN_SLICE_YEARS = 3
 MIN_SLICE_REGIONS = 3
 
@@ -47,6 +50,49 @@ def calc_nrmse(y_true: npt.ArrayLike, y_pred: npt.ArrayLike) -> float:
     return float("nan") if denom == 0 else float(rmse / denom)
 
 
+def _yearly_r2_values(
+    df: pd.DataFrame,
+    target_col: str,
+    model_col: str,
+    *,
+    loc_col: str = KEY_LOC,
+    year_col: str = KEY_YEAR,
+    min_regions: int = MIN_SLICE_REGIONS,
+) -> list[float]:
+    """Per-year cross-region R² values that pass the minimum-region filter."""
+    yearly_r2: list[float] = []
+    for _, year_df in df.groupby(year_col):
+        if year_df[loc_col].nunique() < min_regions:
+            continue
+        _, r2 = calc_r_r2(
+            year_df[target_col].values,
+            year_df[model_col].values,
+        )
+        yearly_r2.append(r2)
+    return yearly_r2
+
+
+def _regional_r2_values(
+    df: pd.DataFrame,
+    target_col: str,
+    model_col: str,
+    *,
+    loc_col: str = KEY_LOC,
+    min_years: int = MIN_SLICE_YEARS,
+) -> list[float]:
+    """Per-region cross-year R² values that pass the minimum-year filter."""
+    regional_r2: list[float] = []
+    for _, loc_df in df.groupby(loc_col):
+        if len(loc_df) < min_years:
+            continue
+        _, r2 = calc_r_r2(
+            loc_df[target_col].values,
+            loc_df[model_col].values,
+        )
+        regional_r2.append(r2)
+    return regional_r2
+
+
 def calc_median_yearly_r2(
     df: pd.DataFrame,
     target_col: str,
@@ -57,15 +103,14 @@ def calc_median_yearly_r2(
     min_regions: int = MIN_SLICE_REGIONS,
 ) -> float:
     """Median of per-year R², where each year's R² is computed across regions."""
-    yearly_r2: list[float] = []
-    for _, year_df in df.groupby(year_col):
-        if year_df[loc_col].nunique() < min_regions:
-            continue
-        _, r2 = calc_r_r2(
-            year_df[target_col].values,
-            year_df[model_col].values,
-        )
-        yearly_r2.append(r2)
+    yearly_r2 = _yearly_r2_values(
+        df,
+        target_col,
+        model_col,
+        loc_col=loc_col,
+        year_col=year_col,
+        min_regions=min_regions,
+    )
     if not yearly_r2:
         return float("nan")
     return float(np.nanmedian(yearly_r2))
@@ -82,15 +127,13 @@ def calc_median_regional_r2(
 ) -> float:
     """Median of per-region R², where each region's R² is computed across years."""
     del year_col  # API symmetry with yearly helper; years come from row groups.
-    regional_r2: list[float] = []
-    for _, loc_df in df.groupby(loc_col):
-        if len(loc_df) < min_years:
-            continue
-        _, r2 = calc_r_r2(
-            loc_df[target_col].values,
-            loc_df[model_col].values,
-        )
-        regional_r2.append(r2)
+    regional_r2 = _regional_r2_values(
+        df,
+        target_col,
+        model_col,
+        loc_col=loc_col,
+        min_years=min_years,
+    )
     if not regional_r2:
         return float("nan")
     return float(np.nanmedian(regional_r2))
@@ -160,18 +203,27 @@ def compute_report_metrics(
 
     Views:
       - region_year: pooled region-year rows (r, R², NRMSE, pooled anomaly r/R²)
-      - spatial: typical-year cross-region R² (median over years); climatology map r/R²
-      - temporal: typical-region cross-year R² (median over regions); aggregate series r/R²
+      - spatial: median per-year cross-region R²; regional-mean map r/R² (agg across years)
+      - temporal: median per-region cross-year R²; mean-across-regions series r/R²
       - anomaly: typical-region R² on residuals; pooled anomaly r/R²
+
+    Slice medians require at least MIN_SLICE_REGIONS / MIN_SLICE_YEARS points per
+    slice. Aggregate metrics pool all region-years first and only need two aggregate
+    points; n_slices_* counts how many slices contributed to each median.
     """
     complete = df[target_col].notna() & df[model_col].notna()
     df = df.loc[complete].copy()
     region_year = get_metrics_dict(df, target_col, model_col, loc_col=loc_col)
 
-    spatial_clim = df.groupby(loc_col)[[target_col, model_col]].mean()
-    r_spatial_clim, r2_spatial_clim = calc_r_r2(
-        spatial_clim[target_col].values,
-        spatial_clim[model_col].values,
+    yearly_r2 = _yearly_r2_values(
+        df, target_col, model_col, loc_col=loc_col, year_col=year_col
+    )
+    regional_r2 = _regional_r2_values(df, target_col, model_col, loc_col=loc_col)
+
+    spatial_agg = df.groupby(loc_col)[[target_col, model_col]].mean()
+    r_spatial_agg, r2_spatial_agg = calc_r_r2(
+        spatial_agg[target_col].values,
+        spatial_agg[model_col].values,
     )
 
     temporal_agg = df.groupby(year_col)[[target_col, model_col]].mean().sort_index()
@@ -186,16 +238,14 @@ def compute_report_metrics(
         "n_samples": int(len(df)),
         "region_year": region_year,
         "spatial": {
-            "r2_typical_year": calc_median_yearly_r2(
-                df, target_col, model_col, loc_col=loc_col, year_col=year_col
-            ),
-            "r_climatology": r_spatial_clim,
-            "r2_climatology": r2_spatial_clim,
+            "r2_typical_year": float(np.nanmedian(yearly_r2)) if yearly_r2 else float("nan"),
+            "n_slices_years": len(yearly_r2),
+            "r_aggregate": r_spatial_agg,
+            "r2_aggregate": r2_spatial_agg,
         },
         "temporal": {
-            "r2_typical_region": calc_median_regional_r2(
-                df, target_col, model_col, loc_col=loc_col, year_col=year_col
-            ),
+            "r2_typical_region": float(np.nanmedian(regional_r2)) if regional_r2 else float("nan"),
+            "n_slices_regions": len(regional_r2),
             "r_aggregate": r_temporal_agg,
             "r2_aggregate": r2_temporal_agg,
         },
@@ -218,7 +268,7 @@ def format_report_metrics(metrics: dict[str, Any]) -> str:
     return (
         f"region-year r={ry['r']:.2f} R²={ry['r2']:.2f} NRMSE={ry['nrmse']:.2f} | "
         f"spatial R²(med/yr)={sp['r2_typical_year']:.2f} "
-        f"clim R²={sp['r2_climatology']:.2f} | "
+        f"agg R²={sp['r2_aggregate']:.2f} | "
         f"temporal R²(med/reg)={tm['r2_typical_region']:.2f} "
         f"agg R²={tm['r2_aggregate']:.2f} | "
         f"anomaly R²(med/reg)={an['r2_typical_region']:.2f} "

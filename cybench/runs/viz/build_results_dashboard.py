@@ -273,7 +273,9 @@ def _view_metric_values_from_report(report: dict) -> list[tuple[str, str, Option
         ("region_year", "r2", safe_float(ry.get("r2"))),
         ("region_year", "nrmse", safe_float(ry.get("nrmse"))),
         ("spatial", "r2", safe_float(sp.get("r2_typical_year"))),
+        ("spatial", "r2_agg", safe_float(sp.get("r2_aggregate", sp.get("r2_climatology")))),
         ("temporal", "r2", safe_float(tm.get("r2_typical_region"))),
+        ("temporal", "r2_agg", safe_float(tm.get("r2_aggregate"))),
         ("anomaly", "r2", safe_float(an.get("r2_typical_region"))),
     ]
 
@@ -302,10 +304,24 @@ def _view_metric_values_from_stats(s: dict) -> list[tuple[str, str, Optional[flo
             safe_float(sp.get("r2_typical_year", sp.get("r2"))),
         ),
         (
+            "spatial",
+            "r2_agg",
+            safe_float(sp.get("r2_aggregate", sp.get("r2_climatology", sp.get("r2")))),
+        ),
+        (
             "temporal",
             "r2",
             safe_float(
                 tm.get("r2_typical_region", s.get("r2_time_model"))
+                if tm
+                else s.get("r2_time_model")
+            ),
+        ),
+        (
+            "temporal",
+            "r2_agg",
+            safe_float(
+                tm.get("r2_aggregate", s.get("r2_time_model"))
                 if tm
                 else s.get("r2_time_model")
             ),

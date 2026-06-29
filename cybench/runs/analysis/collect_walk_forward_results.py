@@ -414,6 +414,38 @@ def export_year_csvs(df: pd.DataFrame, run: BenchmarkRun, dest_dir: Path) -> Non
         year_df.to_csv(dest_dir / out_name, index=False, float_format="%.6f")
 
 
+def write_dashboard_metrics_overlay(
+    dest_dir: Path,
+    *,
+    dataset: str,
+    summary: dict[str, Any],
+) -> None:
+    """Per-dataset region-year metrics for plot annotations (matches walk_forward_summary)."""
+    path = dest_dir / "dashboard_metrics.json"
+    overlays: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                overlays = loaded
+        except (OSError, json.JSONDecodeError):
+            overlays = {}
+    overlays[dataset] = {
+        "r": summary.get("r"),
+        "r2": summary.get("r2"),
+        "nrmse": summary.get("nrmse"),
+        "n_samples": summary.get("n_samples"),
+        "n_regions": summary.get("n_regions"),
+        "n_years": summary.get("n_years"),
+        "n_seeds": summary.get("n_seeds"),
+        "r_std": summary.get("r_std"),
+        "r2_std": summary.get("r2_std"),
+        "nrmse_std": summary.get("nrmse_std"),
+        "plot_seed": summary.get("plot_seed"),
+    }
+    path.write_text(json.dumps(overlays, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def _run_matches_horizon(run: BenchmarkRun, horizon: str | None) -> bool:
     if not horizon:
         return True
@@ -605,6 +637,10 @@ def main() -> None:
 
         model_preds_dir = preds_root / f"{run.model}_{run.horizon}"
         export_year_csvs(plot_df, run, model_preds_dir)
+        summary_for_overlay = {**summary, "plot_seed": plot_seed}
+        write_dashboard_metrics_overlay(
+            model_preds_dir, dataset=run.dataset, summary=summary_for_overlay
+        )
         plot_key = f"{run.model}_{run.horizon}"
         models_to_plot[plot_key] = (model_preds_dir, model_col)
 

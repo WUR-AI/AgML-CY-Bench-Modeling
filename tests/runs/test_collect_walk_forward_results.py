@@ -207,7 +207,7 @@ def test_summary_rows_to_dashboard_records(tmp_path: Path):
             "r2": -1.46,
             "nrmse": 0.31,
             "r2_spatial": 0.42,
-            "r2_spatial_clim": -0.93,
+            "r2_spatial_agg": -0.93,
             "r2_temporal": -0.55,
             "r2_temporal_agg": -5.10,
             "r2_anomaly": -0.80,

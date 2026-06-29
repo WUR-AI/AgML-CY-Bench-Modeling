@@ -68,9 +68,11 @@ def test_compute_report_metrics_views():
     assert out["n_years"] == 3
     assert out["n_samples"] == 9
     assert np.isfinite(out["spatial"]["r2_typical_year"])
+    assert out["spatial"]["n_slices_years"] == 3
     assert np.isfinite(out["temporal"]["r2_typical_region"])
+    assert out["temporal"]["n_slices_regions"] == 3
     assert np.isfinite(out["anomaly"]["r2_typical_region"])
-    assert np.isfinite(out["spatial"]["r2_climatology"])
+    assert np.isfinite(out["spatial"]["r2_aggregate"])
     assert np.isfinite(out["temporal"]["r2_aggregate"])
 
 

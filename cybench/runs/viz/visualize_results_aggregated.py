@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-import os
-import re
-import json
-import argparse
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 import numpy as np
@@ -82,13 +79,48 @@ def discover_inputs(results_dir: str) -> Dict[str, List[str]]:
     return groups
 
 
+def _load_dashboard_metrics_overlay(
+    results_dir: str | None, dataset_key: str
+) -> dict[str, Any] | None:
+    """Region-year metrics from collect (walk_forward_summary), if dashboard_metrics.json exists."""
+    if not results_dir:
+        return None
+    path = os.path.join(results_dir, "dashboard_metrics.json")
+    if not os.path.isfile(path):
+        return None
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    entry = raw.get(dataset_key)
+    return entry if isinstance(entry, dict) else None
+
+
+def _region_year_metrics_from_overlay(overlay: dict[str, Any]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for key in ("r", "r2", "nrmse"):
+        val = overlay.get(key)
+        if val is not None and not (isinstance(val, float) and np.isnan(val)):
+            out[key] = float(val)
+    return out
+
+
 def load_and_clean_data(
-    csv_files: List[str], target_model_to_plot: str, min_years: int, dataset_key: str = ""
+    csv_files: List[str],
+    target_model_to_plot: str,
+    min_years: int,
+    dataset_key: str = "",
+    *,
+    trust_collect_export: bool = False,
 ) -> Tuple[Optional[pd.DataFrame], str]:
     """
     Loads CSVs and applies strict filtering:
     1. Enforce numeric types for Target and ALL Models.
-    2. Skip YEARS where < 50% of the dataset's regions have valid data (for all columns).
+    2. Unless ``trust_collect_export``, skip YEARS where < 50% of regions have
+       valid data (for all columns). Collect exports already QC-filtered rows;
+       re-applying this step changes N and r relative to the dashboard table.
     3. Drop remaining individual rows with missing data.
     """
     try:
@@ -123,65 +155,65 @@ def load_and_clean_data(
     # ---------------------------------------------------------
     # 4. Filter Years based on Spatial Coverage
     # ---------------------------------------------------------
+    if not trust_collect_export:
+        # Calculate mask of valid rows (finite in ALL relevant cols)
+        valid_mask = _complete_rows_mask(df, cols_to_check)
 
-    # Calculate mask of valid rows (finite in ALL relevant cols)
-    valid_mask = _complete_rows_mask(df, cols_to_check)
+        # If a region is entirely NaN for all years, it shouldn't count towards the "total" we expect.
+        valid_locations_universe = df.loc[valid_mask, KEY_LOC].unique()
+        total_regions = len(valid_locations_universe)
 
-    # If a region is entirely NaN for all years, it shouldn't count towards the "total" we expect.
-    valid_locations_universe = df.loc[valid_mask, KEY_LOC].unique()
-    total_regions = len(valid_locations_universe)
+        if total_regions > 0:
+            # Count unique regions having valid data per year
+            regions_per_year = cast(
+                pd.Series, df[valid_mask].groupby("year")[KEY_LOC].nunique()
+            )
+            all_regions_per_year = df.groupby("year")[KEY_LOC].nunique()
 
-    if total_regions > 0:
-        # Count unique regions having valid data per year
-        regions_per_year = cast(
-            pd.Series, df[valid_mask].groupby("year")[KEY_LOC].nunique()
-        )
-        all_regions_per_year = df.groupby("year")[KEY_LOC].nunique()
+            # Report how many regions are removed per year because of missing model/target values.
+            removed_regions_per_year = (all_regions_per_year - regions_per_year).fillna(0).astype(int)
+            removed_regions_per_year = removed_regions_per_year[removed_regions_per_year > 0]
+            if len(removed_regions_per_year) > 0:
+                key_prefix = f"{dataset_key}: " if dataset_key else ""
+                print(
+                    f"[INFO] {key_prefix}regions removed by validity filter per year "
+                    f"(year:count) -> "
+                    + ", ".join(f"{int(y)}:{int(c)}" for y, c in removed_regions_per_year.items())
+                )
 
-        # Report how many regions are removed per year because of missing model/target values.
-        removed_regions_per_year = (all_regions_per_year - regions_per_year).fillna(0).astype(int)
-        removed_regions_per_year = removed_regions_per_year[removed_regions_per_year > 0]
-        if len(removed_regions_per_year) > 0:
+            # Determine valid years
+            min_required = int(np.ceil(YEAR_COVERAGE_THRESHOLD * total_regions))
+            valid_years = _index_as_list(
+                cast(pd.Series, regions_per_year[regions_per_year >= min_required]).index
+            )
+            all_years = sorted(df["year"].unique())
             key_prefix = f"{dataset_key}: " if dataset_key else ""
+
+            per_year_coverage = []
+            for year in all_years:
+                available_regions = _series_int_at(regions_per_year, year)
+                status = "KEEP" if available_regions >= min_required else "SKIP"
+                per_year_coverage.append(
+                    f"{int(year)}={available_regions}/{total_regions} ({status})"
+                )
             print(
-                f"[INFO] {key_prefix}regions removed by validity filter per year "
-                f"(year:count) -> "
-                + ", ".join(f"{int(y)}:{int(c)}" for y, c in removed_regions_per_year.items())
+                f"[INFO] {key_prefix}year coverage check "
+                f"(threshold={min_required}/{total_regions} regions): "
+                + ", ".join(per_year_coverage)
             )
 
-        # Determine valid years
-        min_required = int(np.ceil(YEAR_COVERAGE_THRESHOLD * total_regions))
-        valid_years = _index_as_list(
-            cast(pd.Series, regions_per_year[regions_per_year >= min_required]).index
-        )
-        all_years = sorted(df["year"].unique())
-        key_prefix = f"{dataset_key}: " if dataset_key else ""
+            skipped_years = sorted(set(df["year"].unique()) - set(valid_years))
+            if skipped_years:
+                print(
+                    f"[INFO] {key_prefix}skipping year(s) for low spatial coverage "
+                    f"(threshold={min_required}/{total_regions} regions): {skipped_years}"
+                )
 
-        per_year_coverage = []
-        for year in all_years:
-            available_regions = _series_int_at(regions_per_year, year)
-            status = "KEEP" if available_regions >= min_required else "SKIP"
-            per_year_coverage.append(
-                f"{int(year)}={available_regions}/{total_regions} ({status})"
-            )
-        print(
-            f"[INFO] {key_prefix}year coverage check "
-            f"(threshold={min_required}/{total_regions} regions): "
-            + ", ".join(per_year_coverage)
-        )
-
-        skipped_years = sorted(set(df["year"].unique()) - set(valid_years))
-        if skipped_years:
-            print(
-                f"[INFO] {key_prefix}skipping year(s) for low spatial coverage "
-                f"(threshold={min_required}/{total_regions} regions): {skipped_years}"
-            )
-
-        # Filter the DataFrame to keep only valid years
-        df = df[df["year"].isin(valid_years)].copy()
-    else:
-        # If no valid regions exist at all, return empty early
-        return None, "no_valid_regions_found"
+            # Filter the DataFrame to keep only valid years
+            df = df[df["year"].isin(valid_years)].copy()
+        else:
+            # If no valid regions exist at all, return empty early
+            return None, "no_valid_regions_found"
 
     # ---------------------------------------------------------
     # 5. Strict Row Filtering (Intersection of Validity)
@@ -221,15 +253,15 @@ def generate_markdown_table(stats_list: List[dict]) -> str:
     md += (
         "|  |  |  | "
         "r | R² | NRMSE | "
-        "R² (med/yr) | "
-        "R² (med/reg) | "
+        "R² (med/yr) | R² (agg) | "
+        "R² (med/reg) | R² (agg) | "
         "R² (med/reg) |\n"
     )
     md += (
         "| :--- | ---: | ---: | "
         "---: | ---: | ---: | "
-        "---: | "
-        "---: | "
+        "---: | ---: | "
+        "---: | ---: | "
         "---: |\n"
     )
 
@@ -263,7 +295,9 @@ def generate_markdown_table(stats_list: List[dict]) -> str:
             f"| {style(fmt(mod['r2']))} "
             f"| {style(fmt(mod['nrmse']))} "
             f"| {style(fmt(sp['r2_typical_year']))} "
+            f"| {style(fmt(sp.get('r2_aggregate', sp.get('r2_climatology'))))} "
             f"| {style(fmt(tm['r2_typical_region']))} "
+            f"| {style(fmt(tm['r2_aggregate']))} "
             f"| {style(fmt(an['r2_typical_region']))} |"
         )
         md += row + "\n"
@@ -298,14 +332,14 @@ th.left, td.left { text-align: left; }
       <th rowspan="2">N_regions</th>
       <th rowspan="2">N_years</th>
       <th colspan="3">Region-Year</th>
-      <th colspan="1">Spatial</th>
-      <th colspan="1">Temporal</th>
+      <th colspan="2">Spatial</th>
+      <th colspan="2">Temporal</th>
       <th colspan="1">Anomaly</th>
     </tr>
     <tr>
       <th>r</th><th>R²</th><th>NRMSE</th>
-      <th>R² (med/yr)</th>
-      <th>R² (med/reg)</th>
+      <th>R² (med/yr)</th><th>R² (agg)</th>
+      <th>R² (med/reg)</th><th>R² (agg)</th>
       <th>R² (med/reg)</th>
     </tr>
   </thead>
@@ -331,7 +365,9 @@ th.left, td.left { text-align: left; }
             f"<td>{fmt(mod['r2'])}</td>"
             f"<td>{fmt(mod['nrmse'])}</td>"
             f"<td>{fmt(sp['r2_typical_year'])}</td>"
+            f"<td>{fmt(sp.get('r2_aggregate', sp.get('r2_climatology')))}</td>"
             f"<td>{fmt(tm['r2_typical_region'])}</td>"
+            f"<td>{fmt(tm['r2_aggregate'])}</td>"
             f"<td>{fmt(an['r2_typical_region'])}</td>"
             "</tr>\n"
         )
@@ -411,7 +447,9 @@ def generate_local_report_html(stats_list: List[dict], pdf_filename: str) -> str
         <td>{m['r2']:.2f}</td>
         <td>{m['nrmse']:.2f}</td>
         <td>{sp['r2_typical_year']:.2f}</td>
+        <td>{sp.get('r2_aggregate', sp.get('r2_climatology', float('nan'))):.2f}</td>
         <td>{tm['r2_typical_region']:.2f}</td>
+        <td>{tm['r2_aggregate']:.2f}</td>
         <td>{an['r2_typical_region']:.2f}</td>
       </tr>
 """
@@ -448,14 +486,14 @@ def generate_local_report_html(stats_list: List[dict], pdf_filename: str) -> str
         <th rowspan="2">N_regions</th>
         <th rowspan="2">N_years</th>
         <th colspan="3">Region-Year</th>
-        <th colspan="1">Spatial</th>
-        <th colspan="1">Temporal</th>
+        <th colspan="2">Spatial</th>
+        <th colspan="2">Temporal</th>
         <th colspan="1">Anomaly</th>
       </tr>
       <tr>
         <th>r</th><th>R²</th><th>NRMSE</th>
-        <th>R² (med/yr)</th>
-        <th>R² (med/reg)</th>
+        <th>R² (med/yr)</th><th>R² (agg)</th>
+        <th>R² (med/reg)</th><th>R² (agg)</th>
         <th>R² (med/reg)</th>
       </tr>
     </thead>
@@ -587,6 +625,7 @@ def _plot_scatter_panel(
     metrics_model: dict,
     metrics_base: dict | None,
     n_samples: int,
+    metrics_note: str | None = None,
 ) -> None:
     y_true = _as_float_array(df_filtered[KEY_TARGET])
     y_pred = _as_float_array(df_filtered[model])
@@ -635,9 +674,11 @@ def _plot_scatter_panel(
     ax.set_ylabel("Predicted yield")
 
     def fmt_region_year(m: dict) -> str:
-        return f"r = {m['r']:.2f}, R² = {m['r2']:.2f}, NRMSE = {m['nrmse']:.2f}"
+        return f"r = {m['r']:.3f}, R² = {m['r2']:.3f}, NRMSE = {m['nrmse']:.3f}"
 
     txt_lines = [f"N = {n_samples:,}", f"Model: {fmt_region_year(metrics_model)}"]
+    if metrics_note:
+        txt_lines.append(metrics_note)
     if metrics_base:
         txt_lines.append(f"Baseline: {fmt_region_year(metrics_base)}")
 
@@ -659,6 +700,7 @@ def process_dataset(
     *,
     world: gpd.GeoDataFrame | None,
     panels: tuple[str, ...] = ALL_PANELS,
+    results_dir: str | None = None,
 ) -> Tuple[Figure, dict, dict[str, Axes]]:
 
     # 1. Core Year Filtering
@@ -678,6 +720,28 @@ def process_dataset(
     valid_locs = loc_coverage.index.astype(str).tolist()
 
     df_filtered = cast(pd.DataFrame, df[df[KEY_LOC].isin(valid_locs)].copy())
+    # Region-year metrics and scatter use the full cleaned frame (matches collect / table).
+    # df_filtered is only for map panels (long-run spatial means).
+    df_metrics = df
+
+    overlay = _load_dashboard_metrics_overlay(results_dir, dataset_key)
+    metrics_note: str | None = None
+    if overlay and {"r", "r2", "nrmse"}.issubset(
+        {k for k, v in overlay.items() if v is not None}
+    ):
+        metrics_model = _region_year_metrics_from_overlay(overlay)
+        n_seeds = int(overlay["n_seeds"]) if overlay.get("n_seeds") else 1
+        if n_seeds > 1:
+            metrics_note = f"(matches table: mean over {n_seeds} seeds)"
+        elif overlay.get("plot_seed") is not None:
+            metrics_note = f"(matches table; plot seed {overlay['plot_seed']})"
+        table_n = overlay.get("n_samples")
+        if table_n is not None and int(table_n) != len(df_metrics):
+            metrics_note = (
+                (metrics_note + " ") if metrics_note else ""
+            ) + f"[WARN] N={len(df_metrics)} here vs {int(table_n)} in table"
+    else:
+        metrics_model = get_metrics_dict(df_metrics, KEY_TARGET, model)
 
     need_maps = "map_actual" in panels or "map_pred" in panels
     geo_df = None
@@ -710,13 +774,10 @@ def process_dataset(
             raw_bounds[3] + pad_y,
         )
 
-    # Stats calculation (Primary Model)
-    metrics_model = get_metrics_dict(df_filtered, KEY_TARGET, model)
-
-    # 3b. Stats Calculation (Baseline)
-    has_baseline = BASELINE_MODEL in df_filtered.columns
+    # Stats calculation (Baseline)
+    has_baseline = BASELINE_MODEL in df_metrics.columns
     if has_baseline:
-        metrics_base = get_metrics_dict(df_filtered, KEY_TARGET, BASELINE_MODEL)
+        metrics_base = get_metrics_dict(df_metrics, KEY_TARGET, BASELINE_MODEL)
     else:
         metrics_base = None
 
@@ -732,7 +793,7 @@ def process_dataset(
 
     ts = ts.sort_index()
 
-    report = compute_report_metrics(df_filtered, KEY_TARGET, model, year_col="year")
+    report = compute_report_metrics(df_metrics, KEY_TARGET, model, year_col="year")
     r_time_model = report["temporal"]["r_aggregate"]
     r2_time_model = report["temporal"]["r2_aggregate"]
 
@@ -746,9 +807,9 @@ def process_dataset(
     else:
         r_time_base = np.nan
 
-    n_samples = len(df_filtered)
-    n_regions = int(cast(pd.Series, df_filtered[KEY_LOC]).nunique())
-    n_years = int(cast(pd.Series, df_filtered["year"]).nunique())
+    n_samples = len(df_metrics)
+    n_regions = int(cast(pd.Series, df_metrics[KEY_LOC]).nunique())
+    n_years = int(cast(pd.Series, df_metrics["year"]).nunique())
 
     # Save stats dict
     stats = {
@@ -798,11 +859,12 @@ def process_dataset(
         elif panel_name == "scatter":
             _plot_scatter_panel(
                 ax,
-                df_filtered,
+                df_metrics,
                 model,
                 metrics_model=metrics_model,
                 metrics_base=metrics_base,
                 n_samples=n_samples,
+                metrics_note=metrics_note,
             )
         elif panel_name == "temporal":
             r2_med_reg = report["temporal"]["r2_typical_region"]
@@ -955,15 +1017,22 @@ def main():
     panel_dir = os.path.join(args.results_dir, "report_assets")
 
     def _run_dataset(key: str, files: list[str], pdf: PdfPages | None) -> None:
+        trust_collect = os.path.isfile(
+            os.path.join(args.results_dir, "dashboard_metrics.json")
+        )
         df, msg = load_and_clean_data(
-            files, args.model, min_years=args.min_years, dataset_key=key
+            files,
+            args.model,
+            min_years=args.min_years,
+            dataset_key=key,
+            trust_collect_export=trust_collect,
         )
         if df is None:
             print(f"[SKIP] {msg}")
             return
         try:
             fig, stats, panel_axes = process_dataset(
-                key, df, args.model, world=world, panels=panels
+                key, df, args.model, world=world, panels=panels, results_dir=args.results_dir
             )
             if pdf is not None:
                 pdf.savefig(fig)
