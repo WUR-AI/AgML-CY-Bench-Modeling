@@ -84,6 +84,29 @@ def test_build_radar_payload_structure(tmp_path: Path):
     assert families["Process-Based"]["relative"]["Overall"] == 0.0
 
 
+def test_relative_scores_use_all_models_not_only_representatives(tmp_path: Path):
+    d = tmp_path / "paper_walk_forward_de_eos_v1"
+    d.mkdir(parents=True)
+    pd.DataFrame(
+        [
+            _summary_row("lpjml_bc", r2=0.5),
+            _summary_row("lightgbm", r2=0.8),
+            _summary_row("transformer_lf", r2=0.7),
+            _summary_row("tabpfn", r2=0.75),
+            _summary_row("ridge", r2=0.9),
+        ]
+    ).to_csv(d / "walk_forward_summary.csv", index=False)
+
+    payload = build_radar_payload(tmp_path, version=1)
+    families = {
+        f["family"]: f
+        for f in payload["by_horizon"]["eos"]["all"]["families"]
+    }
+    # Best overall model is ridge (not plotted); lightgbm rep is below that ceiling.
+    assert families["Feature-Engineered ML"]["relative"]["Overall"] < 1.0
+    assert families["Feature-Engineered ML"]["raw"]["r2"] == 0.8
+
+
 def test_build_radar_html_embeds_payload(tmp_path: Path):
     d = tmp_path / "paper_walk_forward_de_eos_v1"
     d.mkdir(parents=True)

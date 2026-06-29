@@ -130,7 +130,7 @@ def pick_representatives(
 
 
 def relative_scores(raw: pd.DataFrame) -> pd.DataFrame:
-    """Min–max normalize each view column across families (higher radius = better)."""
+    """Min–max normalize each view column across all models in *raw* (higher radius = better)."""
     out = raw.copy()
     for view in EVALUATION_VIEWS:
         label = view["label"]
@@ -155,12 +155,7 @@ def _family_records(
     representatives: dict[str, str],
 ) -> list[dict[str, Any]]:
     view_labels = [v["label"] for v in EVALUATION_VIEWS]
-    rep_models = [model for model in representatives.values() if model in medians.index]
-    rel_all = (
-        relative_scores(medians.loc[rep_models].copy())
-        if rep_models
-        else pd.DataFrame()
-    )
+    rel_all = relative_scores(medians.copy()) if not medians.empty else pd.DataFrame()
 
     rows: list[dict[str, Any]] = []
     for family, model in representatives.items():
@@ -256,8 +251,8 @@ def build_radar_payload(
         },
         "by_horizon": by_horizon,
         "normalization_note": (
-            "Each axis is min–max normalized across the plotted family representatives "
-            "for the selected horizon and crop filter. Larger radii indicate better "
-            "relative performance on that evaluation view."
+            "Each axis is min–max normalized across all models in the selected horizon "
+            "and crop filter. Radar vertices show one representative per family; radii "
+            "indicate where that representative sits relative to the full model field."
         ),
     }
