@@ -326,8 +326,8 @@ def _process_batch(
             force_cpu=force_cpu,
             force_cpu_reason=force_cpu_reason,
             force_rerun=args.force_rerun,
-            wf_repetitions=args.wf_repetitions,
-            wf_resume=args.wf_resume,
+            wf_repetitions=args.repetitions,
+            wf_resume=args.resume,
         )
 
     return 0
