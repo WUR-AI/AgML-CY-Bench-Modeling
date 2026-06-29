@@ -20,11 +20,13 @@ METRIC_KEYS: tuple[str, ...] = (
     "r",
     "r2",
     "nrmse",
-    "r2_yearly_median",
-    "r_spatial",
     "r2_spatial",
-    "r_temporal",
+    "r_spatial_clim",
+    "r2_spatial_clim",
     "r2_temporal",
+    "r_temporal_agg",
+    "r2_temporal_agg",
+    "r2_anomaly",
     "r_res",
     "r2_res",
 )
@@ -34,11 +36,13 @@ HIGHER_IS_BETTER = frozenset(
     {
         "r",
         "r2",
-        "r_spatial",
         "r2_spatial",
-        "r_temporal",
+        "r_spatial_clim",
+        "r2_spatial_clim",
         "r2_temporal",
-        "r2_yearly_median",
+        "r_temporal_agg",
+        "r2_temporal_agg",
+        "r2_anomaly",
         "r_res",
         "r2_res",
     }
@@ -50,6 +54,14 @@ def flatten_report_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
     ry = metrics.get("region_year", {})
     sp = metrics.get("spatial", {})
     tm = metrics.get("temporal", {})
+    an = metrics.get("anomaly", {})
+    r2_spatial = sp.get("r2_typical_year")
+    if r2_spatial is None:
+        r2_spatial = ry.get("median_r2")
+    r2_temporal = tm.get("r2_typical_region")
+    r2_anomaly = an.get("r2_typical_region")
+    if r2_anomaly is None:
+        r2_anomaly = ry.get("r2_res")
     return {
         "n_regions": metrics.get("n_regions"),
         "n_years": metrics.get("n_years"),
@@ -57,13 +69,15 @@ def flatten_report_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
         "r": ry.get("r"),
         "r2": ry.get("r2"),
         "nrmse": ry.get("nrmse"),
-        "r2_yearly_median": ry.get("median_r2"),
         "r_res": ry.get("r_res"),
         "r2_res": ry.get("r2_res"),
-        "r_spatial": sp.get("r"),
-        "r2_spatial": sp.get("r2"),
-        "r_temporal": tm.get("r"),
-        "r2_temporal": tm.get("r2"),
+        "r2_spatial": r2_spatial,
+        "r_spatial_clim": sp.get("r_climatology", sp.get("r")),
+        "r2_spatial_clim": sp.get("r2_climatology", sp.get("r2")),
+        "r2_temporal": r2_temporal,
+        "r_temporal_agg": tm.get("r_aggregate", tm.get("r")),
+        "r2_temporal_agg": tm.get("r2_aggregate", tm.get("r2")),
+        "r2_anomaly": r2_anomaly,
     }
 
 
@@ -190,6 +204,7 @@ def _metrics_from_report_yaml(path: Path) -> dict[str, Any]:
             "region_year": raw.get("region_year") or {},
             "spatial": raw.get("spatial") or {},
             "temporal": raw.get("temporal") or {},
+            "anomaly": raw.get("anomaly") or {},
         }
     )
 

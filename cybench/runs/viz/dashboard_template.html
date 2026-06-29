@@ -248,16 +248,12 @@
     const panelButtons = Array.from(document.querySelectorAll(".toolbar button"));
 
     const METRIC_COLUMNS = [
-      { key: "region_year_r", label: "r", group: "Region-Year", higherBetter: true },
-      { key: "region_year_r2", label: "R²", group: "Region-Year", higherBetter: true },
-      { key: "region_year_nrmse", label: "NRMSE", group: "Region-Year", higherBetter: false },
-      { key: "region_year_median_r2", label: "med R²/yr", group: "Region-Year", higherBetter: true },
-      { key: "spatial_r", label: "r", group: "Spatial", higherBetter: true },
-      { key: "spatial_r2", label: "R²", group: "Spatial", higherBetter: true },
-      { key: "temporal_r", label: "r", group: "Temporal", higherBetter: true },
-      { key: "temporal_r2", label: "R²", group: "Temporal", higherBetter: true },
-      { key: "anomaly_r", label: "r", group: "Anomaly", higherBetter: true },
-      { key: "anomaly_r2", label: "R²", group: "Anomaly", higherBetter: true },
+      { key: "region_year_r", label: "r", group: "Region-Year", higherBetter: true, title: "Pearson r on all region-year rows" },
+      { key: "region_year_r2", label: "R²", group: "Region-Year", higherBetter: true, title: "R² on all region-year rows" },
+      { key: "region_year_nrmse", label: "NRMSE", group: "Region-Year", higherBetter: false, title: "Normalized RMSE on absolute yields" },
+      { key: "spatial_r2", label: "R² (med/yr)", group: "Spatial", higherBetter: true, title: "Median across years of within-year cross-region R²" },
+      { key: "temporal_r2", label: "R² (med/reg)", group: "Temporal", higherBetter: true, title: "Median across regions of within-region cross-year R²" },
+      { key: "anomaly_r2", label: "R² (med/reg)", group: "Anomaly", higherBetter: true, title: "Median across regions of R² on yield minus regional mean" },
     ];
 
     // Absolute color scales — comparable across rows and dashboards.
@@ -265,12 +261,8 @@
       region_year_r: { min: 0, max: 1, higherBetter: true },
       region_year_r2: { min: 0, max: 1, higherBetter: true },
       region_year_nrmse: { min: 0, max: 0.5, higherBetter: false },
-      region_year_median_r2: { min: 0, max: 1, higherBetter: true },
-      spatial_r: { min: 0, max: 1, higherBetter: true },
       spatial_r2: { min: 0, max: 1, higherBetter: true },
-      temporal_r: { min: 0, max: 1, higherBetter: true },
       temporal_r2: { min: 0, max: 1, higherBetter: true },
-      anomaly_r: { min: 0, max: 1, higherBetter: true },
       anomaly_r2: { min: 0, max: 1, higherBetter: true },
     };
 
@@ -445,14 +437,15 @@
       <th rowspan="2" class="sortable" data-sort="n_regions">Regions ${sortMark("n_regions")}</th>
       <th rowspan="2" class="sortable" data-sort="n_years">Years ${sortMark("n_years")}</th>
       <th rowspan="2" class="sortable" data-sort="n_samples">Samples ${sortMark("n_samples")}</th>
-      <th colspan="4" class="group-head">Region-Year</th>
-      <th colspan="2" class="group-head">Spatial</th>
-      <th colspan="2" class="group-head">Temporal</th>
-      <th colspan="2" class="group-head">Anomaly</th>
+      <th colspan="3" class="group-head">Region-Year</th>
+      <th colspan="1" class="group-head">Spatial</th>
+      <th colspan="1" class="group-head">Temporal</th>
+      <th colspan="1" class="group-head">Anomaly</th>
     </tr>
     <tr>`;
       for (const col of METRIC_COLUMNS) {
-        html += `<th class="sortable" data-sort="${col.key}">${col.label} ${sortMark(col.key)}</th>`;
+        const tip = col.title ? ` title="${col.title}"` : "";
+        html += `<th class="sortable" data-sort="${col.key}"${tip}>${col.label} ${sortMark(col.key)}</th>`;
       }
       html += `</tr></thead><tbody>`;
 

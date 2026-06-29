@@ -206,11 +206,11 @@ def test_summary_rows_to_dashboard_records(tmp_path: Path):
             "r": 0.04,
             "r2": -1.46,
             "nrmse": 0.31,
-            "r_spatial": -0.12,
-            "r2_spatial": -0.93,
-            "r_temporal": 0.18,
-            "r2_temporal": -5.10,
-            "r2_yearly_median": 0.42,
+            "r2_spatial": 0.42,
+            "r2_spatial_clim": -0.93,
+            "r2_temporal": -0.55,
+            "r2_temporal_agg": -5.10,
+            "r2_anomaly": -0.80,
             "r_res": 0.05,
             "r2_res": -1.76,
             "n_seeds": 3,
@@ -225,7 +225,7 @@ def test_summary_rows_to_dashboard_records(tmp_path: Path):
     (assets / "maize_NL_scatter.png").write_bytes(b"png")
 
     records = summary_rows_to_dashboard_records(rows, tmp_path)
-    assert len(records) == 10
+    assert len(records) == 6
     assert records[0]["view"] == "region_year"
     nrmse_rec = next(r for r in records if r["view"] == "region_year" and r["metric"] == "nrmse")
     assert nrmse_rec["value"] == 0.31

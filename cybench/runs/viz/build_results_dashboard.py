@@ -13,7 +13,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from cybench.evaluation.aggregated_metrics import calc_median_yearly_r2
+from cybench.evaluation.aggregated_metrics import compute_report_metrics
 
 
 @dataclass
@@ -135,9 +135,6 @@ def load_records_from_runs_root(
             with open(stats_fp, "r") as f:
                 s = json.load(f)
 
-            m = s.get("metrics_model", {})
-            sp = s.get("metrics_spatial", {})
-
             panel_dir = os.path.join(run_dir, "report_assets")
             images = {}
             for p in ["map_actual", "map_pred", "scatter", "temporal"]:
@@ -153,19 +150,7 @@ def load_records_from_runs_root(
                 "n_samples": s.get("n_samples"),
                 "images": images,
             }
-            view_metric_values = [
-                ("region_year", "r", safe_float(m.get("r"))),
-                ("region_year", "r2", safe_float(m.get("r2"))),
-                ("region_year", "nrmse", safe_float(m.get("nrmse"))),
-                ("region_year", "median_r2", safe_float(s.get("r2_yearly_median"))),
-                ("spatial", "r", safe_float(sp.get("r"))),
-                ("spatial", "r2", safe_float(sp.get("r2"))),
-                ("temporal", "r", safe_float(s.get("r_time_model"))),
-                ("temporal", "r2", safe_float(s.get("r2_time_model"))),
-                ("anomaly", "r", safe_float(m.get("r_res"))),
-                ("anomaly", "r2", safe_float(m.get("r2_res"))),
-            ]
-            for view, metric, value in view_metric_values:
+            for view, metric, value in _view_metric_values_from_stats(s):
                 records.append(
                     {**common, "view": view, "metric": metric, "value": value}
                 )
@@ -192,24 +177,24 @@ def load_records_from_runs_root(
 
         y_true = pd.to_numeric(df["yield"], errors="coerce")
         y_pred = pd.to_numeric(df[pred_col], errors="coerce")
-        clean = pd.DataFrame({"yield": y_true, "pred": y_pred, "adm_id": df["adm_id"], "year": df["year"]}).dropna()
+        clean = pd.DataFrame(
+            {
+                "yield": y_true,
+                "pred": y_pred,
+                "adm_id": df["adm_id"],
+                "year": df["year"],
+            }
+        ).dropna()
         if clean.empty:
             continue
 
-        r, r2 = calc_r_r2(clean["yield"].values, clean["pred"].values)
-        nrmse = calc_nrmse(clean["yield"].values, clean["pred"].values)
-
-        spatial = clean.groupby("adm_id")[["yield", "pred"]].mean()
-        r_sp, r2_sp = calc_r_r2(spatial["yield"].values, spatial["pred"].values)
-
-        temporal = clean.groupby("year")[["yield", "pred"]].mean().sort_index()
-        r_tm, r2_tm = calc_r_r2(temporal["yield"].values, temporal["pred"].values)
-        r2_yearly_median = calc_median_yearly_r2(clean, "yield", "pred", year_col="year")
-
-        loc_means = clean.groupby("adm_id")["yield"].mean()
-        y_res = clean["yield"] - clean["adm_id"].map(loc_means)
-        p_res = clean["pred"] - clean["adm_id"].map(loc_means)
-        r_res, r2_res = calc_r_r2(y_res.values, p_res.values)
+        report = compute_report_metrics(
+            clean.rename(columns={"yield": "yield", "pred": "pred"}),
+            "yield",
+            "pred",
+            loc_col="adm_id",
+            year_col="year",
+        )
 
         panel_dir = os.path.join(run_dir, "report_assets")
         images = {}
@@ -221,24 +206,12 @@ def load_records_from_runs_root(
         common = {
             "model": model_name,
             "dataset": dataset,
-            "n_regions": int(clean["adm_id"].nunique()),
-            "n_years": int(clean["year"].nunique()),
-            "n_samples": int(len(clean)),
+            "n_regions": report["n_regions"],
+            "n_years": report["n_years"],
+            "n_samples": report["n_samples"],
             "images": images,
         }
-        view_metric_values = [
-            ("region_year", "r", safe_float(r)),
-            ("region_year", "r2", safe_float(r2)),
-            ("region_year", "nrmse", safe_float(nrmse)),
-            ("region_year", "median_r2", safe_float(r2_yearly_median)),
-            ("spatial", "r", safe_float(r_sp)),
-            ("spatial", "r2", safe_float(r2_sp)),
-            ("temporal", "r", safe_float(r_tm)),
-            ("temporal", "r2", safe_float(r2_tm)),
-            ("anomaly", "r", safe_float(r_res)),
-            ("anomaly", "r2", safe_float(r2_res)),
-        ]
-        for view, metric, value in view_metric_values:
+        for view, metric, value in _view_metric_values_from_report(report):
             records.append({**common, "view": view, "metric": metric, "value": value})
 
     return records
@@ -290,6 +263,64 @@ def generate_assets_for_runs(
             print(f"[OK] Assets generated for: {run_dir}")
 
 
+def _view_metric_values_from_report(report: dict) -> list[tuple[str, str, Optional[float]]]:
+    ry = report.get("region_year", {})
+    sp = report.get("spatial", {})
+    tm = report.get("temporal", {})
+    an = report.get("anomaly", {})
+    return [
+        ("region_year", "r", safe_float(ry.get("r"))),
+        ("region_year", "r2", safe_float(ry.get("r2"))),
+        ("region_year", "nrmse", safe_float(ry.get("nrmse"))),
+        ("spatial", "r2", safe_float(sp.get("r2_typical_year"))),
+        ("temporal", "r2", safe_float(tm.get("r2_typical_region"))),
+        ("anomaly", "r2", safe_float(an.get("r2_typical_region"))),
+    ]
+
+
+def _view_metric_values_from_stats(s: dict) -> list[tuple[str, str, Optional[float]]]:
+    m = s.get("metrics_model", {})
+    sp = s.get("metrics_spatial", {})
+    tm = s.get("metrics_temporal", {})
+    an = s.get("metrics_anomaly", {})
+    if tm and an:
+        return _view_metric_values_from_report(
+            {
+                "region_year": m,
+                "spatial": sp,
+                "temporal": tm,
+                "anomaly": an,
+            }
+        )
+    return [
+        ("region_year", "r", safe_float(m.get("r"))),
+        ("region_year", "r2", safe_float(m.get("r2"))),
+        ("region_year", "nrmse", safe_float(m.get("nrmse"))),
+        (
+            "spatial",
+            "r2",
+            safe_float(sp.get("r2_typical_year", sp.get("r2"))),
+        ),
+        (
+            "temporal",
+            "r2",
+            safe_float(
+                tm.get("r2_typical_region", s.get("r2_time_model"))
+                if tm
+                else s.get("r2_time_model")
+            ),
+        ),
+        (
+            "anomaly",
+            "r2",
+            safe_float(
+                an.get("r2_typical_region", m.get("r2_res"))
+                if an
+                else m.get("r2_res")
+            ),
+        ),
+    ]
+
 def safe_float(v) -> Optional[float]:
     if v is None:
         return None
@@ -319,9 +350,6 @@ def load_records(sources: List[SourceConfig], output_dir: str) -> List[Dict]:
             if not dataset:
                 continue
 
-            m = s.get("metrics_model", {})
-            sp = s.get("metrics_spatial", {})
-
             panel_paths_abs = {
                 "map_actual": os.path.join(panel_dir, f"{dataset}_map_actual.png"),
                 "map_pred": os.path.join(panel_dir, f"{dataset}_map_pred.png"),
@@ -343,18 +371,7 @@ def load_records(sources: List[SourceConfig], output_dir: str) -> List[Dict]:
                 "images": panel_paths_rel,
             }
 
-            view_metric_values = [
-                ("region_year", "r", safe_float(m.get("r"))),
-                ("region_year", "r2", safe_float(m.get("r2"))),
-                ("region_year", "nrmse", safe_float(m.get("nrmse"))),
-                ("region_year", "median_r2", safe_float(s.get("r2_yearly_median"))),
-                ("spatial", "r", safe_float(sp.get("r"))),
-                ("spatial", "r2", safe_float(sp.get("r2"))),
-                ("temporal", "r", safe_float(s.get("r_time_model"))),
-                ("temporal", "r2", safe_float(s.get("r2_time_model"))),
-                ("anomaly", "r", safe_float(m.get("r_res"))),
-                ("anomaly", "r2", safe_float(m.get("r2_res"))),
-            ]
+            view_metric_values = _view_metric_values_from_stats(s)
 
             for view, metric, value in view_metric_values:
                 records.append(

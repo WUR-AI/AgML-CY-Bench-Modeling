@@ -29,7 +29,7 @@ EVALUATION_VIEWS: tuple[dict[str, str], ...] = (
     },
     {
         "label": "Anomaly",
-        "metric": "r2_res",
+        "metric": "r2_anomaly",
         "question": "Can it predict deviations from a region's expected yield?",
     },
 )

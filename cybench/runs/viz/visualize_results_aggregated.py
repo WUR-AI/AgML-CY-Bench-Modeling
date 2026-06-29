@@ -21,8 +21,8 @@ from matplotlib.figure import Figure
 from cybench.util.geo import get_shapes_from_polygons, world_shape_path
 from cybench.config import KEY_LOC, KEY_TARGET
 from cybench.evaluation.aggregated_metrics import (
-    calc_median_yearly_r2,
     calc_r_r2,
+    compute_report_metrics,
     get_metrics_dict,
 )
 
@@ -212,24 +212,24 @@ def generate_markdown_table(stats_list: List[dict]) -> str:
 
     md = (
         "| Dataset | N_regions | N_years | "
-        "Region-Year | Region-Year | Region-Year | Region-Year | "
-        "Spatial | Spatial | "
-        "Temporal | Temporal | "
-        "Anomaly | Anomaly |\n"
+        "Region-Year | Region-Year | Region-Year | "
+        "Spatial | "
+        "Temporal | "
+        "Anomaly |\n"
     )
     md += (
         "|  |  |  | "
-        "r | R² | NRMSE | med R²/yr | "
-        "r | R² | "
-        "r | R² | "
-        "r | R² |\n"
+        "r | R² | NRMSE | "
+        "R² (med/yr) | "
+        "R² (med/reg) | "
+        "R² (med/reg) |\n"
     )
     md += (
         "| :--- | ---: | ---: | "
-        "---: | ---: | ---: | ---: | "
-        "---: | ---: | "
-        "---: | ---: | "
-        "---: | ---: |\n"
+        "---: | ---: | ---: | "
+        "---: | "
+        "---: | "
+        "---: |\n"
     )
 
     for s in stats_list:
@@ -238,6 +238,8 @@ def generate_markdown_table(stats_list: List[dict]) -> str:
         n_yrs = s["n_years"]
         mod = s["metrics_model"]
         sp = s["metrics_spatial"]
+        tm = s["metrics_temporal"]
+        an = s["metrics_anomaly"]
 
         # Check threshold
         is_faint = n_reg < MIN_REGIONS_THRESHOLD
@@ -259,13 +261,9 @@ def generate_markdown_table(stats_list: List[dict]) -> str:
             f"| {style(fmt(mod['r']))} "
             f"| {style(fmt(mod['r2']))} "
             f"| {style(fmt(mod['nrmse']))} "
-            f"| {style(fmt(s['r2_yearly_median']))} "
-            f"| {style(fmt(sp['r']))} "
-            f"| {style(fmt(sp['r2']))} "
-            f"| {style(fmt(s['r_time_model']))} "
-            f"| {style(fmt(s['r2_time_model']))} "
-            f"| {style(fmt(mod['r_res']))} "
-            f"| {style(fmt(mod['r2_res']))} |"
+            f"| {style(fmt(sp['r2_typical_year']))} "
+            f"| {style(fmt(tm['r2_typical_region']))} "
+            f"| {style(fmt(an['r2_typical_region']))} |"
         )
         md += row + "\n"
 
@@ -298,16 +296,16 @@ th.left, td.left { text-align: left; }
       <th class="left" rowspan="2">Dataset</th>
       <th rowspan="2">N_regions</th>
       <th rowspan="2">N_years</th>
-      <th colspan="4">Region-Year</th>
-      <th colspan="2">Spatial</th>
-      <th colspan="2">Temporal</th>
-      <th colspan="2">Anomaly</th>
+      <th colspan="3">Region-Year</th>
+      <th colspan="1">Spatial</th>
+      <th colspan="1">Temporal</th>
+      <th colspan="1">Anomaly</th>
     </tr>
     <tr>
-      <th>r</th><th>R²</th><th>NRMSE</th><th>med R²/yr</th>
-      <th>r</th><th>R²</th>
-      <th>r</th><th>R²</th>
-      <th>r</th><th>R²</th>
+      <th>r</th><th>R²</th><th>NRMSE</th>
+      <th>R² (med/yr)</th>
+      <th>R² (med/reg)</th>
+      <th>R² (med/reg)</th>
     </tr>
   </thead>
   <tbody>
@@ -319,6 +317,8 @@ th.left, td.left { text-align: left; }
         n_yrs = s["n_years"]
         mod = s["metrics_model"]
         sp = s["metrics_spatial"]
+        tm = s["metrics_temporal"]
+        an = s["metrics_anomaly"]
         cls = ' class="small-n"' if n_reg < MIN_REGIONS_THRESHOLD else ""
 
         html += (
@@ -329,13 +329,9 @@ th.left, td.left { text-align: left; }
             f"<td>{fmt(mod['r'])}</td>"
             f"<td>{fmt(mod['r2'])}</td>"
             f"<td>{fmt(mod['nrmse'])}</td>"
-            f"<td>{fmt(s['r2_yearly_median'])}</td>"
-            f"<td>{fmt(sp['r'])}</td>"
-            f"<td>{fmt(sp['r2'])}</td>"
-            f"<td>{fmt(s['r_time_model'])}</td>"
-            f"<td>{fmt(s['r2_time_model'])}</td>"
-            f"<td>{fmt(mod['r_res'])}</td>"
-            f"<td>{fmt(mod['r2_res'])}</td>"
+            f"<td>{fmt(sp['r2_typical_year'])}</td>"
+            f"<td>{fmt(tm['r2_typical_region'])}</td>"
+            f"<td>{fmt(an['r2_typical_region'])}</td>"
             "</tr>\n"
         )
 
@@ -397,6 +393,8 @@ def generate_local_report_html(stats_list: List[dict], pdf_filename: str) -> str
     for s in stats_list:
         m = s["metrics_model"]
         sp = s["metrics_spatial"]
+        tm = s["metrics_temporal"]
+        an = s["metrics_anomaly"]
         paths = s.get("panel_paths", {})
         rows.append(
             f"""
@@ -411,13 +409,9 @@ def generate_local_report_html(stats_list: List[dict], pdf_filename: str) -> str
         <td>{m['r']:.2f}</td>
         <td>{m['r2']:.2f}</td>
         <td>{m['nrmse']:.2f}</td>
-        <td>{s['r2_yearly_median']:.2f}</td>
-        <td>{sp['r']:.2f}</td>
-        <td>{sp['r2']:.2f}</td>
-        <td>{s['r_time_model']:.2f}</td>
-        <td>{s['r2_time_model']:.2f}</td>
-        <td>{m['r_res']:.2f}</td>
-        <td>{m['r2_res']:.2f}</td>
+        <td>{sp['r2_typical_year']:.2f}</td>
+        <td>{tm['r2_typical_region']:.2f}</td>
+        <td>{an['r2_typical_region']:.2f}</td>
       </tr>
 """
         )
@@ -452,16 +446,16 @@ def generate_local_report_html(stats_list: List[dict], pdf_filename: str) -> str
         <th rowspan="2">Dataset</th>
         <th rowspan="2">N_regions</th>
         <th rowspan="2">N_years</th>
-        <th colspan="4">Region-Year</th>
-        <th colspan="2">Spatial</th>
-        <th colspan="2">Temporal</th>
-        <th colspan="2">Anomaly</th>
+        <th colspan="3">Region-Year</th>
+        <th colspan="1">Spatial</th>
+        <th colspan="1">Temporal</th>
+        <th colspan="1">Anomaly</th>
       </tr>
       <tr>
-        <th>r</th><th>R²</th><th>NRMSE</th><th>med R²/yr</th>
-        <th>r</th><th>R²</th>
-        <th>r</th><th>R²</th>
-        <th>r</th><th>R²</th>
+        <th>r</th><th>R²</th><th>NRMSE</th>
+        <th>R² (med/yr)</th>
+        <th>R² (med/reg)</th>
+        <th>R² (med/reg)</th>
       </tr>
     </thead>
     <tbody id="table-body">
@@ -684,18 +678,9 @@ def process_dataset(
 
     ts = ts.sort_index()
 
-    r_time_model, r2_time_model = calc_r_r2(
-        _as_float_array(ts[KEY_TARGET]),
-        _as_float_array(ts[model]),
-    )
-    r2_yearly_median = calc_median_yearly_r2(df_filtered, KEY_TARGET, model)
-
-    # Spatial stats (mean over years per location)
-    spatial = cast(pd.DataFrame, df_filtered.groupby(KEY_LOC)[[KEY_TARGET, model]].mean())
-    r_spatial_model, r2_spatial_model = calc_r_r2(
-        _as_float_array(spatial[KEY_TARGET]),
-        _as_float_array(spatial[model]),
-    )
+    report = compute_report_metrics(df_filtered, KEY_TARGET, model, year_col="year")
+    r_time_model = report["temporal"]["r_aggregate"]
+    r2_time_model = report["temporal"]["r2_aggregate"]
 
     # For baseline temporal correlation, we use the renamed column
     base_col_name = f"{BASELINE_MODEL}_Base"
@@ -719,11 +704,12 @@ def process_dataset(
         "n_years": n_years,
         "metrics_model": metrics_model,
         "metrics_baseline": metrics_base,
+        "metrics_spatial": report["spatial"],
+        "metrics_temporal": report["temporal"],
+        "metrics_anomaly": report["anomaly"],
         "r_time_model": r_time_model,
         "r2_time_model": r2_time_model,
-        "r2_yearly_median": r2_yearly_median,
         "r_time_base": r_time_base,
-        "metrics_spatial": {"r": r_spatial_model, "r2": r2_spatial_model},
     }
 
     n_panels = len(panels)

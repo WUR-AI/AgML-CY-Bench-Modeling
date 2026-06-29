@@ -3,6 +3,7 @@ import pandas as pd
 
 from cybench.config import KEY_LOC, KEY_TARGET, KEY_YEAR
 from cybench.evaluation.aggregated_metrics import (
+    calc_median_regional_r2,
     calc_median_yearly_r2,
     calc_nrmse,
     calc_r_r2,
@@ -40,17 +41,24 @@ def test_get_metrics_dict_has_anomaly_columns():
 
 def test_calc_median_yearly_r2():
     rows = []
-    for loc in ("A", "B"):
+    for loc in ("A", "B", "C"):
         rows.append({KEY_LOC: loc, KEY_YEAR: 2019, KEY_TARGET: 5.0, "model": 5.0})
     rows.extend(
         [
             {KEY_LOC: "A", KEY_YEAR: 2020, KEY_TARGET: 5.0, "model": 5.0},
             {KEY_LOC: "B", KEY_YEAR: 2020, KEY_TARGET: 7.0, "model": 6.0},
+            {KEY_LOC: "C", KEY_YEAR: 2020, KEY_TARGET: 6.0, "model": 6.5},
         ]
     )
     df = pd.DataFrame(rows)
-    _, r2_2020 = calc_r_r2([5.0, 7.0], [5.0, 6.0])
+    _, r2_2020 = calc_r_r2([5.0, 7.0, 6.0], [5.0, 6.0, 6.5])
     assert calc_median_yearly_r2(df, KEY_TARGET, "model") == np.nanmedian([1.0, r2_2020])
+
+
+def test_calc_median_regional_r2():
+    df = _make_df()
+    val = calc_median_regional_r2(df, KEY_TARGET, "model")
+    assert np.isfinite(val)
 
 
 def test_compute_report_metrics_views():
@@ -59,11 +67,11 @@ def test_compute_report_metrics_views():
     assert out["n_regions"] == 3
     assert out["n_years"] == 3
     assert out["n_samples"] == 9
-    assert "region_year" in out
-    assert "spatial" in out
-    assert "temporal" in out
-    assert "median_r2" in out["region_year"]
-    assert np.isfinite(out["region_year"]["median_r2"])
+    assert np.isfinite(out["spatial"]["r2_typical_year"])
+    assert np.isfinite(out["temporal"]["r2_typical_region"])
+    assert np.isfinite(out["anomaly"]["r2_typical_region"])
+    assert np.isfinite(out["spatial"]["r2_climatology"])
+    assert np.isfinite(out["temporal"]["r2_aggregate"])
 
 
 def test_compute_report_metrics_ignores_nan_predictions():
