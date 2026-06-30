@@ -225,7 +225,7 @@ def test_summary_rows_to_dashboard_records(tmp_path: Path):
     (assets / "maize_NL_scatter.png").write_bytes(b"png")
 
     records = summary_rows_to_dashboard_records(rows, tmp_path)
-    assert len(records) == 6
+    assert len(records) == 8
     assert records[0]["view"] == "region_year"
     nrmse_rec = next(r for r in records if r["view"] == "region_year" and r["metric"] == "nrmse")
     assert nrmse_rec["value"] == 0.31
@@ -234,6 +234,10 @@ def test_summary_rows_to_dashboard_records(tmp_path: Path):
     assert r_rec["value_std"] == 0.004
     r2_rec = next(r for r in records if r["view"] == "region_year" and r["metric"] == "r2")
     assert r2_rec["value_std"] is None
+    sp_agg = next(r for r in records if r["view"] == "spatial" and r["metric"] == "r2_agg")
+    assert sp_agg["value"] == -0.93
+    tm_agg = next(r for r in records if r["view"] == "temporal" and r["metric"] == "r2_agg")
+    assert tm_agg["value"] == -5.10
     scatter_recs = [r for r in records if r.get("images", {}).get("scatter")]
     assert scatter_recs
     assert "maize_NL" in scatter_recs[0]["images"]["scatter"]

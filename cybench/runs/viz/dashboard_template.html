@@ -106,6 +106,20 @@
       text-transform: uppercase;
       letter-spacing: 0.03em;
     }
+    th.group-head .group-hint {
+      display: block;
+      font-weight: 400;
+      font-size: 0.65rem;
+      text-transform: none;
+      letter-spacing: 0;
+      margin-top: 0.12rem;
+      line-height: 1.2;
+    }
+    th .metric-sub {
+      font-weight: 500;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
     tr.metric-row { cursor: pointer; }
     tr.metric-row:hover td { filter: brightness(0.97); }
     tr.metric-row.selected td {
@@ -251,11 +265,41 @@
       { key: "region_year_r", label: "r", group: "Region-Year", higherBetter: true, title: "Pearson r on all region-year rows" },
       { key: "region_year_r2", label: "R²", group: "Region-Year", higherBetter: true, title: "R² on all region-year rows" },
       { key: "region_year_nrmse", label: "NRMSE", group: "Region-Year", higherBetter: false, title: "Normalized RMSE on absolute yields" },
-      { key: "spatial_r2", label: "R² (med/yr)", group: "Spatial", higherBetter: true, title: "Median across years of within-year cross-region R² (years with ≥3 regions)" },
-      { key: "spatial_r2_agg", label: "R² (agg)", group: "Spatial", higherBetter: true, title: "R² on regional mean yields (mean across years per region)" },
-      { key: "temporal_r2", label: "R² (med/reg)", group: "Temporal", higherBetter: true, title: "Median across regions of within-region cross-year R² (regions with ≥3 years)" },
-      { key: "temporal_r2_agg", label: "R² (agg)", group: "Temporal", higherBetter: true, title: "R² on national mean yield series across years" },
-      { key: "anomaly_r2", label: "R² (med/reg)", group: "Anomaly", higherBetter: true, title: "Median across regions of R² on yield minus regional mean" },
+      {
+        key: "spatial_r2",
+        label: "R²<br><span class=\"metric-sub\">med/yr</span>",
+        group: "Spatial",
+        higherBetter: true,
+        title: "Slice by year (aggregate across time); R² across regions each year; then median across years (years with ≥3 regions)",
+      },
+      {
+        key: "spatial_r2_agg",
+        label: "R²<br><span class=\"metric-sub\">agg</span>",
+        group: "Spatial",
+        higherBetter: true,
+        title: "Mean yield across years per region (aggregate across time); then one R² across regions",
+      },
+      {
+        key: "temporal_r2",
+        label: "R²<br><span class=\"metric-sub\">med/reg</span>",
+        group: "Temporal",
+        higherBetter: true,
+        title: "Slice by region (aggregate across space); R² across years per region; then median across regions (regions with ≥3 years)",
+      },
+      {
+        key: "temporal_r2_agg",
+        label: "R²<br><span class=\"metric-sub\">agg</span>",
+        group: "Temporal",
+        higherBetter: true,
+        title: "Mean yield across regions each year (aggregate across space); then one R² across years",
+      },
+      {
+        key: "anomaly_r2",
+        label: "R²<br><span class=\"metric-sub\">med/reg</span>",
+        group: "Anomaly",
+        higherBetter: true,
+        title: "Per region: R² on yield minus regional mean; then median across regions",
+      },
     ];
 
     // Absolute color scales — comparable across rows and dashboards.
@@ -442,8 +486,8 @@
       <th rowspan="2" class="sortable" data-sort="n_years">Years ${sortMark("n_years")}</th>
       <th rowspan="2" class="sortable" data-sort="n_samples">Samples ${sortMark("n_samples")}</th>
       <th colspan="3" class="group-head">Region-Year</th>
-      <th colspan="1" class="group-head">Spatial</th>
-      <th colspan="1" class="group-head">Temporal</th>
+      <th colspan="2" class="group-head" title="Spatial pattern recovery">Spatial<span class="group-hint">slice by year → R² → median</span></th>
+      <th colspan="2" class="group-head" title="Temporal dynamics recovery">Temporal<span class="group-hint">slice by region → R² → median</span></th>
       <th colspan="1" class="group-head">Anomaly</th>
     </tr>
     <tr>`;

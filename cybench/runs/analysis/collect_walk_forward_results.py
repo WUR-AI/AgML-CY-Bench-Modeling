@@ -395,7 +395,9 @@ def summary_rows_to_dashboard_records(
         ("region_year", "r2", "r2"),
         ("region_year", "nrmse", "nrmse"),
         ("spatial", "r2", "r2_spatial"),
+        ("spatial", "r2_agg", "r2_spatial_agg"),
         ("temporal", "r2", "r2_temporal"),
+        ("temporal", "r2_agg", "r2_temporal_agg"),
         ("anomaly", "r2", "r2_anomaly"),
     ]
     records: list[dict[str, Any]] = []

@@ -177,7 +177,7 @@
 
     <div class="card">
       <h2>Performance vs training set size</h2>
-      <p class="muted" id="scatter-note">Each point is one crop×country dataset for the family representative. Y-axis: model NRMSE divided by average yield NRMSE (1.0 = baseline; lower is better). X-axis: mean training rows across walk-forward splits.</p>
+      <p class="muted" id="scatter-note">Each point is one crop×country dataset for the family representative. Y-axis: model NRMSE ÷ average yield NRMSE (1.0 = baseline; lower is better). X-axis: log₁₀(mean training rows); view spans the 5th–95th percentile range.</p>
       <div class="scatter-panel" id="scatter-panel"></div>
     </div>
   </div>
@@ -296,21 +296,57 @@
       `).join("");
     }
 
-    function currentScatterFamilies() {
+    function currentScatterSlice() {
       const hz = horizonSelect.value;
       const crop = cropSelect.value;
-      return ((DATA.sample_scatter || {})[hz] || {})[crop] || [];
+      const raw = ((DATA.sample_scatter || {})[hz] || {})[crop] || [];
+      if (Array.isArray(raw)) {
+        return { families: raw, summary: {} };
+      }
+      return { families: raw.families || [], summary: raw.summary || {} };
+    }
+
+    function percentile(sorted, p) {
+      if (!sorted.length) return 0;
+      const idx = (sorted.length - 1) * p;
+      const lo = Math.floor(idx);
+      const hi = Math.ceil(idx);
+      if (lo === hi) return sorted[lo];
+      return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+    }
+
+    function spearmanRho(xs, ys) {
+      if (xs.length < 5) return null;
+      const rank = arr => {
+        const order = arr.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0]);
+        const out = new Array(arr.length);
+        order.forEach(([_, i], r) => { out[i] = r + 1; });
+        return out;
+      };
+      const rx = rank(xs);
+      const ry = rank(ys);
+      const mx = rx.reduce((a, b) => a + b, 0) / rx.length;
+      const my = ry.reduce((a, b) => a + b, 0) / ry.length;
+      let num = 0, dx = 0, dy = 0;
+      for (let i = 0; i < rx.length; i++) {
+        const vx = rx[i] - mx;
+        const vy = ry[i] - my;
+        num += vx * vy;
+        dx += vx * vx;
+        dy += vy * vy;
+      }
+      return dx && dy ? num / Math.sqrt(dx * dy) : null;
     }
 
     function renderScatter() {
       const metricKey = scatterMetric.key || "relative_nrmse";
       const refY = scatterMetric.reference ?? 1.0;
-      const families = currentScatterFamilies();
+      const { families, summary } = currentScatterSlice();
       const series = families
         .map(fam => ({
           ...fam,
           points: (fam.points || []).filter(
-            p => p[metricKey] !== null && p[metricKey] !== undefined
+            p => p[metricKey] !== null && p[metricKey] !== undefined && p.n_train > 0
           ),
         }))
         .filter(fam => fam.points.length);
@@ -318,25 +354,40 @@
       if (!series.length) {
         scatterPanel.innerHTML =
           '<p class="muted">No scatter data for this selection (re-collect summaries with average_yield baseline and n_train).</p>';
+        scatterNote.textContent =
+          "Each point is one crop×country dataset for the family representative.";
         return;
       }
-
-      const width = 720;
-      const height = 360;
-      const pad = { l: 56, r: 20, t: 20, b: 48 };
-      const innerW = width - pad.l - pad.r;
-      const innerH = height - pad.t - pad.b;
 
       const allPoints = series.flatMap(fam =>
         fam.points.map(p => ({ ...p, family: fam.family, color: fam.color, rep: fam.display_name }))
       );
-      const xs = allPoints.map(p => p.n_train);
+      const nTrainSorted = allPoints.map(p => p.n_train).sort((a, b) => a - b);
+      const xP05 = summary.x_p05 ?? Math.round(percentile(nTrainSorted, 0.05));
+      const xP95 = summary.x_p95 ?? Math.round(percentile(nTrainSorted, 0.95));
+      const xP50 = summary.x_p50 ?? Math.round(percentile(nTrainSorted, 0.5));
+      const log = v => Math.log10(Math.max(v, 1));
+      const logP05 = log(xP05);
+      const logP95 = log(xP95);
+      const logPad = 0.04 * (logP95 - logP05 || 1);
+
+      const corePts = allPoints.filter(p => p.n_train >= xP05 && p.n_train <= xP95);
+      const rho = summary.spearman_rho_core ?? spearmanRho(
+        corePts.map(p => p.n_train),
+        corePts.map(p => p[metricKey])
+      );
+      const nOut = summary.n_outliers_x ?? allPoints.length - corePts.length;
+
+      const width = 720;
+      const height = 380;
+      const pad = { l: 58, r: 24, t: 20, b: 52 };
+      const innerW = width - pad.l - pad.r;
+      const innerH = height - pad.t - pad.b;
+
       const ys = allPoints.map(p => p[metricKey]);
-      const xMin = Math.min(...xs);
-      const xMax = Math.max(...xs);
       const yMin = Math.max(0, Math.min(...ys, refY) - 0.08);
       const yMax = Math.max(...ys, refY) + 0.08;
-      const xScale = v => pad.l + ((v - xMin) / (xMax - xMin || 1)) * innerW;
+      const xScale = v => pad.l + ((log(v) - logP05 + logPad) / (logP95 - logP05 + 2 * logPad || 1)) * innerW;
       const yScale = v => pad.t + innerH - ((v - yMin) / (yMax - yMin || 1)) * innerH;
 
       let svg = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Performance vs training size">`;
@@ -344,33 +395,50 @@
 
       const yRef = yScale(refY);
       svg += `<line x1="${pad.l}" y1="${yRef}" x2="${pad.l + innerW}" y2="${yRef}" stroke="#bbb" stroke-dasharray="5 4"/>`;
-      svg += `<text x="${pad.l + innerW + 4}" y="${yRef + 3}" font-size="10" fill="#656d76">baseline</text>`;
+      svg += `<text x="${pad.l + innerW + 4}" y="${yRef + 3}" font-size="10" fill="#656d76">1.0</text>`;
 
+      const tickVals = [xP05, xP50, xP95].filter((v, i, a) => a.indexOf(v) === i);
+      tickVals.forEach(tx => {
+        svg += `<text x="${xScale(tx)}" y="${height - 12}" text-anchor="middle" font-size="10" fill="#656d76">${tx >= 1000 ? `${Math.round(tx / 1000)}k` : tx}</text>`;
+      });
       for (let i = 0; i <= 4; i++) {
-        const tx = xMin + (i / 4) * (xMax - xMin);
         const ty = yMin + (i / 4) * (yMax - yMin);
-        svg += `<text x="${xScale(tx)}" y="${height - 10}" text-anchor="middle" font-size="10" fill="#656d76">${Math.round(tx)}</text>`;
         svg += `<text x="10" y="${yScale(ty) + 3}" text-anchor="start" font-size="10" fill="#656d76">${ty.toFixed(2)}</text>`;
       }
-      svg += `<text x="${pad.l + innerW / 2}" y="${height - 2}" text-anchor="middle" font-size="11" fill="#1f2328">Training rows (mean)</text>`;
+      svg += `<text x="${pad.l + innerW / 2}" y="${height - 2}" text-anchor="middle" font-size="11" fill="#1f2328">Training rows (mean, log scale; ${xP05.toLocaleString()}–${xP95.toLocaleString()})</text>`;
       svg += `<text x="16" y="${pad.t + innerH / 2}" text-anchor="middle" font-size="11" fill="#1f2328" transform="rotate(-90 16 ${pad.t + innerH / 2})">${scatterMetric.label || metricKey}</text>`;
 
-      series.forEach(fam => {
-        fam.points.forEach(p => {
-          const cx = xScale(p.n_train);
-          const cy = yScale(p[metricKey]);
-          svg += `<circle cx="${cx}" cy="${cy}" r="6" fill="${fam.color}" fill-opacity="0.82" stroke="#fff" stroke-width="1.2">
-            <title>${fam.family} · ${p.display_name} · ${p.dataset}
-Train=${p.n_train}, rel NRMSE=${p[metricKey]}
+      allPoints.forEach(p => {
+        const isOut = p.n_train < xP05 || p.n_train > xP95;
+        const cx = xScale(Math.min(Math.max(p.n_train, xP05), xP95));
+        const cy = yScale(p[metricKey]);
+        const r = isOut ? 5 : 6;
+        const stroke = isOut ? p.color : "#fff";
+        const sw = isOut ? 2 : 1.2;
+        const fill = isOut ? "#fff" : p.color;
+        const outLabel = isOut ? " [outside range]" : "";
+        svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" fill-opacity="${isOut ? 1 : 0.82}" stroke="${stroke}" stroke-width="${sw}">
+            <title>${p.family} · ${p.display_name} · ${p.dataset}${outLabel}
+Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
 (model=${p.nrmse}, baseline=${p.baseline_nrmse})</title>
           </circle>`;
-        });
       });
       svg += "</svg>";
 
       const legend = series.map(fam =>
         `<span style="color:${fam.color}"><strong>${fam.family}</strong> · ${fam.display_name}</span>`
       ).join("");
+
+      let statLine = "";
+      if (rho !== null && rho !== undefined) {
+        const strength = Math.abs(rho) < 0.15 ? "no clear" : Math.abs(rho) < 0.35 ? "weak" : "moderate";
+        const dir = rho < -0.05 ? "more data → lower relative NRMSE" : rho > 0.05 ? "more data → higher relative NRMSE" : "flat trend";
+        statLine = `Spearman ρ = ${Number(rho).toFixed(2)} across datasets in range (${strength} trend; ${dir}). `;
+      }
+      scatterNote.textContent =
+        `Y-axis: model NRMSE ÷ average yield NRMSE (1.0 = baseline). X-axis uses log₁₀ scale over the 5th–95th percentile of training size (median ${xP50.toLocaleString()} rows). `
+        + `${nOut} point${nOut === 1 ? "" : "s"} outside that range shown as open circles at the axis edge. `
+        + statLine;
 
       scatterPanel.innerHTML = `${svg}<div class="scatter-legend">${legend}</div>`;
     }

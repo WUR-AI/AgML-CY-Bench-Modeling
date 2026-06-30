@@ -13,6 +13,7 @@ from cybench.runs.analysis.model_family_radar_lib import (
     build_sample_scatter_slice,
     pick_representatives,
     relative_scores,
+    summarize_sample_scatter,
 )
 
 
@@ -92,7 +93,9 @@ def test_build_radar_payload_structure(tmp_path: Path):
     assert families["Process-Based"]["relative"]["Overall"] == 0.0
     assert "sample_scatter" in payload
     eos_scatter = payload["sample_scatter"]["eos"]["all"]
-    assert any(f["family"] == "Tabular Foundation" for f in eos_scatter)
+    assert "families" in eos_scatter
+    assert any(f["family"] == "Tabular Foundation" for f in eos_scatter["families"])
+    assert eos_scatter["summary"]["n_points"] >= 4
 
 
 def test_build_sample_scatter_slice_uses_family_representatives():
@@ -130,6 +133,24 @@ def test_build_radar_payload_includes_relative_scatter_metric(tmp_path: Path):
     ).to_csv(d / "walk_forward_summary.csv", index=False)
     payload = build_radar_payload(tmp_path, version=1)
     assert payload["sample_scatter_metric"]["key"] == "relative_nrmse"
+
+
+def test_summarize_sample_scatter_reports_percentiles():
+    fams = build_sample_scatter_slice(
+        pd.DataFrame(
+            [
+                _summary_row("average_yield", nrmse=0.20, n_train=100, batch_horizon="eos"),
+                _summary_row("lightgbm", nrmse=0.16, n_train=100, batch_horizon="eos"),
+                _summary_row("average_yield", nrmse=0.20, n_train=10000, batch_horizon="eos", country="US"),
+                _summary_row("lightgbm", nrmse=0.10, n_train=10000, batch_horizon="eos", country="US"),
+            ]
+        ),
+        batch_horizon="eos",
+    )
+    summary = summarize_sample_scatter(fams)
+    assert summary["n_points"] == 2
+    assert summary["x_min"] == 100
+    assert summary["x_max"] == 10000
 
 
 def test_build_radar_html_embeds_payload(tmp_path: Path):

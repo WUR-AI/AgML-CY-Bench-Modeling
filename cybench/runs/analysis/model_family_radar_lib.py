@@ -273,25 +273,80 @@ def build_sample_scatter_slice(
     return families_out
 
 
+def summarize_sample_scatter(families: list[dict[str, Any]]) -> dict[str, Any]:
+    """Headline stats for the training-size scatter (percentiles + rank correlation)."""
+    rows: list[dict[str, Any]] = []
+    for fam in families:
+        for p in fam.get("points") or []:
+            rel = p.get("relative_nrmse")
+            n_train = p.get("n_train")
+            if rel is None or n_train is None:
+                continue
+            rows.append(
+                {
+                    "family": fam.get("family"),
+                    "n_train": int(n_train),
+                    "relative_nrmse": float(rel),
+                }
+            )
+    if not rows:
+        return {}
+
+    frame = pd.DataFrame(rows)
+    n = len(frame)
+    p05 = float(frame["n_train"].quantile(0.05))
+    p95 = float(frame["n_train"].quantile(0.95))
+    core = frame[(frame["n_train"] >= p05) & (frame["n_train"] <= p95)]
+    rho = float(core["n_train"].corr(core["relative_nrmse"], method="spearman")) if len(core) >= 5 else float("nan")
+
+    per_family: dict[str, float | None] = {}
+    for family, grp in core.groupby("family"):
+        if len(grp) < 4:
+            per_family[str(family)] = None
+        else:
+            per_family[str(family)] = round(
+                float(grp["n_train"].corr(grp["relative_nrmse"], method="spearman")), 3
+            )
+
+    return {
+        "n_points": n,
+        "n_outliers_x": int(n - len(core)),
+        "x_p05": int(round(p05)),
+        "x_p50": int(round(float(frame["n_train"].median()))),
+        "x_p95": int(round(p95)),
+        "x_min": int(frame["n_train"].min()),
+        "x_max": int(frame["n_train"].max()),
+        "spearman_rho_core": None if pd.isna(rho) else round(rho, 3),
+        "spearman_family_core": per_family,
+    }
+
+
 def build_sample_scatter_payload(
     df: pd.DataFrame,
     *,
     representatives: dict[str, str] | None = None,
-) -> dict[str, dict[str, list[dict[str, Any]]]]:
+) -> dict[str, dict[str, Any]]:
     by_horizon: dict[str, dict[str, list[dict[str, Any]]]] = {}
     for hz in ("eos", "mid"):
         if "batch_horizon" in df.columns and hz not in set(df["batch_horizon"].astype(str)):
             continue
-        by_crop: dict[str, list[dict[str, Any]]] = {
-            "all": build_sample_scatter_slice(
-                df, batch_horizon=hz, representatives=representatives
-            ),
+        by_crop: dict[str, Any] = {}
+        all_fams = build_sample_scatter_slice(
+            df, batch_horizon=hz, representatives=representatives
+        )
+        by_crop["all"] = {
+            "families": all_fams,
+            "summary": summarize_sample_scatter(all_fams),
         }
         if "crop" in df.columns:
             for crop in sorted({str(c) for c in df["crop"].dropna().unique()}):
-                by_crop[crop] = build_sample_scatter_slice(
+                fams = build_sample_scatter_slice(
                     df, batch_horizon=hz, crop=crop, representatives=representatives
                 )
+                by_crop[crop] = {
+                    "families": fams,
+                    "summary": summarize_sample_scatter(fams),
+                }
         by_horizon[hz] = by_crop
     return by_horizon
 
