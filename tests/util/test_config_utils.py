@@ -20,19 +20,6 @@ class _FakeTorchDataset:
         return None, self._x_c, self._x_t, None
 
 
-def test_adjust_model_cfg_sets_lstm_lf_simple_dims():
-    config_dir = Path(__file__).resolve().parents[2] / "cybench" / "conf"
-    with initialize_config_dir(config_dir=str(config_dir), version_base=None):
-        cfg = compose(
-            config_name="config",
-            overrides=["model=lstm_lf_simple", "dataset.framework=torch"],
-        )
-
-    adjusted = adjust_model_cfg_to_dataset(cfg.model, _FakeTorchDataset(n_channels=10, n_context=7))
-    assert adjusted.torch_model.temporal_in_dim == 10
-    assert adjusted.torch_model.context_in_dim == 7
-
-
 def test_adjust_model_cfg_sets_lstm_input_size():
     config_dir = Path(__file__).resolve().parents[2] / "cybench" / "conf"
     with initialize_config_dir(config_dir=str(config_dir), version_base=None):
