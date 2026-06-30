@@ -60,16 +60,32 @@ def _yearly_r2_values(
     min_regions: int = MIN_SLICE_REGIONS,
 ) -> list[float]:
     """Per-year cross-region R² values that pass the minimum-region filter."""
-    yearly_r2: list[float] = []
+    return [r2 for _, r2 in _yearly_r_values(
+        df, target_col, model_col, loc_col=loc_col, year_col=year_col, min_regions=min_regions
+    )]
+
+
+def _yearly_r_values(
+    df: pd.DataFrame,
+    target_col: str,
+    model_col: str,
+    *,
+    loc_col: str = KEY_LOC,
+    year_col: str = KEY_YEAR,
+    min_regions: int = MIN_SLICE_REGIONS,
+) -> list[tuple[float, float]]:
+    """Per-year cross-region (r, R²) pairs that pass the minimum-region filter."""
+    yearly: list[tuple[float, float]] = []
     for _, year_df in df.groupby(year_col):
         if year_df[loc_col].nunique() < min_regions:
             continue
-        _, r2 = calc_r_r2(
-            year_df[target_col].values,
-            year_df[model_col].values,
+        yearly.append(
+            calc_r_r2(
+                year_df[target_col].values,
+                year_df[model_col].values,
+            )
         )
-        yearly_r2.append(r2)
-    return yearly_r2
+    return yearly
 
 
 def _regional_r2_values(
@@ -81,16 +97,31 @@ def _regional_r2_values(
     min_years: int = MIN_SLICE_YEARS,
 ) -> list[float]:
     """Per-region cross-year R² values that pass the minimum-year filter."""
-    regional_r2: list[float] = []
+    return [r2 for _, r2 in _regional_r_values(
+        df, target_col, model_col, loc_col=loc_col, min_years=min_years
+    )]
+
+
+def _regional_r_values(
+    df: pd.DataFrame,
+    target_col: str,
+    model_col: str,
+    *,
+    loc_col: str = KEY_LOC,
+    min_years: int = MIN_SLICE_YEARS,
+) -> list[tuple[float, float]]:
+    """Per-region cross-year (r, R²) pairs that pass the minimum-year filter."""
+    regional: list[tuple[float, float]] = []
     for _, loc_df in df.groupby(loc_col):
         if len(loc_df) < min_years:
             continue
-        _, r2 = calc_r_r2(
-            loc_df[target_col].values,
-            loc_df[model_col].values,
+        regional.append(
+            calc_r_r2(
+                loc_df[target_col].values,
+                loc_df[model_col].values,
+            )
         )
-        regional_r2.append(r2)
-    return regional_r2
+    return regional
 
 
 def calc_median_yearly_r2(
@@ -148,19 +179,51 @@ def calc_median_regional_r2_res(
     min_years: int = MIN_SLICE_YEARS,
 ) -> float:
     """Median of per-region R² on location-de-meaned yields (anomaly view)."""
+    regional_r = _regional_residual_r_values(
+        df, target_col, model_col, loc_col=loc_col, min_years=min_years
+    )
+    if not regional_r:
+        return float("nan")
+    return float(np.nanmedian([r2 for _, r2 in regional_r]))
+
+
+def calc_median_regional_r_res(
+    df: pd.DataFrame,
+    target_col: str,
+    model_col: str,
+    *,
+    loc_col: str = KEY_LOC,
+    min_years: int = MIN_SLICE_YEARS,
+) -> float:
+    """Median of per-region Pearson r on location-de-meaned yields (anomaly view)."""
+    regional_r = _regional_residual_r_values(
+        df, target_col, model_col, loc_col=loc_col, min_years=min_years
+    )
+    if not regional_r:
+        return float("nan")
+    return float(np.nanmedian([r for r, _ in regional_r]))
+
+
+def _regional_residual_r_values(
+    df: pd.DataFrame,
+    target_col: str,
+    model_col: str,
+    *,
+    loc_col: str = KEY_LOC,
+    min_years: int = MIN_SLICE_YEARS,
+) -> list[tuple[float, float]]:
     loc_means = df.groupby(loc_col)[target_col].mean()
     work = df.copy()
     work["_true_res"] = work[target_col] - work[loc_col].map(loc_means)
     work["_pred_res"] = work[model_col] - work[loc_col].map(loc_means)
-    regional_r2: list[float] = []
+    regional: list[tuple[float, float]] = []
     for _, loc_df in work.groupby(loc_col):
         if len(loc_df) < min_years:
             continue
-        _, r2 = calc_r_r2(loc_df["_true_res"].values, loc_df["_pred_res"].values)
-        regional_r2.append(r2)
-    if not regional_r2:
-        return float("nan")
-    return float(np.nanmedian(regional_r2))
+        regional.append(
+            calc_r_r2(loc_df["_true_res"].values, loc_df["_pred_res"].values)
+        )
+    return regional
 
 
 def get_metrics_dict(
@@ -218,7 +281,11 @@ def compute_report_metrics(
     yearly_r2 = _yearly_r2_values(
         df, target_col, model_col, loc_col=loc_col, year_col=year_col
     )
+    yearly_r = [r for r, _ in _yearly_r_values(
+        df, target_col, model_col, loc_col=loc_col, year_col=year_col
+    )]
     regional_r2 = _regional_r2_values(df, target_col, model_col, loc_col=loc_col)
+    regional_r = [r for r, _ in _regional_r_values(df, target_col, model_col, loc_col=loc_col)]
 
     spatial_agg = df.groupby(loc_col)[[target_col, model_col]].mean()
     r_spatial_agg, r2_spatial_agg = calc_r_r2(
@@ -238,18 +305,23 @@ def compute_report_metrics(
         "n_samples": int(len(df)),
         "region_year": region_year,
         "spatial": {
+            "r_typical_year": float(np.nanmedian(yearly_r)) if yearly_r else float("nan"),
             "r2_typical_year": float(np.nanmedian(yearly_r2)) if yearly_r2 else float("nan"),
             "n_slices_years": len(yearly_r2),
             "r_aggregate": r_spatial_agg,
             "r2_aggregate": r2_spatial_agg,
         },
         "temporal": {
+            "r_typical_region": float(np.nanmedian(regional_r)) if regional_r else float("nan"),
             "r2_typical_region": float(np.nanmedian(regional_r2)) if regional_r2 else float("nan"),
             "n_slices_regions": len(regional_r2),
             "r_aggregate": r_temporal_agg,
             "r2_aggregate": r2_temporal_agg,
         },
         "anomaly": {
+            "r_typical_region": calc_median_regional_r_res(
+                df, target_col, model_col, loc_col=loc_col
+            ),
             "r2_typical_region": calc_median_regional_r2_res(
                 df, target_col, model_col, loc_col=loc_col
             ),
@@ -267,10 +339,10 @@ def format_report_metrics(metrics: dict[str, Any]) -> str:
     an = metrics["anomaly"]
     return (
         f"region-year r={ry['r']:.2f} R²={ry['r2']:.2f} NRMSE={ry['nrmse']:.2f} | "
-        f"spatial R²(med/yr)={sp['r2_typical_year']:.2f} "
-        f"agg R²={sp['r2_aggregate']:.2f} | "
-        f"temporal R²(med/reg)={tm['r2_typical_region']:.2f} "
-        f"agg R²={tm['r2_aggregate']:.2f} | "
-        f"anomaly R²(med/reg)={an['r2_typical_region']:.2f} "
-        f"pooled R²={an['r2_pooled']:.2f}"
+        f"spatial r(med/yr)={sp['r_typical_year']:.2f} "
+        f"agg r={sp['r_aggregate']:.2f} | "
+        f"temporal r(med/reg)={tm['r_typical_region']:.2f} "
+        f"agg r={tm['r_aggregate']:.2f} | "
+        f"anomaly r(med/reg)={an['r_typical_region']:.2f} "
+        f"pooled r={an['r_pooled']:.2f}"
     )

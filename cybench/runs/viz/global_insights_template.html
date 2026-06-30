@@ -219,6 +219,7 @@
       </div>
       <p class="muted" style="margin-top:0;" id="matrix-metric-note">
         Median column = median across countries per model (click column headers to sort). Green = better.
+        Pattern axes (spatial, temporal, anomaly) show Pearson r; overall shows R²/NRMSE.
         Country cells link to the matching country dashboard with that model pre-selected.
       </p>
       <div class="table-scroll" id="model-country-wrap"></div>
@@ -279,6 +280,11 @@
     function fixedR2Bg(v) {
       if (v === null || v === undefined || Number.isNaN(v)) return null;
       return heatColor(v, 0, 1, true);
+    }
+
+    function fixedRBg(v) {
+      if (v === null || v === undefined || Number.isNaN(v)) return null;
+      return heatColor(v, -1, 1, true);
     }
 
     function fixedDeltaBg(v) {
@@ -366,9 +372,9 @@
           { id: "nrmse", label: "NRMSE", higher_better: false },
         ],
       },
-      { id: "spatial", label: "Spatial", note: "R² on regional means.", metrics: [{ id: "r2", label: "R²", higher_better: true }] },
-      { id: "temporal", label: "Temporal", note: "R² on yearly national means.", metrics: [{ id: "r2", label: "R²", higher_better: true }] },
-      { id: "anomaly", label: "Anomaly", note: "Pooled R² on de-meaned yields.", metrics: [{ id: "r2", label: "R²", higher_better: true }] },
+      { id: "spatial", label: "Spatial", note: "Pearson r on regional means (aggregate).", metrics: [{ id: "r", label: "r", higher_better: true }] },
+      { id: "temporal", label: "Temporal", note: "Pearson r on yearly national means (aggregate).", metrics: [{ id: "r", label: "r", higher_better: true }] },
+      { id: "anomaly", label: "Anomaly", note: "Pooled Pearson r on de-meaned yields.", metrics: [{ id: "r", label: "r", higher_better: true }] },
     ];
 
     function syncCropSelects(value) {
@@ -431,7 +437,7 @@
       const metric = metrics.find(m => m.id === metricId) || metrics[0];
       const higherBetter = metric?.higher_better !== false;
       const label = metric?.label || metricId.toUpperCase();
-      const bg = metricId === "nrmse" ? fixedNrmseBg : fixedR2Bg;
+      const bg = metricId === "nrmse" ? fixedNrmseBg : (metricId === "r2" ? fixedR2Bg : fixedRBg);
       return {
         axisId: axis.id,
         axisLabel: axis.label,

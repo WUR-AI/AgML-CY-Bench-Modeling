@@ -21,12 +21,15 @@ METRIC_KEYS: tuple[str, ...] = (
     "r2",
     "nrmse",
     "r2_spatial",
+    "r_spatial",
     "r_spatial_agg",
     "r2_spatial_agg",
     "r2_temporal",
+    "r_temporal",
     "r_temporal_agg",
     "r2_temporal_agg",
     "r2_anomaly",
+    "r_anomaly",
     "r_res",
     "r2_res",
 )
@@ -37,12 +40,15 @@ HIGHER_IS_BETTER = frozenset(
         "r",
         "r2",
         "r2_spatial",
+        "r_spatial",
         "r_spatial_agg",
         "r2_spatial_agg",
         "r2_temporal",
+        "r_temporal",
         "r_temporal_agg",
         "r2_temporal_agg",
         "r2_anomaly",
+        "r_anomaly",
         "r_res",
         "r2_res",
     }
@@ -58,10 +64,15 @@ def flatten_report_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
     r2_spatial = sp.get("r2_typical_year")
     if r2_spatial is None:
         r2_spatial = ry.get("median_r2")
+    r_spatial = sp.get("r_typical_year")
     r2_temporal = tm.get("r2_typical_region")
+    r_temporal = tm.get("r_typical_region")
     r2_anomaly = an.get("r2_typical_region")
     if r2_anomaly is None:
         r2_anomaly = ry.get("r2_res")
+    r_anomaly = an.get("r_typical_region")
+    if r_anomaly is None:
+        r_anomaly = ry.get("r_res")
     return {
         "n_regions": metrics.get("n_regions"),
         "n_years": metrics.get("n_years"),
@@ -72,12 +83,15 @@ def flatten_report_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
         "r_res": ry.get("r_res"),
         "r2_res": ry.get("r2_res"),
         "r2_spatial": r2_spatial,
+        "r_spatial": r_spatial,
         "r_spatial_agg": sp.get("r_aggregate", sp.get("r_climatology", sp.get("r"))),
         "r2_spatial_agg": sp.get("r2_aggregate", sp.get("r2_climatology", sp.get("r2"))),
         "r2_temporal": r2_temporal,
+        "r_temporal": r_temporal,
         "r_temporal_agg": tm.get("r_aggregate", tm.get("r")),
         "r2_temporal_agg": tm.get("r2_aggregate", tm.get("r2")),
         "r2_anomaly": r2_anomaly,
+        "r_anomaly": r_anomaly,
     }
 
 

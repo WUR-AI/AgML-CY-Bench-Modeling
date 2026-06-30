@@ -28,25 +28,25 @@ MODEL_COUNTRY_AXES: tuple[dict[str, Any], ...] = (
     {
         "id": "spatial",
         "label": "Spatial",
-        "note": "R² on regional means (aggregate across years).",
+        "note": "Pearson r on regional means (aggregate across years).",
         "metrics": (
-            {"id": "r2", "column": "r2_spatial_agg", "label": "R²", "higher_better": True},
+            {"id": "r", "column": "r_spatial_agg", "label": "r", "higher_better": True},
         ),
     },
     {
         "id": "temporal",
         "label": "Temporal",
-        "note": "R² on yearly national means (aggregate across regions).",
+        "note": "Pearson r on yearly national means (aggregate across regions).",
         "metrics": (
-            {"id": "r2", "column": "r2_temporal_agg", "label": "R²", "higher_better": True},
+            {"id": "r", "column": "r_temporal_agg", "label": "r", "higher_better": True},
         ),
     },
     {
         "id": "anomaly",
         "label": "Anomaly",
-        "note": "Pooled R² on location-de-meaned yields (r2_res, else r2_anomaly).",
+        "note": "Pooled Pearson r on location-de-meaned yields.",
         "metrics": (
-            {"id": "r2", "column": "r2_res", "label": "R²", "higher_better": True},
+            {"id": "r", "column": "r_res", "label": "r", "higher_better": True},
         ),
     },
 )
@@ -59,10 +59,15 @@ _NUMERIC_SUMMARY_COLS = (
     "n_regions",
     "n_years",
     "r2_spatial",
+    "r_spatial",
+    "r_spatial_agg",
     "r2_spatial_agg",
     "r2_temporal",
+    "r_temporal",
+    "r_temporal_agg",
     "r2_temporal_agg",
     "r2_anomaly",
+    "r_anomaly",
     "r2_res",
 )
 
@@ -139,14 +144,9 @@ def compat_legacy_summary_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def _series_for_matrix_column(grp: pd.DataFrame, column: str) -> pd.Series:
     """Return numeric series for a matrix column, with anomaly fallbacks."""
-    if column == "r2_res":
-        if "r2_res" in grp.columns:
-            s = pd.to_numeric(grp["r2_res"], errors="coerce")
-            if "r2_anomaly" in grp.columns:
-                return s.fillna(pd.to_numeric(grp["r2_anomaly"], errors="coerce"))
-            return s
-        if "r2_anomaly" in grp.columns:
-            return pd.to_numeric(grp["r2_anomaly"], errors="coerce")
+    if column == "r_res":
+        if "r_res" in grp.columns:
+            return pd.to_numeric(grp["r_res"], errors="coerce")
         return pd.Series(dtype=float)
     if column not in grp.columns:
         return pd.Series(dtype=float)

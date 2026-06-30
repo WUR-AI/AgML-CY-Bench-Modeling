@@ -209,6 +209,7 @@ def test_build_model_country_matrix_spatial_axis():
                 "nrmse": 0.10,
                 "r2": 0.9,
                 "r2_spatial_agg": 0.55,
+                "r_spatial_agg": 0.62,
                 "n_samples": 50,
             },
             {
@@ -219,14 +220,15 @@ def test_build_model_country_matrix_spatial_axis():
                 "nrmse": 0.20,
                 "r2": 0.7,
                 "r2_spatial_agg": 0.35,
+                "r_spatial_agg": 0.35,
                 "n_samples": 50,
             },
         ]
     )
     matrix = build_model_country_matrix(df, batch_horizon="eos")
     ridge_cell = next(c for c in matrix["cells"] if c["model"] == "ridge")
-    assert ridge_cell["axes"]["spatial"]["r2"] == 0.45
-    assert matrix["model_totals"]["ridge"]["spatial"]["r2"] == 0.45
+    assert ridge_cell["axes"]["spatial"]["r"] == 0.485
+    assert matrix["model_totals"]["ridge"]["spatial"]["r"] == 0.485
 
 
 def test_model_median_by_country_matches_matrix():

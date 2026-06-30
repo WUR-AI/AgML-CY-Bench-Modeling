@@ -207,10 +207,15 @@ def test_summary_rows_to_dashboard_records(tmp_path: Path):
             "r2": -1.46,
             "nrmse": 0.31,
             "r2_spatial": 0.42,
+            "r_spatial": 0.55,
             "r2_spatial_agg": -0.93,
+            "r_spatial_agg": 0.12,
             "r2_temporal": -0.55,
+            "r_temporal": 0.33,
             "r2_temporal_agg": -5.10,
+            "r_temporal_agg": 0.48,
             "r2_anomaly": -0.80,
+            "r_anomaly": 0.21,
             "r_res": 0.05,
             "r2_res": -1.76,
             "n_seeds": 3,
@@ -230,14 +235,14 @@ def test_summary_rows_to_dashboard_records(tmp_path: Path):
     nrmse_rec = next(r for r in records if r["view"] == "region_year" and r["metric"] == "nrmse")
     assert nrmse_rec["value"] == 0.31
     assert nrmse_rec["value_std"] == 0.012
-    r_rec = next(r for r in records if r["view"] == "region_year" and r["metric"] == "r")
-    assert r_rec["value_std"] == 0.004
-    r2_rec = next(r for r in records if r["view"] == "region_year" and r["metric"] == "r2")
-    assert r2_rec["value_std"] is None
-    sp_agg = next(r for r in records if r["view"] == "spatial" and r["metric"] == "r2_agg")
-    assert sp_agg["value"] == -0.93
-    tm_agg = next(r for r in records if r["view"] == "temporal" and r["metric"] == "r2_agg")
-    assert tm_agg["value"] == -5.10
+    sp_slice = next(r for r in records if r["view"] == "spatial" and r["metric"] == "r")
+    assert sp_slice["value"] == 0.55
+    sp_agg = next(r for r in records if r["view"] == "spatial" and r["metric"] == "r_agg")
+    assert sp_agg["value"] == 0.12
+    tm_agg = next(r for r in records if r["view"] == "temporal" and r["metric"] == "r_agg")
+    assert tm_agg["value"] == 0.48
+    an_pool = next(r for r in records if r["view"] == "anomaly" and r["metric"] == "r_pooled")
+    assert an_pool["value"] == 0.05
     scatter_recs = [r for r in records if r.get("images", {}).get("scatter")]
     assert scatter_recs
     assert "maize_NL" in scatter_recs[0]["images"]["scatter"]

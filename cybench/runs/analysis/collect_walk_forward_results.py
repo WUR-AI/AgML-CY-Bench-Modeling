@@ -391,14 +391,14 @@ def summary_rows_to_dashboard_records(
 ) -> list[dict[str, Any]]:
     """Flatten summary rows into records for build_results_dashboard.build_html."""
     metric_map = [
-        ("region_year", "r", "r"),
         ("region_year", "r2", "r2"),
         ("region_year", "nrmse", "nrmse"),
-        ("spatial", "r2", "r2_spatial"),
-        ("spatial", "r2_agg", "r2_spatial_agg"),
-        ("temporal", "r2", "r2_temporal"),
-        ("temporal", "r2_agg", "r2_temporal_agg"),
-        ("anomaly", "r2", "r2_anomaly"),
+        ("spatial", "r", "r_spatial"),
+        ("spatial", "r_agg", "r_spatial_agg"),
+        ("temporal", "r", "r_temporal"),
+        ("temporal", "r_agg", "r_temporal_agg"),
+        ("anomaly", "r", "r_anomaly"),
+        ("anomaly", "r_pooled", "r_res"),
     ]
     records: list[dict[str, Any]] = []
     for row in summary_rows:
