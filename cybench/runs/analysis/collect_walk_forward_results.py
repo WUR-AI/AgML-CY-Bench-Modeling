@@ -37,6 +37,7 @@ import sys
 from pathlib import Path
 from typing import Any, cast
 
+import numpy as np
 import pandas as pd
 import yaml
 from omegaconf import OmegaConf
@@ -92,6 +93,54 @@ def resolve_model_column(run_dir: Path, model_slug: str) -> str:
 
 
 COUNT_METRIC_KEYS: tuple[str, ...] = ("n_regions", "n_years", "n_samples")
+
+_TRAIN_LOG_RE = re.compile(r"Train final model on (\d+) datapoints", re.IGNORECASE)
+
+
+def _n_train_from_split_metrics(run_dir: Path, seed: int) -> list[int]:
+    """Training row counts recorded per walk-forward split (``report_metrics.yaml``)."""
+    sizes: list[int] = []
+    for split_dir in sorted(run_dir.iterdir()):
+        if not split_dir.is_dir() or not re.fullmatch(r"\d{4}", split_dir.name):
+            continue
+        metrics_path = split_dir / str(seed) / "report_metrics.yaml"
+        if not metrics_path.is_file():
+            continue
+        try:
+            raw = yaml.safe_load(metrics_path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        n_train = raw.get("n_train")
+        if n_train is not None and not pd.isna(n_train):
+            sizes.append(int(n_train))
+    return sizes
+
+
+def _n_train_from_run_log(run_dir: Path) -> list[int]:
+    """Fallback for runs logged before ``n_train`` was written to report_metrics."""
+    log_path = run_dir / "run_experiments.log"
+    if not log_path.is_file():
+        return []
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    return [int(m.group(1)) for m in _TRAIN_LOG_RE.finditer(text)]
+
+
+def summarize_walk_forward_n_train(run_dir: Path, *, seed: int) -> dict[str, Any]:
+    """Mean training rows across walk-forward splits (train window grows per year)."""
+    sizes = _n_train_from_split_metrics(run_dir, seed)
+    if not sizes:
+        sizes = _n_train_from_run_log(run_dir)
+    if not sizes:
+        return {"n_train": None, "n_train_splits": 0}
+    return {
+        "n_train": int(round(float(np.mean(sizes)))),
+        "n_train_min": int(min(sizes)),
+        "n_train_max": int(max(sizes)),
+        "n_train_splits": len(sizes),
+    }
 
 
 def discover_run_seeds(run_dir: Path) -> list[int]:
@@ -278,6 +327,7 @@ def collect_walk_forward_run(
 
     assert plot_df is not None
     summary = aggregate_flat_metrics_across_seeds(per_seed_flat, seeds)
+    summary.update(summarize_walk_forward_n_train(run.path, seed=plot_seed))
     return summary, per_seed_rows, plot_df, model_col, plot_seed
 
 

@@ -364,6 +364,7 @@ def main(cfg):
                 target_col=KEY_TARGET,
                 model_col=model_col,
             )
+            report_metrics["n_train"] = len(train_dataset)
             metric_ls.append(eval_metric)
             log.info(f"Split {train_test_split[-1]} (seed {seed}) finished with metrics: {eval_metric}")
             log.info(

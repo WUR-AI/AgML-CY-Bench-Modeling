@@ -63,7 +63,7 @@ def load_summary_frame(summary_paths: list[Path]) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
     out = pd.concat(frames, ignore_index=True)
-    for col in ("nrmse", "r2", "n_samples", "n_regions", "n_years"):
+    for col in ("nrmse", "r2", "n_samples", "n_train", "n_regions", "n_years"):
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce")
     return out

@@ -195,12 +195,13 @@ def family_for_model(model: str) -> str | None:
 
 
 SAMPLE_SCATTER_METRICS: tuple[dict[str, str], ...] = (
-    {"key": "r2", "label": "Overall R²"},
-    {"key": "r2_spatial", "label": "Spatial R² (med/yr)"},
-    {"key": "r2_spatial_agg", "label": "Spatial R² (agg)"},
-    {"key": "r2_temporal", "label": "Temporal R² (med/reg)"},
-    {"key": "r2_temporal_agg", "label": "Temporal R² (agg)"},
-    {"key": "r2_anomaly", "label": "Anomaly R² (med/reg)"},
+    {"key": "nrmse", "label": "Overall NRMSE", "lower_is_better": True},
+    {"key": "r2", "label": "Overall R²", "lower_is_better": False},
+    {"key": "r2_spatial", "label": "Spatial R² (med/yr)", "lower_is_better": False},
+    {"key": "r2_spatial_agg", "label": "Spatial R² (agg)", "lower_is_better": False},
+    {"key": "r2_temporal", "label": "Temporal R² (med/reg)", "lower_is_better": False},
+    {"key": "r2_temporal_agg", "label": "Temporal R² (agg)", "lower_is_better": False},
+    {"key": "r2_anomaly", "label": "Anomaly R² (med/reg)", "lower_is_better": False},
 )
 
 
@@ -210,7 +211,7 @@ def build_sample_scatter_slice(
     batch_horizon: str,
     crop: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Per-family points for performance vs pooled test sample count."""
+    """Per-family points for performance vs mean walk-forward training set size."""
     work = df[df["batch_horizon"] == batch_horizon].copy() if "batch_horizon" in df.columns else df
     if crop:
         work = work[work["crop"] == crop]
@@ -218,7 +219,7 @@ def build_sample_scatter_slice(
         return []
 
     metric_keys = [m["key"] for m in SAMPLE_SCATTER_METRICS]
-    for key in metric_keys + ["n_samples"]:
+    for key in metric_keys + ["n_train"]:
         if key in work.columns:
             work[key] = pd.to_numeric(work[key], errors="coerce")
 
@@ -229,8 +230,8 @@ def build_sample_scatter_slice(
             continue
         points: list[dict[str, Any]] = []
         for _, row in sub.iterrows():
-            n_samples = row.get("n_samples")
-            if pd.isna(n_samples) or int(n_samples) <= 0:
+            n_train = row.get("n_train")
+            if pd.isna(n_train) or int(n_train) <= 0:
                 continue
             model = str(row["model"])
             point: dict[str, Any] = {
@@ -239,7 +240,7 @@ def build_sample_scatter_slice(
                 "country": str(row.get("country", "")),
                 "crop": str(row.get("crop", "")),
                 "dataset": f"{row.get('crop', '')}_{row.get('country', '')}",
-                "n_samples": int(n_samples),
+                "n_train": int(n_train),
                 "metrics": {},
             }
             for metric in metric_keys:

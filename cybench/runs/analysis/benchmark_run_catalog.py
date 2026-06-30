@@ -196,7 +196,7 @@ def _metrics_from_report_yaml(path: Path) -> dict[str, Any]:
     raw = OmegaConf.to_container(OmegaConf.load(path))
     if not isinstance(raw, dict):
         return {}
-    return flatten_report_metrics(
+    flat = flatten_report_metrics(
         {
             "n_regions": raw.get("n_regions"),
             "n_years": raw.get("n_years"),
@@ -207,6 +207,9 @@ def _metrics_from_report_yaml(path: Path) -> dict[str, Any]:
             "anomaly": raw.get("anomaly") or {},
         }
     )
+    if raw.get("n_train") is not None:
+        flat["n_train"] = raw.get("n_train")
+    return flat
 
 
 def load_run_metrics(run: BenchmarkRun, *, seed: int = 42) -> dict[str, Any] | None:
@@ -221,7 +224,7 @@ def load_run_metrics(run: BenchmarkRun, *, seed: int = 42) -> dict[str, Any] | N
             return None
         return {
             k: summary.get(k)
-            for k in ("n_regions", "n_years", "n_samples") + METRIC_KEYS
+            for k in ("n_regions", "n_years", "n_samples", "n_train") + METRIC_KEYS
         }
 
     metrics_path = _screening_metrics_path(run.path, seed=seed)

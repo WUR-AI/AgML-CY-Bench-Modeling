@@ -237,3 +237,18 @@ def test_summary_rows_to_dashboard_records(tmp_path: Path):
     scatter_recs = [r for r in records if r.get("images", {}).get("scatter")]
     assert scatter_recs
     assert "maize_NL" in scatter_recs[0]["images"]["scatter"]
+
+
+def test_summarize_walk_forward_n_train_from_log(tmp_path: Path):
+    from cybench.runs.analysis.collect_walk_forward_results import summarize_walk_forward_n_train
+
+    run_dir = tmp_path / "maize_DE_tabpfn_walk_forward_eos_20260616_135557"
+    run_dir.mkdir()
+    (run_dir / "run_experiments.log").write_text(
+        "Train final model on 2783 datapoints (years [...])\n"
+        "Train final model on 3225 datapoints (years [...])\n",
+        encoding="utf-8",
+    )
+    out = summarize_walk_forward_n_train(run_dir, seed=42)
+    assert out["n_train_splits"] == 2
+    assert out["n_train"] == 3004

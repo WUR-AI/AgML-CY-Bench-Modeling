@@ -1,6 +1,7 @@
 data
 output
 outputs/
+_build/
 .venv/
 venv/
 __pycache__
