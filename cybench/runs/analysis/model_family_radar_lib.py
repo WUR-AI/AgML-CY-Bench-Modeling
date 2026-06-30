@@ -11,37 +11,37 @@ from cybench.runs.analysis.benchmark_run_catalog import HIGHER_IS_BETTER, LOWER_
 from cybench.runs.analysis.global_insights_lib import (
     attach_baseline_metrics,
     discover_summary_tables,
-    is_baseline_model,
     load_summary_frame,
 )
 
-# Scientific views → headline metric per axis (from aggregated_metrics / METRIC_KEYS).
+# Scientific views → headline metric per axis (aggregate / pooled, not slice medians).
 EVALUATION_VIEWS: tuple[dict[str, str], ...] = (
     {
         "label": "Overall",
         "metric": "r2",
-        "question": "Can the model predict crop yields accurately?",
+        "question": "Can the model predict crop yields accurately (all region×year rows)?",
     },
     {
         "label": "Spatial",
-        "metric": "r2_spatial",
-        "question": "For a typical year, can it reproduce spatial productivity patterns?",
+        "metric": "r2_spatial_agg",
+        "question": "Can it reproduce long-run spatial yield patterns (R² on regional means)?",
     },
     {
         "label": "Temporal",
-        "metric": "r2_temporal",
-        "question": "For a typical region, can it reproduce year-to-year yield dynamics?",
+        "metric": "r2_temporal_agg",
+        "question": "Can it reproduce national yield trends (R² on yearly national means)?",
     },
     {
         "label": "Anomaly",
-        "metric": "r2_anomaly",
-        "question": "Can it predict deviations from a region's expected yield?",
+        "metric": "r2_res",
+        "question": "Can it predict location-de-meaned yield deviations (pooled R²)?",
     },
 )
 
 VIEW_METRICS: tuple[str, ...] = tuple(v["metric"] for v in EVALUATION_VIEWS)
 
 MODEL_FAMILIES: dict[str, list[str]] = {
+    "Naive baselines": ["average", "average_yield", "trend"],
     "Process-Based": ["lpjml_bc", "twso_bc"],
     "Feature-Engineered ML": ["lightgbm", "xgboost", "random_forest", "ridge"],
     "Sequence / Deep TS": [
@@ -58,21 +58,24 @@ MODEL_FAMILIES: dict[str, list[str]] = {
     "Tabular Foundation": ["tabpfn", "tabicl", "tabdpt"],
 }
 
-DEFAULT_REPRESENTATIVES: dict[str, str] = {
-    "Process-Based": "lpjml_bc",
-    "Feature-Engineered ML": "lightgbm",
-    "Sequence / Deep TS": "transformer_lf",
-    "Tabular Foundation": "tabpfn",
-}
+FAMILY_ORDER: tuple[str, ...] = tuple(MODEL_FAMILIES.keys())
 
 FAMILY_COLORS: dict[str, str] = {
+    "Naive baselines": "#6c757d",
     "Process-Based": "#e76f51",
     "Feature-Engineered ML": "#2a9d8f",
     "Sequence / Deep TS": "#457b9d",
     "Tabular Foundation": "#9b5de5",
 }
 
+RADAR_NORMALIZATION_NOTE = (
+    "Each axis is independently normalized to highlight the relative strengths of "
+    "each modeling paradigm. Absolute R² values are reported in Table X."
+)
+
 MODEL_DISPLAY_NAMES: dict[str, str] = {
+    "average": "Average",
+    "average_yield": "Average",
     "lpjml_bc": "LPJmL",
     "twso_bc": "TWSO",
     "lightgbm": "LightGBM",
@@ -85,7 +88,12 @@ MODEL_DISPLAY_NAMES: dict[str, str] = {
     "tabpfn": "TabPFN",
     "tabicl": "TabICL",
     "tabdpt": "TabDPT",
+    "trend": "Trend",
 }
+
+def is_naive_radar_model(model: object) -> bool:
+    slug = str(model).lower().replace("-", "_")
+    return slug in {"average", "averageyieldmodel", "average_yield", "trend"}
 
 
 def _metric_higher_is_better(metric: str) -> bool:
@@ -96,30 +104,32 @@ def _metric_higher_is_better(metric: str) -> bool:
     return True
 
 
-def _median_per_model(df: pd.DataFrame, metrics: tuple[str, ...]) -> pd.DataFrame:
-    """Median metric per model (one value per crop×country row in *df*)."""
-    if df.empty or "model" not in df.columns:
+def _median_for_models(
+    df: pd.DataFrame, models: list[str], metrics: tuple[str, ...]
+) -> pd.DataFrame:
+    """Median metric per model slug (one value per crop×country row in *df*)."""
+    if df.empty or "model" not in df.columns or not models:
         return pd.DataFrame()
-    work = df[~df["model"].apply(is_baseline_model)]
+    work = df[df["model"].isin(models)]
     if work.empty:
         return pd.DataFrame()
     present = [m for m in metrics if m in work.columns]
     if not present:
         return pd.DataFrame()
-    grouped = work.groupby("model", sort=True)[present].median()
-    return grouped
+    return work.groupby("model", sort=True)[present].median()
 
 
 def pick_representatives(
     df: pd.DataFrame,
     *,
-    selection_metric: str = "r2",
+    selection_metric: str = "nrmse",
     overrides: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    """Pick one model slug per family (default: best median overall R² in frame)."""
-    overrides = dict(overrides or DEFAULT_REPRESENTATIVES)
+    """Pick one model slug per family (default: lowest median NRMSE in frame)."""
+    overrides = dict(overrides or {})
     chosen: dict[str, str] = {}
     models_in_frame = set(df["model"].astype(str)) if "model" in df.columns else set()
+    higher_is_better = _metric_higher_is_better(selection_metric)
 
     for family, candidates in MODEL_FAMILIES.items():
         override = overrides.get(family)
@@ -133,12 +143,12 @@ def pick_representatives(
         med = med[med.notna()]
         if med.empty:
             continue
-        chosen[family] = str(med.idxmax())
+        chosen[family] = str(med.idxmin() if not higher_is_better else med.idxmax())
     return chosen
 
 
 def relative_scores(raw: pd.DataFrame) -> pd.DataFrame:
-    """Min–max normalize each view column across all models in *raw* (higher radius = better)."""
+    """Min–max normalize each view column across family representatives (higher radius = better)."""
     out = raw.copy()
     for view in EVALUATION_VIEWS:
         label = view["label"]
@@ -158,26 +168,26 @@ def relative_scores(raw: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _family_records(
+def _records_from_medians(
     medians: pd.DataFrame,
-    representatives: dict[str, str],
+    rel_all: pd.DataFrame,
+    entries: list[tuple[str, str, str, str, bool]],
 ) -> list[dict[str, Any]]:
+    """Build radar rows from median table. *entries*: (index, family, display, color, is_naive)."""
     view_labels = [v["label"] for v in EVALUATION_VIEWS]
-    rel_all = relative_scores(medians.copy()) if not medians.empty else pd.DataFrame()
-
     rows: list[dict[str, Any]] = []
-    for family, model in representatives.items():
-        if model not in medians.index:
+    for model_key, family, display_name, color, is_naive in entries:
+        if model_key not in medians.index:
             continue
-        raw_row = medians.loc[model]
+        raw_row = medians.loc[model_key]
         raw: dict[str, float | None] = {}
         for view in EVALUATION_VIEWS:
             val = raw_row.get(view["metric"])
             raw[view["metric"]] = None if pd.isna(val) else round(float(val), 4)
         relative = {
             label: (
-                round(float(rel_all[label].loc[model]), 4)
-                if label in rel_all.columns and model in rel_all.index
+                round(float(rel_all[label].loc[model_key]), 4)
+                if label in rel_all.columns and model_key in rel_all.index
                 else None
             )
             for label in view_labels
@@ -185,14 +195,37 @@ def _family_records(
         rows.append(
             {
                 "family": family,
-                "model": model,
-                "display_name": MODEL_DISPLAY_NAMES.get(model, model),
-                "color": FAMILY_COLORS.get(family, "#666"),
+                "model": model_key,
+                "display_name": display_name,
+                "color": color,
+                "is_naive": is_naive,
                 "raw": raw,
                 "relative": relative,
             }
         )
     return rows
+
+
+def _family_records(
+    medians: pd.DataFrame,
+    representatives: dict[str, str],
+    *,
+    rel_all: pd.DataFrame | None = None,
+) -> list[dict[str, Any]]:
+    if rel_all is None:
+        rel_all = relative_scores(medians.copy()) if not medians.empty else pd.DataFrame()
+    entries = [
+        (
+            representatives[family],
+            family,
+            MODEL_DISPLAY_NAMES.get(representatives[family], representatives[family]),
+            FAMILY_COLORS.get(family, "#666"),
+            family == "Naive baselines",
+        )
+        for family in FAMILY_ORDER
+        if family in representatives
+    ]
+    return _records_from_medians(medians, rel_all, entries)
 
 
 def family_for_model(model: str) -> str | None:
@@ -361,9 +394,11 @@ def build_radar_slice(
     work = df[df["batch_horizon"] == batch_horizon].copy() if "batch_horizon" in df.columns else df
     if crop:
         work = work[work["crop"] == crop]
-    medians = _median_per_model(work, VIEW_METRICS)
     reps = pick_representatives(work, overrides=representatives)
-    families = _family_records(medians, reps)
+    rep_models = list(reps.values())
+    medians = _median_for_models(work, rep_models, VIEW_METRICS)
+    rel_all = relative_scores(medians.copy()) if not medians.empty else pd.DataFrame()
+    families = _family_records(medians, reps, rel_all=rel_all)
     return {
         "batch_horizon": batch_horizon,
         "crop": crop or "all",
@@ -416,9 +451,8 @@ def build_radar_payload(
         "by_horizon": by_horizon,
         "sample_scatter_metric": SAMPLE_SCATTER_METRIC,
         "sample_scatter": build_sample_scatter_payload(df, representatives=representatives),
-        "normalization_note": (
-            "Each axis is min–max normalized across all models in the selected horizon "
-            "and crop filter. Radar vertices show one representative per family; radii "
-            "indicate where that representative sits relative to the full model field."
+        "normalization_note": RADAR_NORMALIZATION_NOTE,
+        "representative_selection": (
+            "One model per family: lowest median NRMSE across datasets in the selection."
         ),
     }
