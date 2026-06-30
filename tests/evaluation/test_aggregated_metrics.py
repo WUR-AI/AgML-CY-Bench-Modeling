@@ -13,10 +13,22 @@ from cybench.evaluation.aggregated_metrics import (
 
 
 def _make_df() -> pd.DataFrame:
+    """Deterministic 3×3 panel with variance in both spatial and temporal aggregates."""
+    targets = {
+        ("A", 2019): 4.0,
+        ("A", 2020): 5.0,
+        ("A", 2021): 6.0,
+        ("B", 2019): 5.0,
+        ("B", 2020): 6.0,
+        ("B", 2021): 7.0,
+        ("C", 2019): 6.0,
+        ("C", 2020): 7.0,
+        ("C", 2021): 8.0,
+    }
     rows = []
     for loc in ("A", "B", "C"):
         for year in (2019, 2020, 2021):
-            y = 5.0 + hash((loc, year)) % 3
+            y = targets[(loc, year)]
             rows.append({KEY_LOC: loc, KEY_YEAR: year, KEY_TARGET: y, "model": y + 0.1})
     return pd.DataFrame(rows)
 
