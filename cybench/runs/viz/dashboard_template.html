@@ -221,7 +221,7 @@
       <div class="table-scroll" id="heatmap-wrap"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="drill-down">
       <h3>Drill-down plots</h3>
       <div id="selection-label" class="muted">Click a table row to inspect plots.</div>
       <div class="toolbar">
@@ -320,6 +320,28 @@
     let sortKey = "region_year_nrmse";
     let sortDir = "asc";
     let colorMode = "fixed";
+    let pendingDeepLink = readDeepLink();
+
+    function readDeepLink() {
+      const params = new URLSearchParams(window.location.search);
+      const model = params.get("model");
+      if (!model) return null;
+      const dataset = params.get("dataset") || "";
+      const panel = params.get("panel") || "";
+      return { model, dataset, panel };
+    }
+
+    function applyDeepLinkFilters() {
+      if (!pendingDeepLink) return;
+      if (pendingDeepLink.model) modelFilter.value = pendingDeepLink.model;
+      if (pendingDeepLink.dataset) datasetFilter.value = pendingDeepLink.dataset;
+      if (["maps", "scatter", "temporal"].includes(pendingDeepLink.panel)) {
+        activePanel = pendingDeepLink.panel;
+        panelButtons.forEach(b => {
+          b.classList.toggle("active", b.dataset.panel === activePanel);
+        });
+      }
+    }
 
     function parseDataset(dataset) {
       const idx = dataset.lastIndexOf("_");
@@ -560,6 +582,22 @@
         }
       }
 
+      if (pendingDeepLink?.model) {
+        const deep = pendingDeepLink;
+        const target = metricRows.find(r => {
+          const rec = JSON.parse(decodeURIComponent(r.dataset.row));
+          if (rec.model !== deep.model) return false;
+          if (deep.dataset) return rec.dataset === deep.dataset;
+          return true;
+        });
+        pendingDeepLink = null;
+        if (target) {
+          target.click();
+          document.getElementById("drill-down")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          return;
+        }
+      }
+
       if (metricRows.length > 0) {
         metricRows[0].click();
       } else {
@@ -645,5 +683,6 @@
     });
 
     buildRows();
+    applyDeepLinkFilters();
     renderHeatmap();
   </script>

@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from cybench.runs.analysis.build_model_family_radar_dashboard import build_radar_html
+from cybench.runs.analysis.global_insights_lib import compat_legacy_summary_columns
 from cybench.runs.analysis.model_family_radar_lib import (
     RADAR_NORMALIZATION_NOTE,
     build_radar_payload,
@@ -81,6 +82,15 @@ def test_relative_scores_span_unit_interval():
     assert rel["Overall"].min() == 0.0
     assert rel["Overall"].max() == 1.0
     assert rel["Anomaly"].tolist() == [0.0, 1.0]
+
+
+def test_legacy_summary_columns_map_to_agg_metrics():
+    df = pd.DataFrame(
+        [{"model": "trend", "r2_spatial": 0.69, "r2_temporal": -0.75, "r2_res": -1.0}]
+    )
+    out = compat_legacy_summary_columns(df)
+    assert out["r2_spatial_agg"].iloc[0] == 0.69
+    assert out["r2_temporal_agg"].iloc[0] == -0.75
 
 
 def test_build_radar_payload_structure(tmp_path: Path):

@@ -105,6 +105,14 @@
     .heatmap-matrix th.sortable { cursor: pointer; user-select: none; }
     .heatmap-matrix th.sortable:hover { background: #e8eaed; }
     td.metric-cell { font-variant-numeric: tabular-nums; }
+    td.metric-cell a {
+      color: inherit;
+      text-decoration: none;
+    }
+    td.metric-cell a:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
     tr:nth-child(even) td { background: #fafbfc; }
     a { color: var(--accent); }
     .note { margin-top: 0.5rem; }
@@ -190,12 +198,19 @@
       <div class="table-scroll" id="leaderboard-wrap"></div>
       <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">Model × country</h3>
       <div class="controls">
+        <span class="muted">Axis</span>
+        <div class="toolbar" id="rq1-matrix-axis-toolbar">
+          <button type="button" data-axis="overall" class="active">Overall</button>
+          <button type="button" data-axis="spatial">Spatial</button>
+          <button type="button" data-axis="temporal">Temporal</button>
+          <button type="button" data-axis="anomaly">Anomaly</button>
+        </div>
         <label>Crop
           <select id="rq1-matrix-crop-filter">
             <option value="all">All crops</option>
           </select>
         </label>
-        <label>Metric
+        <label id="rq1-matrix-metric-wrap">Metric
           <select id="rq1-matrix-metric">
             <option value="nrmse" selected>NRMSE (median)</option>
             <option value="r2">R² (median)</option>
@@ -204,6 +219,7 @@
       </div>
       <p class="muted" style="margin-top:0;" id="matrix-metric-note">
         Median column = median across countries per model (click column headers to sort). Green = better.
+        Country cells link to the matching country dashboard with that model pre-selected.
       </p>
       <div class="table-scroll" id="model-country-wrap"></div>
     </div>
@@ -323,6 +339,7 @@
     let rq1Horizon = "eos";
     let rq1Crop = "all";
     let rq1SkilledOnly = false;
+    let rq1MatrixAxis = "overall";
     let rq1MatrixMetric = "nrmse";
     let mcSort = "median";
     let mcDir = "asc";
@@ -334,9 +351,25 @@
     const rq1HorizonToolbar = document.getElementById("rq1-horizon-toolbar");
     const rq1CropFilter = document.getElementById("rq1-crop-filter");
     const rq1SkilledCheckbox = document.getElementById("rq1-skilled-only");
+    const rq1MatrixAxisToolbar = document.getElementById("rq1-matrix-axis-toolbar");
+    const rq1MatrixMetricWrap = document.getElementById("rq1-matrix-metric-wrap");
     const rq1MatrixMetricSelect = document.getElementById("rq1-matrix-metric");
     const rq1MatrixCropFilter = document.getElementById("rq1-matrix-crop-filter");
     const matrixMetricNote = document.getElementById("matrix-metric-note");
+    const MATRIX_AXES = DATA.matrix_axes || [
+      {
+        id: "overall",
+        label: "Overall",
+        note: "Region×year pooled metrics.",
+        metrics: [
+          { id: "r2", label: "R²", higher_better: true },
+          { id: "nrmse", label: "NRMSE", higher_better: false },
+        ],
+      },
+      { id: "spatial", label: "Spatial", note: "R² on regional means.", metrics: [{ id: "r2", label: "R²", higher_better: true }] },
+      { id: "temporal", label: "Temporal", note: "R² on yearly national means.", metrics: [{ id: "r2", label: "R²", higher_better: true }] },
+      { id: "anomaly", label: "Anomaly", note: "Pooled R² on de-meaned yields.", metrics: [{ id: "r2", label: "R²", higher_better: true }] },
+    ];
 
     function syncCropSelects(value) {
       rq1Crop = value || "all";
@@ -384,27 +417,66 @@
       return byHorizon[rq1Crop] || byHorizon.all || { models: [], countries: [], cells: [], model_totals: {} };
     }
 
+    function matrixAxisDef(axisId) {
+      return MATRIX_AXES.find(a => a.id === axisId) || MATRIX_AXES[0];
+    }
+
     function matrixMetricSpec() {
-      if (rq1MatrixMetric === "r2") {
-        return {
-          key: "median_r2",
-          label: "R²",
-          bg: fixedR2Bg,
-          note: "Median column = median of country values (same as Table 1). Country cells = NRMSE/R² for that model×country. Green = higher R².",
-        };
+      const axis = matrixAxisDef(rq1MatrixAxis);
+      const metrics = axis.metrics || [];
+      let metricId = rq1MatrixMetric;
+      if (!metrics.some(m => m.id === metricId)) {
+        metricId = metrics[0]?.id || "r2";
       }
+      const metric = metrics.find(m => m.id === metricId) || metrics[0];
+      const higherBetter = metric?.higher_better !== false;
+      const label = metric?.label || metricId.toUpperCase();
+      const bg = metricId === "nrmse" ? fixedNrmseBg : fixedR2Bg;
       return {
-        key: "median_nrmse",
-        label: "NRMSE",
-        bg: fixedNrmseBg,
-        note: "Median column = median of country values (same as Table 1). Country cells = NRMSE/R² for that model×country. Green = lower NRMSE.",
+        axisId: axis.id,
+        axisLabel: axis.label,
+        metricId,
+        label,
+        higherBetter,
+        bg,
+        note: `${axis.note || axis.label} Median column = median across countries per model. Green = ${higherBetter ? "higher" : "lower"} ${label}.`,
+        cellValue(cell) {
+          if (!cell) return null;
+          const axes = cell.axes || {};
+          const bucket = axes[axis.id] || {};
+          if (bucket[metricId] !== undefined && bucket[metricId] !== null) {
+            return bucket[metricId];
+          }
+          // Legacy payloads (overall only).
+          if (axis.id === "overall" && metricId === "nrmse") return cell.median_nrmse ?? null;
+          if (axis.id === "overall" && metricId === "r2") return cell.median_r2 ?? null;
+          return null;
+        },
+        totalValue(totals) {
+          if (!totals) return null;
+          const bucket = totals[axis.id] || totals;
+          if (bucket && bucket[metricId] !== undefined) return bucket[metricId];
+          if (axis.id === "overall" && metricId === "nrmse") return totals.median_nrmse ?? null;
+          if (axis.id === "overall" && metricId === "r2") return totals.median_r2 ?? null;
+          return null;
+        },
       };
     }
 
-    function defaultMatrixSortDir(metric, key) {
+    function defaultMatrixSortDir(spec, key) {
       if (key === "model") return "asc";
-      if (metric === "r2") return "desc";
-      return "asc";
+      return spec.higherBetter ? "desc" : "asc";
+    }
+
+    function cellDashboardUrl(country, model) {
+      const byHz = (DATA.dashboard_hrefs || {})[country];
+      const base = byHz && byHz[rq1Horizon];
+      if (!base) return null;
+      const params = new URLSearchParams({ model });
+      if (rq1Crop && rq1Crop !== "all") {
+        params.set("dataset", `${rq1Crop}_${country}`);
+      }
+      return `${base}?${params.toString()}#drill-down`;
     }
 
     function buildMatrixRows(models, countries, cellMap, spec, modelTotals) {
@@ -413,11 +485,10 @@
         const byCountry = {};
         for (const cc of countries) {
           const cell = cellMap.get(`${model}|||${cc}`);
-          const raw = cell ? cell[spec.key] : null;
+          const raw = spec.cellValue(cell);
           byCountry[cc] = { raw, cell };
         }
-        const total = modelTotals && modelTotals[model];
-        const median = total ? total[spec.key] : null;
+        const median = spec.totalValue(modelTotals && modelTotals[model]);
         rows.push({ model, median, byCountry });
       }
       return rows;
@@ -487,7 +558,7 @@
 
       let html = '<table class="heatmap-matrix"><thead><tr>';
       html += `<th class="model-col sortable" data-sort="model">Model ${sortMark("model")}</th>`;
-      html += `<th class="median-col sortable" data-sort="median">Median ${sortMark("median")}</th>`;
+      html += `<th class="median-col sortable" data-sort="median">Median ${spec.label} ${sortMark("median")}</th>`;
       for (const cc of countries) {
         html += `<th class="country-col sortable" data-sort="${cc}">${cc} ${sortMark(cc)}</th>`;
       }
@@ -518,7 +589,12 @@
           const title = cell?.beat_baseline_rate != null
             ? ` title="Beat baseline: ${pct(cell.beat_baseline_rate)}"`
             : "";
-          html += `<td class="metric-cell"${style}${title}>${fmt(raw)}</td>`;
+          const dashUrl = cellDashboardUrl(cc, row.model);
+          const value = fmt(raw);
+          const inner = dashUrl
+            ? `<a href="${dashUrl}"${title}>${value}</a>`
+            : value;
+          html += `<td class="metric-cell"${style}${dashUrl ? "" : title}>${inner}</td>`;
         }
         html += "</tr>";
       }
@@ -532,11 +608,27 @@
             mcDir = mcDir === "asc" ? "desc" : "asc";
           } else {
             mcSort = key;
-            mcDir = defaultMatrixSortDir(rq1MatrixMetric, key);
+            mcDir = defaultMatrixSortDir(spec, key);
           }
           renderModelCountryHeatmap();
         });
       });
+    }
+
+    function syncMatrixMetricControl() {
+      const axis = matrixAxisDef(rq1MatrixAxis);
+      const metrics = axis.metrics || [];
+      const showPicker = metrics.length > 1;
+      rq1MatrixMetricWrap.style.display = showPicker ? "" : "none";
+      if (!showPicker) {
+        rq1MatrixMetric = metrics[0]?.id || "r2";
+        return;
+      }
+      const options = metrics.map(m => `<option value="${m.id}">${m.label} (median)</option>`).join("");
+      const prev = rq1MatrixMetric;
+      rq1MatrixMetricSelect.innerHTML = options;
+      rq1MatrixMetric = metrics.some(m => m.id === prev) ? prev : metrics[0].id;
+      rq1MatrixMetricSelect.value = rq1MatrixMetric;
     }
 
     function renderRq1() {
@@ -560,10 +652,21 @@
       syncCropSelects(rq1MatrixCropFilter.value || "all");
       renderRq1();
     });
+    rq1MatrixAxisToolbar.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        rq1MatrixAxisToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        rq1MatrixAxis = btn.dataset.axis || "overall";
+        syncMatrixMetricControl();
+        mcSort = "median";
+        mcDir = defaultMatrixSortDir(matrixMetricSpec(), "median");
+        renderModelCountryHeatmap();
+      });
+    });
     rq1MatrixMetricSelect.addEventListener("change", () => {
-      rq1MatrixMetric = rq1MatrixMetricSelect.value || "nrmse";
+      rq1MatrixMetric = rq1MatrixMetricSelect.value || "r2";
       mcSort = "median";
-      mcDir = defaultMatrixSortDir(rq1MatrixMetric, "median");
+      mcDir = defaultMatrixSortDir(matrixMetricSpec(), "median");
       renderModelCountryHeatmap();
     });
     rq1SkilledCheckbox.addEventListener("change", () => {
@@ -571,6 +674,7 @@
       renderRq1();
     });
     rq1ModelFilter.addEventListener("input", renderRq1);
+    syncMatrixMetricControl();
     renderRq1();
 
     // Horizon overall (RQ2)

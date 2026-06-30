@@ -14,6 +14,58 @@ _PAPER_DIR_RE = re.compile(
 
 _BASELINE_MODELS = frozenset({"average", "averageyieldmodel", "average_yield"})
 
+# Evaluation views for the model×country heatmap (aligned with country dashboards / radar).
+MODEL_COUNTRY_AXES: tuple[dict[str, Any], ...] = (
+    {
+        "id": "overall",
+        "label": "Overall",
+        "note": "Region×year pooled metrics (all samples).",
+        "metrics": (
+            {"id": "r2", "column": "r2", "label": "R²", "higher_better": True},
+            {"id": "nrmse", "column": "nrmse", "label": "NRMSE", "higher_better": False},
+        ),
+    },
+    {
+        "id": "spatial",
+        "label": "Spatial",
+        "note": "R² on regional means (aggregate across years).",
+        "metrics": (
+            {"id": "r2", "column": "r2_spatial_agg", "label": "R²", "higher_better": True},
+        ),
+    },
+    {
+        "id": "temporal",
+        "label": "Temporal",
+        "note": "R² on yearly national means (aggregate across regions).",
+        "metrics": (
+            {"id": "r2", "column": "r2_temporal_agg", "label": "R²", "higher_better": True},
+        ),
+    },
+    {
+        "id": "anomaly",
+        "label": "Anomaly",
+        "note": "Pooled R² on location-de-meaned yields (r2_res, else r2_anomaly).",
+        "metrics": (
+            {"id": "r2", "column": "r2_res", "label": "R²", "higher_better": True},
+        ),
+    },
+)
+
+_NUMERIC_SUMMARY_COLS = (
+    "nrmse",
+    "r2",
+    "n_samples",
+    "n_train",
+    "n_regions",
+    "n_years",
+    "r2_spatial",
+    "r2_spatial_agg",
+    "r2_temporal",
+    "r2_temporal_agg",
+    "r2_anomaly",
+    "r2_res",
+)
+
 
 def is_baseline_model(model: object) -> bool:
     return str(model).lower().replace("-", "_") in _BASELINE_MODELS
@@ -24,6 +76,30 @@ def parse_paper_dir_name(name: str) -> tuple[str, str, int] | None:
     if not match:
         return None
     return match.group("country").upper(), match.group("horizon"), int(match.group("version"))
+
+
+def dashboard_href_for_paper_dir(paper_dir_name: str) -> str | None:
+    """Relative GitHub Pages path to a country dashboard (e.g. ``de_walk_forward_eos_v1/dashboard.html``)."""
+    parsed = parse_paper_dir_name(paper_dir_name)
+    if parsed is None:
+        return None
+    country, hz, ver = parsed
+    slug = f"{country.lower()}_walk_forward_{hz}_v{ver}"
+    return f"{slug}/dashboard.html"
+
+
+def build_dashboard_hrefs(output_root: Path, *, version: int = 1) -> dict[str, dict[str, str]]:
+    """Map CY-Bench country code -> horizon (``eos``/``mid``) -> dashboard HTML href."""
+    hrefs: dict[str, dict[str, str]] = {}
+    for path in discover_summary_tables(output_root, version=version):
+        parsed = parse_paper_dir_name(path.parent.name)
+        if parsed is None:
+            continue
+        country, hz, _ver = parsed
+        rel = dashboard_href_for_paper_dir(path.parent.name)
+        if rel:
+            hrefs.setdefault(country, {})[hz] = rel
+    return hrefs
 
 
 def discover_summary_tables(output_root: Path, *, version: int = 1) -> list[Path]:
@@ -41,6 +117,79 @@ def discover_summary_tables(output_root: Path, *, version: int = 1) -> list[Path
         if summary.is_file():
             paths.append(summary)
     return paths
+
+
+def compat_legacy_summary_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Map pre-v2 walk_forward_summary columns to current aggregate metric names.
+
+    Older collects stored aggregate spatial/temporal R² in ``r2_spatial`` /
+    ``r2_temporal``; current schema uses ``r2_spatial_agg`` / ``r2_temporal_agg``.
+    """
+    if df.empty:
+        return df
+    out = df.copy()
+    if "r2_spatial_agg" not in out.columns and "r2_spatial" in out.columns:
+        out["r2_spatial_agg"] = out["r2_spatial"]
+    if "r2_temporal_agg" not in out.columns and "r2_temporal" in out.columns:
+        out["r2_temporal_agg"] = out["r2_temporal"]
+    if "r2_res" not in out.columns and "r2_anomaly" in out.columns:
+        out["r2_res"] = out["r2_anomaly"]
+    return out
+
+
+def _series_for_matrix_column(grp: pd.DataFrame, column: str) -> pd.Series:
+    """Return numeric series for a matrix column, with anomaly fallbacks."""
+    if column == "r2_res":
+        if "r2_res" in grp.columns:
+            s = pd.to_numeric(grp["r2_res"], errors="coerce")
+            if "r2_anomaly" in grp.columns:
+                return s.fillna(pd.to_numeric(grp["r2_anomaly"], errors="coerce"))
+            return s
+        if "r2_anomaly" in grp.columns:
+            return pd.to_numeric(grp["r2_anomaly"], errors="coerce")
+        return pd.Series(dtype=float)
+    if column not in grp.columns:
+        return pd.Series(dtype=float)
+    return pd.to_numeric(grp[column], errors="coerce")
+
+
+def _median_in_group(grp: pd.DataFrame, column: str) -> float | None:
+    vals = _series_for_matrix_column(grp, column).dropna()
+    if vals.empty:
+        return None
+    return float(vals.median())
+
+
+def _axis_metrics_for_group(grp: pd.DataFrame) -> dict[str, dict[str, float | None]]:
+    axes: dict[str, dict[str, float | None]] = {}
+    for axis in MODEL_COUNTRY_AXES:
+        metrics: dict[str, float | None] = {}
+        for spec in axis["metrics"]:
+            metrics[str(spec["id"])] = _median_in_group(grp, str(spec["column"]))
+        axes[str(axis["id"])] = metrics
+    return axes
+
+
+def matrix_axes_payload() -> list[dict[str, Any]]:
+    """JSON-serializable axis definitions for the insights heatmap UI."""
+    out: list[dict[str, Any]] = []
+    for axis in MODEL_COUNTRY_AXES:
+        out.append(
+            {
+                "id": axis["id"],
+                "label": axis["label"],
+                "note": axis["note"],
+                "metrics": [
+                    {
+                        "id": m["id"],
+                        "label": m["label"],
+                        "higher_better": m["higher_better"],
+                    }
+                    for m in axis["metrics"]
+                ],
+            }
+        )
+    return out
 
 
 def load_summary_frame(summary_paths: list[Path]) -> pd.DataFrame:
@@ -63,10 +212,10 @@ def load_summary_frame(summary_paths: list[Path]) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
     out = pd.concat(frames, ignore_index=True)
-    for col in ("nrmse", "r2", "n_samples", "n_train", "n_regions", "n_years"):
+    for col in _NUMERIC_SUMMARY_COLS:
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce")
-    return out
+    return compat_legacy_summary_columns(out)
 
 
 def _weighted_mean(series: pd.Series, weights: pd.Series) -> float:
@@ -134,24 +283,33 @@ def _filter_summary_work(
 
 
 def _model_median_by_country(work: pd.DataFrame) -> dict[str, dict[str, Any]]:
-    """Per-model median of per-country NRMSE/R².
+    """Per-model median of per-country axis metrics.
 
-    Each country contributes one value: the median within that country (relevant when
-    crop=all spans multiple crops in the same country). The model summary is then the
-    median across those country values — not a median over all crop×country rows pooled.
+    Each country contributes one value per axis metric: the median within that country
+    (relevant when crop=all spans multiple crops in the same country). The model summary
+    is then the median across those country values.
     """
     totals: dict[str, dict[str, Any]] = {}
     for model, model_grp in work.groupby("model", sort=True):
-        country_nrmse: list[float] = []
-        country_r2: list[float] = []
+        by_country: list[dict[str, dict[str, float | None]]] = []
         for _, country_grp in model_grp.groupby("country", sort=True):
-            country_nrmse.append(float(country_grp["nrmse"].median()))
-            if "r2" in country_grp.columns:
-                country_r2.append(float(country_grp["r2"].median()))
-        totals[str(model)] = {
-            "median_nrmse": round(float(pd.Series(country_nrmse).median()), 4),
-            "median_r2": round(float(pd.Series(country_r2).median()), 4) if country_r2 else None,
-        }
+            by_country.append(_axis_metrics_for_group(country_grp))
+
+        axes: dict[str, dict[str, float | None]] = {}
+        for axis in MODEL_COUNTRY_AXES:
+            axis_id = str(axis["id"])
+            axes[axis_id] = {}
+            for spec in axis["metrics"]:
+                metric_id = str(spec["id"])
+                country_vals = [
+                    c[axis_id][metric_id]
+                    for c in by_country
+                    if c[axis_id].get(metric_id) is not None
+                ]
+                axes[axis_id][metric_id] = (
+                    round(float(pd.Series(country_vals).median()), 4) if country_vals else None
+                )
+        totals[str(model)] = axes
     return totals
 
 
@@ -177,12 +335,13 @@ def aggregate_model_leaderboard(
     for model, grp in work.groupby("model", sort=True):
         beat_rate = _beat_baseline_rate(str(model), grp)
         totals = by_country[str(model)]
+        overall = totals.get("overall", {})
 
         rows.append(
             {
                 "model": model,
-                "median_nrmse": totals["median_nrmse"],
-                "median_r2": totals["median_r2"] if totals["median_r2"] is not None else float("nan"),
+                "median_nrmse": overall.get("nrmse"),
+                "median_r2": overall.get("r2"),
                 "beat_baseline_rate": beat_rate,
                 "n_datasets": int(len(grp)),
                 "n_countries": int(grp["country"].nunique()) if "country" in grp else 0,
@@ -230,7 +389,7 @@ def build_model_country_matrix(
     crop: str | None = None,
     skilled_only: bool = False,
 ) -> dict[str, Any]:
-    """Model × country matrix (median NRMSE and R² per model×country)."""
+    """Model × country matrix (median metrics per evaluation axis)."""
     work = _filter_summary_work(
         df, batch_horizon=batch_horizon, crop=crop, skilled_only=skilled_only
     )
@@ -240,12 +399,16 @@ def build_model_country_matrix(
     cells: list[dict[str, Any]] = []
     for (model, country), grp in work.groupby(["model", "country"], sort=True):
         beat_rate = _beat_baseline_rate(str(model), grp)
+        axes = _axis_metrics_for_group(grp)
+        overall = axes.get("overall", {})
         cells.append(
             {
                 "model": model,
                 "country": country,
-                "median_nrmse": float(grp["nrmse"].median()),
-                "median_r2": float(grp["r2"].median()) if "r2" in grp else None,
+                "axes": axes,
+                # Legacy flat keys for overall (leaderboard parity).
+                "median_nrmse": overall.get("nrmse"),
+                "median_r2": overall.get("r2"),
                 "n_datasets": int(len(grp)),
                 "beat_baseline_rate": beat_rate,
             }
@@ -363,6 +526,8 @@ def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, 
     baseline_models = sorted({str(m) for m in df["model"].unique() if is_baseline_model(m)})
     return {
         "output_root": str(output_root.resolve()),
+        "dashboard_hrefs": build_dashboard_hrefs(output_root, version=version),
+        "matrix_axes": matrix_axes_payload(),
         "n_summary_files": len(paths),
         "n_rows": int(len(df)),
         "n_countries": int(df["country"].nunique()) if "country" in df.columns else 0,

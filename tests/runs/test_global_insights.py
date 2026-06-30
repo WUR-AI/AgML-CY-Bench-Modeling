@@ -9,9 +9,11 @@ import pandas as pd
 from cybench.runs.analysis.global_insights_lib import (
     aggregate_model_leaderboard,
     attach_baseline_metrics,
+    build_dashboard_hrefs,
     build_insights_payload,
     build_model_country_matrix,
     compare_horizons,
+    dashboard_href_for_paper_dir,
     is_baseline_model,
     load_summary_frame,
     parse_paper_dir_name,
@@ -22,6 +24,25 @@ def test_parse_paper_dir_name():
     assert parse_paper_dir_name("paper_walk_forward_de_eos_v1") == ("DE", "eos", 1)
     assert parse_paper_dir_name("paper_walk_forward_pl_mid_v1") == ("PL", "mid", 1)
     assert parse_paper_dir_name("paper_walk_forward") is None
+
+
+def test_dashboard_href_for_paper_dir():
+    assert dashboard_href_for_paper_dir("paper_walk_forward_au_mid_v2") == (
+        "au_walk_forward_mid_v2/dashboard.html"
+    )
+    assert dashboard_href_for_paper_dir("not_a_paper_dir") is None
+
+
+def test_build_dashboard_hrefs(tmp_path: Path):
+    for cc, hz in [("de", "eos"), ("de", "mid")]:
+        d = tmp_path / f"paper_walk_forward_{cc}_{hz}_v1"
+        d.mkdir(parents=True)
+        pd.DataFrame([{"crop": "maize", "model": "ridge", "nrmse": 0.1}]).to_csv(
+            d / "walk_forward_summary.csv", index=False
+        )
+    hrefs = build_dashboard_hrefs(tmp_path, version=1)
+    assert hrefs["DE"]["eos"] == "de_walk_forward_eos_v1/dashboard.html"
+    assert hrefs["DE"]["mid"] == "de_walk_forward_mid_v1/dashboard.html"
 
 
 def test_is_baseline_model():
@@ -172,9 +193,40 @@ def test_build_model_country_matrix():
     assert matrix["countries"] == ["DE"]
     ridge_cell = next(c for c in matrix["cells"] if c["model"] == "ridge")
     average_cell = next(c for c in matrix["cells"] if c["model"] == "average")
-    assert ridge_cell["median_nrmse"] == 0.10
-    assert average_cell["median_nrmse"] == 0.30
-    assert matrix["model_totals"]["ridge"]["median_nrmse"] == 0.10
+    assert ridge_cell["axes"]["overall"]["nrmse"] == 0.10
+    assert average_cell["axes"]["overall"]["nrmse"] == 0.30
+    assert matrix["model_totals"]["ridge"]["overall"]["nrmse"] == 0.10
+
+
+def test_build_model_country_matrix_spatial_axis():
+    df = pd.DataFrame(
+        [
+            {
+                "model": "ridge",
+                "crop": "maize",
+                "country": "DE",
+                "batch_horizon": "eos",
+                "nrmse": 0.10,
+                "r2": 0.9,
+                "r2_spatial_agg": 0.55,
+                "n_samples": 50,
+            },
+            {
+                "model": "ridge",
+                "crop": "wheat",
+                "country": "DE",
+                "batch_horizon": "eos",
+                "nrmse": 0.20,
+                "r2": 0.7,
+                "r2_spatial_agg": 0.35,
+                "n_samples": 50,
+            },
+        ]
+    )
+    matrix = build_model_country_matrix(df, batch_horizon="eos")
+    ridge_cell = next(c for c in matrix["cells"] if c["model"] == "ridge")
+    assert ridge_cell["axes"]["spatial"]["r2"] == 0.45
+    assert matrix["model_totals"]["ridge"]["spatial"]["r2"] == 0.45
 
 
 def test_model_median_by_country_matches_matrix():
@@ -213,12 +265,12 @@ def test_model_median_by_country_matches_matrix():
     board = aggregate_model_leaderboard(df, batch_horizon="eos")
     matrix = build_model_country_matrix(df, batch_horizon="eos")
     expected = float(board.loc[board["model"] == "tabpfn", "median_nrmse"].iloc[0])
-    assert matrix["model_totals"]["tabpfn"]["median_nrmse"] == expected
+    assert matrix["model_totals"]["tabpfn"]["overall"]["nrmse"] == expected
     assert expected == 0.25
     de_cell = next(c for c in matrix["cells"] if c["country"] == "DE")
     fr_cell = next(c for c in matrix["cells"] if c["country"] == "FR")
-    assert de_cell["median_nrmse"] == 0.10
-    assert fr_cell["median_nrmse"] == 0.40
+    assert de_cell["axes"]["overall"]["nrmse"] == 0.10
+    assert fr_cell["axes"]["overall"]["nrmse"] == 0.40
     assert (de_cell["median_nrmse"] + fr_cell["median_nrmse"]) / 2 == 0.25
 
 
@@ -304,11 +356,15 @@ def test_build_insights_payload_structure(tmp_path: Path):
 
     payload = build_insights_payload(tmp_path, version=1)
     assert "leaderboards" in payload
+    assert payload["dashboard_hrefs"]["DE"]["eos"] == "de_walk_forward_eos_v1/dashboard.html"
+    assert payload["dashboard_hrefs"]["DE"]["mid"] == "de_walk_forward_mid_v1/dashboard.html"
     assert len(payload["leaderboards"]["eos"]["all"]) == 2
     models = {r["model"] for r in payload["leaderboards"]["eos"]["all"]}
     assert models == {"average", "ridge"}
     assert payload["model_country"]["eos"]["all"]["models"] == ["average", "ridge"]
     assert "model_country_skilled" in payload
     ridge_board = next(r for r in payload["leaderboards"]["eos"]["all"] if r["model"] == "ridge")
-    ridge_matrix = payload["model_country"]["eos"]["all"]["model_totals"]["ridge"]["median_nrmse"]
+    ridge_matrix = payload["model_country"]["eos"]["all"]["model_totals"]["ridge"]["overall"]["nrmse"]
     assert ridge_board["median_nrmse"] == ridge_matrix
+    assert len(payload["matrix_axes"]) == 4
+    assert payload["matrix_axes"][0]["id"] == "overall"
