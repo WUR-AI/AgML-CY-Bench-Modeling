@@ -14,27 +14,27 @@ from cybench.runs.analysis.global_insights_lib import (
     load_summary_frame,
 )
 
-# Scientific views → headline metric per axis (aggregate / pooled, not slice medians).
+# Scientific views → Pearson r (slice medians for spatial/temporal where noted).
 EVALUATION_VIEWS: tuple[dict[str, str], ...] = (
     {
         "label": "Overall",
-        "metric": "r2",
-        "question": "Can the model predict crop yields accurately (all region×year rows)?",
+        "metric": "r",
+        "question": "Can the model predict crop yields accurately (pooled region×year r)?",
     },
     {
         "label": "Spatial",
-        "metric": "r2_spatial_agg",
-        "question": "Can it reproduce long-run spatial yield patterns (R² on regional means)?",
+        "metric": "r_spatial",
+        "question": "For a typical year, can it reproduce spatial patterns (median per-year r across regions)?",
     },
     {
         "label": "Temporal",
-        "metric": "r2_temporal_agg",
-        "question": "Can it reproduce national yield trends (R² on yearly national means)?",
+        "metric": "r_temporal",
+        "question": "For a typical region, can it reproduce year-to-year dynamics (median per-region r across years)?",
     },
     {
         "label": "Anomaly",
-        "metric": "r2_res",
-        "question": "Can it predict location-de-meaned yield deviations (pooled R²)?",
+        "metric": "r_res",
+        "question": "Can it predict location-de-meaned deviations (pooled r on residuals)?",
     },
 )
 
@@ -70,7 +70,7 @@ FAMILY_COLORS: dict[str, str] = {
 
 RADAR_NORMALIZATION_NOTE = (
     "Each axis is independently normalized to highlight the relative strengths of "
-    "each modeling paradigm. Absolute R² values are reported in Table X."
+    "each modeling paradigm (Pearson r). Absolute R² and NRMSE values are reported in Table X."
 )
 
 MODEL_DISPLAY_NAMES: dict[str, str] = {

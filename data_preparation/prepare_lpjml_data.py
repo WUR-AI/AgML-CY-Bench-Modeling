@@ -22,10 +22,10 @@ from pathlib import Path
 import pandas as pd
 
 from cybench.config import DATASETS, PATH_DATA_DIR
+from cybench.models.baseline_csv_paths import LPJML_FILE_STEM
 from cybench.models.lpjml_model import (
     LPJML_COL_IRRIGATED,
     LPJML_COL_RAINFED,
-    LPJML_FILE_STEM,
 )
 
 

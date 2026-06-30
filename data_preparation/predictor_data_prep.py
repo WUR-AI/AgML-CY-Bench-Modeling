@@ -10,7 +10,18 @@ import logging
 import argparse
 import warnings
 
+from cybench.config import DATASETS, PATH_DATA_DIR, PATH_POLYGONS_DIR, REPO_DIR
+from cybench.util.geo import get_shapes_from_polygons
+
 warnings.filterwarnings("ignore")
+
+
+def init_worker_logging():
+    """Disable file logging in worker processes to avoid RotatingFileHandler races."""
+    root = logging.getLogger()
+    for h in root.handlers[:]:
+        root.removeHandler(h)
+    root.addHandler(logging.NullHandler())
 
 
 log = logging.getLogger(__name__)
@@ -187,6 +198,26 @@ ALL_INDICATORS = {
         "is_time_series": False,
         "is_categorical": False,
     },
+    "rainfed_temperate_cereals_yield": {
+        "source": "LPJmL",
+        "is_time_series": True,
+        "is_categorical": False,
+    },
+    "rainfed_maize_yield": {
+        "source": "LPJmL",
+        "is_time_series": True,
+        "is_categorical": False,
+    },
+    "irrigated_temperate_cereals_yield": {
+        "source": "LPJmL",
+        "is_time_series": True,
+        "is_categorical": False,
+    },
+    "irrigated_maize_yield": {
+        "source": "LPJmL",
+        "is_time_series": True,
+        "is_categorical": False,
+    },
 }
 
 # used to read .nc files
@@ -198,6 +229,13 @@ AGERA5_VARIABLES = {
     "rad": "Solar_Radiation_Flux",
     "et0": "ReferenceET_PenmanMonteith_FAO56",
     "vpd": "Vapour_Pressure_Deficit_at_Maximum_Temperature",
+}
+
+LPJML_VARIABLES = {
+    "rainfed_temperate_cereals_yield": "harvestc",
+    "rainfed_maize_yield": "harvestc",
+    "irrigated_temperate_cereals_yield": "harvestc",
+    "irrigated_maize_yield": "harvestc",
 }
 
 
@@ -625,6 +663,7 @@ def geom_extract(
     afi_thresh=None,
     thresh_type=None,
     classification=None,
+    indexes=None,
 ):
     """
     @author: Joint Research Centre - D5 Food Security - ASAP
@@ -707,10 +746,12 @@ def geom_extract(
         ds=indicator_ds,
         mask=[geometry],
         window=indicator_ds.window(*read_bounds),
-        indexes=None,
+        indexes=indexes,
         use_pixels="CENTER",
         out_shape=read_shape,
     )
+    if indicator_arr.ndim == 3 and indicator_arr.shape[0] == 1:
+        indicator_arr = indicator_arr[0]
     nodatavals = indicator_ds.nodatavals
 
     # fpar values must be between 0 and 100
@@ -760,6 +801,8 @@ def geom_extract(
             use_pixels="CENTER",
             out_shape=read_shape,
         )
+        if afi_arr.ndim == 3 and afi_arr.shape[0] == 1:
+            afi_arr = afi_arr[0]
 
         if afi_thresh is not None:
             # afi must be between 0 and 100
@@ -859,6 +902,37 @@ def geom_extract(
     return output
 
 
+def _crop_mask_path(crop: str) -> str:
+    if crop == "maize":
+        crop_mask_file = "crop_mask_maize_WC.tif"
+    elif crop == "wheat":
+        crop_mask_file = "crop_mask_winter_spring_cereals_WC.tif"
+    else:
+        crop_mask_file = "crop_mask_generic_asap.tif"
+
+    for base in (
+        os.path.join(AGML_ROOT, "crop_masks"),
+        os.path.join(REPO_DIR, "data_preparation", "global_crop_AFIs_ESA_WC"),
+    ):
+        path = os.path.join(base, crop_mask_file)
+        if os.path.isfile(path):
+            return path
+    raise FileNotFoundError(f"Crop mask not found: {crop_mask_file}")
+
+
+def _netcdf_dataset_path(indicator_file: str, indicator_name: str) -> str:
+    if indicator_name in AGERA5_VARIABLES:
+        variable = AGERA5_VARIABLES[indicator_name]
+    elif indicator_name in LPJML_VARIABLES:
+        variable = LPJML_VARIABLES[indicator_name]
+    else:
+        raise KeyError(f"No NetCDF variable mapping for indicator {indicator_name!r}")
+    return "netcdf:{indicator_file}:{variable}".format(
+        indicator_file=indicator_file,
+        variable=variable,
+    )
+
+
 def process_file(
     indicator_file,
     crop,
@@ -866,6 +940,8 @@ def process_file(
     geometries,
     is_time_series,
     is_categorical,
+    band_index=None,
+    date_str=None,
 ):
     """
     @author: Guanyuan Shuai
@@ -879,21 +955,12 @@ def process_file(
     :param is_categorical: flag to indicator whether data is categorical or continuous
     :return a dataframe with data from given raster file aggregated to admin units
     """
-    if crop == "maize":
-        crop_mask_file = "crop_mask_maize_WC.tif"
-    elif crop == "wheat":
-        crop_mask_file = "crop_mask_winter_spring_cereals_WC.tif"
-    else:
-        crop_mask_file = "crop_mask_generic_asap.tif"
-
-    crop_mask_path = os.path.join(AGML_ROOT, "crop_masks", crop_mask_file)
+    crop_mask_path = _crop_mask_path(crop)
 
     basename = os.path.basename(indicator_file)
     fname, ext = os.path.splitext(basename)
     if ext == ".nc":
-        indicator_file = "netcdf:{indicator_file}:{variable}".format(
-            indicator_file=indicator_file, variable=AGERA5_VARIABLES[indicator_name]
-        )
+        indicator_file = _netcdf_dataset_path(indicator_file, indicator_name)
 
     if is_categorical:
         aggr = "mode"
@@ -901,7 +968,8 @@ def process_file(
         aggr = "mean"
 
     if is_time_series:
-        date_str = fname[-8:]
+        if date_str is None:
+            date_str = fname[-8:]
         col_names = ["crop_name", "adm_id", "date", indicator_name]
     else:
         date_str = None
@@ -920,6 +988,7 @@ def process_file(
             afi=crop_mask_path,
             afi_thresh=0,
             thresh_type="Fixed",
+            indexes=band_index,
         )
         if (stats is not None) and ("stats" in stats) and (aggr in stats["stats"]):
             aggr_val = stats["stats"][aggr]
@@ -953,6 +1022,48 @@ def get_time_series_files(data_path, year=2000):
             files.append(f)
 
     return files
+
+
+def iter_lpjml_time_slices(indicator_dir, indicator_name, year):
+    """Yield (file_path, band_index, date_str) for one LPJmL harvest year."""
+    if os.path.isdir(indicator_dir):
+        for fname in get_time_series_files(indicator_dir, year=year):
+            date = os.path.splitext(fname)[0][-8:]
+            yield os.path.join(indicator_dir, fname), None, date
+
+    for nc_path in (
+        os.path.join(indicator_dir, f"{indicator_name}.nc"),
+        os.path.join(os.path.dirname(indicator_dir), f"{indicator_name}.nc"),
+    ):
+        if not os.path.isfile(nc_path):
+            continue
+        band_index = year - 2000 + 1
+        yield nc_path, band_index, f"{year}0101"
+        return
+
+
+def iter_time_series_inputs(indicator_dir, indicator_name, year, pred_source):
+    if pred_source == "LPJmL":
+        return list(iter_lpjml_time_slices(indicator_dir, indicator_name, year))
+    if not os.path.isdir(indicator_dir):
+        return []
+    return [
+        (os.path.join(indicator_dir, fname), None, os.path.splitext(fname)[0][-8:])
+        for fname in get_time_series_files(indicator_dir, year=year)
+    ]
+
+
+def get_admin_geometries(region):
+    shp_path = os.path.join(PATH_POLYGONS_DIR, region, f"{region}.shp")
+    if os.path.isfile(shp_path):
+        geo_df = get_shapes_from_polygons(region=region)
+    else:
+        geo_df = get_shapes(region=region)
+    geo_df = geo_df[["adm_id", "geometry"]]
+    return {
+        adm_id: geo_df[geo_df["adm_id"] == adm_id]["geometry"].values[0]
+        for adm_id in geo_df["adm_id"].unique()
+    }
 
 
 def get_shapes(region="US"):
@@ -1049,7 +1160,7 @@ def get_shapes(region="US"):
     return sel_shapes
 
 
-def process_indicators(crop, region, sel_indicators):
+def process_indicators(crop, region, sel_indicators, data_dir=None, output_dir=None):
     """
     @author: Guanyuan Shuai
     Process predictors or indicators.
@@ -1058,13 +1169,9 @@ def process_indicators(crop, region, sel_indicators):
     :param region: region code or 2-letter country code
     :param sel_indicators: a list of indicators to process
     """
-    geo_df = get_shapes(region=region)
-    geo_df = geo_df[["adm_id", "geometry"]]
-
-    geometries = {
-        adm_id: geo_df[geo_df["adm_id"] == adm_id]["geometry"].values[0]
-        for adm_id in geo_df["adm_id"].unique()
-    }
+    data_dir = DATA_DIR if data_dir is None else data_dir
+    output_dir = OUTPUT_DIR if output_dir is None else output_dir
+    geometries = get_admin_geometries(region)
 
     #################Loop over each crop, year, and variable##########################
     ##########setup crop mask file###################
@@ -1072,36 +1179,39 @@ def process_indicators(crop, region, sel_indicators):
         pred_source = ALL_INDICATORS[indicator]["source"]
         is_time_series = ALL_INDICATORS[indicator]["is_time_series"]
         is_categorical = ALL_INDICATORS[indicator]["is_categorical"]
-        output_path = os.path.join(OUTPUT_DIR, crop, region, indicator)
+        output_path = os.path.join(output_dir, crop, region, indicator)
         os.makedirs(output_path, exist_ok=True)
 
         # Time series data
         if is_time_series:
-            indicator_dir = os.path.join(DATA_DIR, pred_source, indicator)
+            indicator_dir = os.path.join(data_dir, pred_source, indicator)
             result_final = pd.DataFrame()
             for yr in range(START_YEAR, END_YEAR + 1):
                 print("Start working on", crop, region, indicator, yr)
-                files = get_time_series_files(indicator_dir, year=yr)
-
-                print("There are " + str(len(files)) + " files!")
-                if len(files) == 0:
+                slices = iter_time_series_inputs(
+                    indicator_dir, indicator, yr, pred_source
+                )
+                print("There are " + str(len(slices)) + " files!")
+                if len(slices) == 0:
                     continue
 
                 start_time = time.time()
-                files = sorted([os.path.join(indicator_dir, f) for f in files])
-                with mp.Pool(processes=None) as pool:
+                slices = sorted(slices, key=lambda item: item[2])
+                with mp.Pool(processes=None, initializer=init_worker_logging) as pool:
                     # NOTE: multiprocessing using a target function with multiple arguments.
                     # Based on the answer to
                     # https://stackoverflow.com/questions/5442910/how-to-use-multiprocessing-pool-map-with-multiple-arguments
                     dfs = pool.starmap(
                         process_file,
                         zip(
-                            files,
+                            [item[0] for item in slices],
                             repeat(crop),
                             repeat(indicator),
                             repeat(geometries),
                             repeat(is_time_series),
                             repeat(is_categorical),
+                            [item[1] for item in slices],
+                            [item[2] for item in slices],
                         ),
                     )
                     result_yr = pd.concat(dfs, axis=0)
@@ -1117,7 +1227,7 @@ def process_indicators(crop, region, sel_indicators):
 
         # Static data
         else:
-            indicator_dir = os.path.join(DATA_DIR, pred_source)
+            indicator_dir = os.path.join(data_dir, pred_source)
             print("Start working on", crop, region, indicator)
             files = os.listdir(indicator_dir)
 
@@ -1150,6 +1260,23 @@ def process_indicators(crop, region, sel_indicators):
             print("Time used: %02d:%02d:%02d" % (h, m, s))
 
 
+def discover_regions(crop: str) -> list[str]:
+    """List country/region codes to process when ``-r`` is not passed.
+
+    Prefer subdirectories of ``cybench/data/{crop}/``; fall back to ``DATASETS``.
+    """
+    crop_dir = os.path.join(PATH_DATA_DIR, crop)
+    if os.path.isdir(crop_dir):
+        regions = sorted(
+            cc
+            for cc in os.listdir(crop_dir)
+            if os.path.isdir(os.path.join(crop_dir, cc))
+        )
+        if regions:
+            return regions
+    return list(DATASETS.get(crop, []))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog="predictor_data_prep.py", description="Prepare CY-Bench predictor data"
@@ -1157,7 +1284,20 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--crop")
     parser.add_argument("-r", "--region", type=str, nargs="+", help="List of regions")
     parser.add_argument("-i", "--indicator", nargs="+")
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        help="Root directory with predictor rasters (default: AGML predictors path)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        help="Directory for region-aggregated CSV output",
+    )
     args = parser.parse_args()
+
+    data_dir = args.data_dir if args.data_dir is not None else DATA_DIR
+    output_dir = args.output_dir if args.output_dir is not None else OUTPUT_DIR
     if args.crop is not None:
         sel_crops = [args.crop]
     else:
@@ -1173,24 +1313,11 @@ if __name__ == "__main__":
         sel_indicators = list(ALL_INDICATORS.keys())
 
     for crop in sel_crops:
-        if sel_regions is None:
-            sel_regions = []
-            if crop == "maize":
-                sel_regions = [
-                    "AR",
-                    "BR",
-                    "CN",
-                    "EU",
-                    "FEWSNET",
-                    "IN",
-                    "ML",
-                    "MX",
-                    "US",
-                ]
-            elif crop == "wheat":
-                sel_regions = ["AR", "AU", "BR", "CN", "EU", "FEWSNET", "IN", "US"]
+        regions = sel_regions if sel_regions is not None else discover_regions(crop)
+        print(f"Processing {crop} for {len(regions)} region(s): {', '.join(regions)}")
 
-        for cn in sel_regions:
+        for cn in regions:
             print("Working on", crop, cn)
-            process_indicators(crop, cn, sel_indicators)
-        sel_regions = args.region
+            process_indicators(
+                crop, cn, sel_indicators, data_dir=data_dir, output_dir=output_dir
+            )

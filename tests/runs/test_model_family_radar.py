@@ -27,8 +27,12 @@ def _summary_row(model: str, **metrics: float) -> dict:
         "batch_horizon": "eos",
         "n_samples": 500,
         "n_train": 2800,
+        "r": 0.55,
         "r2": 0.5,
         "nrmse": 0.18,
+        "r_spatial": 0.72,
+        "r_temporal": 0.25,
+        "r_res": 0.2,
         "r2_spatial": 0.4,
         "r2_spatial_agg": 0.45,
         "r2_temporal": 0.3,
@@ -72,10 +76,10 @@ def test_pick_representatives_prefers_override():
 def test_relative_scores_span_unit_interval():
     raw = pd.DataFrame(
         {
-            "r2": [0.2, 0.8],
-            "r2_spatial_agg": [0.1, 0.9],
-            "r2_temporal_agg": [0.3, 0.7],
-            "r2_res": [0.0, 1.0],
+            "r": [0.2, 0.8],
+            "r_spatial": [0.1, 0.9],
+            "r_temporal": [0.3, 0.7],
+            "r_res": [0.0, 1.0],
         }
     )
     rel = relative_scores(raw)
@@ -86,11 +90,24 @@ def test_relative_scores_span_unit_interval():
 
 def test_legacy_summary_columns_map_to_agg_metrics():
     df = pd.DataFrame(
-        [{"model": "trend", "r2_spatial": 0.69, "r2_temporal": -0.75, "r2_res": -1.0}]
+        [
+            {
+                "model": "trend",
+                "r2_spatial": 0.69,
+                "r2_temporal": -0.75,
+                "r_spatial": 0.89,
+                "r_temporal": -0.29,
+                "r2_res": -1.0,
+            }
+        ]
     )
     out = compat_legacy_summary_columns(df)
     assert out["r2_spatial_agg"].iloc[0] == 0.69
     assert out["r2_temporal_agg"].iloc[0] == -0.75
+    assert out["r_spatial_agg"].iloc[0] == 0.89
+    assert out["r_temporal_agg"].iloc[0] == -0.29
+    assert "r_spatial" not in out.columns
+    assert "r_temporal" not in out.columns
 
 
 def test_build_radar_payload_structure(tmp_path: Path):
@@ -99,38 +116,38 @@ def test_build_radar_payload_structure(tmp_path: Path):
         d.mkdir(parents=True)
         pd.DataFrame(
             [
-                _summary_row("average", r2=0.1, nrmse=0.25),
-                _summary_row("trend", r2=0.3, nrmse=0.22),
+                _summary_row("average", r=0.2, nrmse=0.25),
+                _summary_row("trend", r=0.3, nrmse=0.22),
                 _summary_row(
                     "lpjml_bc",
-                    r2=0.5,
-                    r2_spatial_agg=0.4,
-                    r2_temporal_agg=0.3,
-                    r2_res=0.2,
+                    r=0.5,
+                    r_spatial=0.62,
+                    r_temporal=0.33,
+                    r_res=0.2,
                     nrmse=0.22,
                 ),
                 _summary_row(
                     "lightgbm",
-                    r2=0.8,
-                    r2_spatial_agg=0.7,
-                    r2_temporal_agg=0.6,
-                    r2_res=0.5,
+                    r=0.8,
+                    r_spatial=0.74,
+                    r_temporal=0.1,
+                    r_res=0.5,
                     nrmse=0.15,
                 ),
                 _summary_row(
                     "transformer_lf",
-                    r2=0.7,
-                    r2_spatial_agg=0.6,
-                    r2_temporal_agg=0.5,
-                    r2_res=0.4,
+                    r=0.7,
+                    r_spatial=0.73,
+                    r_temporal=0.21,
+                    r_res=0.4,
                     nrmse=0.17,
                 ),
                 _summary_row(
                     "tabpfn",
-                    r2=0.75,
-                    r2_spatial_agg=0.65,
-                    r2_temporal_agg=0.55,
-                    r2_res=0.45,
+                    r=0.75,
+                    r_spatial=0.77,
+                    r_temporal=0.31,
+                    r_res=0.45,
                     nrmse=0.16,
                 ),
             ]

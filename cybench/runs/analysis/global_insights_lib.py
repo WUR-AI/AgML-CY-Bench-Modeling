@@ -125,20 +125,29 @@ def discover_summary_tables(output_root: Path, *, version: int = 1) -> list[Path
 
 
 def compat_legacy_summary_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Map pre-v2 walk_forward_summary columns to current aggregate metric names.
+    """Map pre-v2 walk_forward_summary columns to current metric names.
 
-    Older collects stored aggregate spatial/temporal R² in ``r2_spatial`` /
-    ``r2_temporal``; current schema uses ``r2_spatial_agg`` / ``r2_temporal_agg``.
+    Older collects stored aggregate spatial/temporal metrics in ``r2_spatial``,
+    ``r2_temporal``, ``r_spatial``, and ``r_temporal``. Current schema keeps
+    slice medians in ``r_spatial`` / ``r_temporal`` and aggregates in
+    ``*_agg`` columns — legacy aggregate r columns are renamed, not reused as slices.
     """
     if df.empty:
         return df
     out = df.copy()
-    if "r2_spatial_agg" not in out.columns and "r2_spatial" in out.columns:
+    legacy_r2_agg = "r2_spatial_agg" not in out.columns and "r2_spatial" in out.columns
+    if legacy_r2_agg:
         out["r2_spatial_agg"] = out["r2_spatial"]
-    if "r2_temporal_agg" not in out.columns and "r2_temporal" in out.columns:
-        out["r2_temporal_agg"] = out["r2_temporal"]
+        out["r2_temporal_agg"] = out.get("r2_temporal")
     if "r2_res" not in out.columns and "r2_anomaly" in out.columns:
         out["r2_res"] = out["r2_anomaly"]
+    if legacy_r2_agg:
+        if "r_spatial_agg" not in out.columns and "r_spatial" in out.columns:
+            out["r_spatial_agg"] = out["r_spatial"]
+            out = out.drop(columns=["r_spatial"])
+        if "r_temporal_agg" not in out.columns and "r_temporal" in out.columns:
+            out["r_temporal_agg"] = out["r_temporal"]
+            out = out.drop(columns=["r_temporal"])
     return out
 
 
