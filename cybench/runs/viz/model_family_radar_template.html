@@ -106,25 +106,13 @@
     .back { margin-bottom: 0.75rem; }
     .back a { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
     .back a:hover { text-decoration: underline; }
-    .scatter-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(280px, 1fr));
-      gap: 1rem;
-    }
-    @media (max-width: 720px) {
-      .scatter-grid { grid-template-columns: 1fr; }
-    }
     .scatter-panel {
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 0.5rem;
+      padding: 0.75rem;
       background: #fcfcfd;
     }
-    .scatter-panel h3 {
-      margin: 0 0 0.35rem;
-      font-size: 0.95rem;
-    }
-    .scatter-panel svg { display: block; width: 100%; height: auto; }
+    .scatter-panel svg { display: block; width: 100%; height: auto; max-width: 720px; margin: 0 auto; }
     .scatter-legend {
       display: flex;
       flex-wrap: wrap;
@@ -189,13 +177,8 @@
 
     <div class="card">
       <h2>Performance vs training set size</h2>
-      <p class="muted">Each point is one crop×country dataset. X-axis: mean training rows across walk-forward splits (region-years used to fit).</p>
-      <div class="controls">
-        <label>Metric
-          <select id="scatter-metric-select"></select>
-        </label>
-      </div>
-      <div class="scatter-grid" id="scatter-grid"></div>
+      <p class="muted" id="scatter-note">Each point is one crop×country dataset for the family representative. Y-axis: model NRMSE divided by average yield NRMSE (1.0 = baseline; lower is better). X-axis: mean training rows across walk-forward splits.</p>
+      <div class="scatter-panel" id="scatter-panel"></div>
     </div>
   </div>
 
@@ -209,37 +192,17 @@
     const legendEl = document.getElementById("legend");
     const viewList = document.getElementById("view-list");
     const metricsTable = document.getElementById("metrics-table");
-    const scatterMetricSelect = document.getElementById("scatter-metric-select");
-    const scatterGrid = document.getElementById("scatter-grid");
+    const scatterPanel = document.getElementById("scatter-panel");
+    const scatterNote = document.getElementById("scatter-note");
 
-    const MODEL_COLORS = [
-      "#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51",
-      "#6d597a", "#b56576", "#355070", "#0081a7", "#00afb9",
-      "#8338ec", "#3a86ff",
-    ];
+    const scatterMetric = DATA.sample_scatter_metric || {
+      key: "relative_nrmse",
+      label: "NRMSE / average yield",
+      reference: 1.0,
+      lower_is_better: true,
+    };
 
     normNote.textContent = DATA.normalization_note || "";
-
-    (DATA.sample_scatter_metrics || []).forEach(m => {
-      const opt = document.createElement("option");
-      opt.value = m.key;
-      opt.textContent = m.label;
-      scatterMetricSelect.appendChild(opt);
-    });
-    if (!scatterMetricSelect.options.length) {
-      const opt = document.createElement("option");
-      opt.value = "nrmse";
-      opt.textContent = "Overall NRMSE";
-      scatterMetricSelect.appendChild(opt);
-    }
-
-    const scatterMetricByKey = Object.fromEntries(
-      (DATA.sample_scatter_metrics || []).map(m => [m.key, m])
-    );
-
-    function scatterMetricLabel(key) {
-      return (scatterMetricByKey[key] || {}).label || key;
-    }
 
     const horizonLabels = { eos: "End of season", mid: "Mid-season" };
     Object.keys(DATA.by_horizon).forEach(hz => {
@@ -339,84 +302,77 @@
       return ((DATA.sample_scatter || {})[hz] || {})[crop] || [];
     }
 
-    function modelColor(model, idx) {
-      return MODEL_COLORS[idx % MODEL_COLORS.length];
-    }
-
-    function renderScatterFamilies() {
-      const metricKey = scatterMetricSelect.value || "nrmse";
-      const metricMeta = scatterMetricByKey[metricKey] || {};
-      const lowerIsBetter = !!metricMeta.lower_is_better;
+    function renderScatter() {
+      const metricKey = scatterMetric.key || "relative_nrmse";
+      const refY = scatterMetric.reference ?? 1.0;
       const families = currentScatterFamilies();
-      if (!families.length) {
-        scatterGrid.innerHTML = '<p class="muted">No scatter data for this selection (re-collect summaries to populate n_train).</p>';
+      const series = families
+        .map(fam => ({
+          ...fam,
+          points: (fam.points || []).filter(
+            p => p[metricKey] !== null && p[metricKey] !== undefined
+          ),
+        }))
+        .filter(fam => fam.points.length);
+
+      if (!series.length) {
+        scatterPanel.innerHTML =
+          '<p class="muted">No scatter data for this selection (re-collect summaries with average_yield baseline and n_train).</p>';
         return;
       }
 
-      scatterGrid.innerHTML = families.map(fam => {
-        const points = (fam.points || []).filter(
-          p => p.metrics && p.metrics[metricKey] !== null && p.metrics[metricKey] !== undefined
-        );
-        if (!points.length) {
-          return `<div class="scatter-panel"><h3>${fam.family}</h3><p class="muted">No data</p></div>`;
-        }
+      const width = 720;
+      const height = 360;
+      const pad = { l: 56, r: 20, t: 20, b: 48 };
+      const innerW = width - pad.l - pad.r;
+      const innerH = height - pad.t - pad.b;
 
-        const width = 360;
-        const height = 260;
-        const pad = { l: 48, r: 12, t: 16, b: 40 };
-        const innerW = width - pad.l - pad.r;
-        const innerH = height - pad.t - pad.b;
+      const allPoints = series.flatMap(fam =>
+        fam.points.map(p => ({ ...p, family: fam.family, color: fam.color, rep: fam.display_name }))
+      );
+      const xs = allPoints.map(p => p.n_train);
+      const ys = allPoints.map(p => p[metricKey]);
+      const xMin = Math.min(...xs);
+      const xMax = Math.max(...xs);
+      const yMin = Math.max(0, Math.min(...ys, refY) - 0.08);
+      const yMax = Math.max(...ys, refY) + 0.08;
+      const xScale = v => pad.l + ((v - xMin) / (xMax - xMin || 1)) * innerW;
+      const yScale = v => pad.t + innerH - ((v - yMin) / (yMax - yMin || 1)) * innerH;
 
-        const xs = points.map(p => p.n_train);
-        const ys = points.map(p => p.metrics[metricKey]);
-        const xMin = Math.min(...xs);
-        const xMax = Math.max(...xs);
-        const yPad = lowerIsBetter ? 0.05 : 0.2;
-        const yMin = lowerIsBetter
-          ? Math.max(0, Math.min(...ys) - yPad)
-          : Math.min(-0.2, ...ys);
-        const yMax = lowerIsBetter
-          ? Math.max(...ys) + yPad
-          : Math.max(1.0, ...ys);
-        const xScale = v => pad.l + ((v - xMin) / (xMax - xMin || 1)) * innerW;
-        const yScale = v => pad.t + innerH - ((v - yMin) / (yMax - yMin || 1)) * innerH;
+      let svg = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Performance vs training size">`;
+      svg += `<rect x="${pad.l}" y="${pad.t}" width="${innerW}" height="${innerH}" fill="#fff" stroke="#e6eaef"/>`;
 
-        const models = [...new Set(points.map(p => p.model))];
-        const modelIdx = Object.fromEntries(models.map((m, i) => [m, i]));
+      const yRef = yScale(refY);
+      svg += `<line x1="${pad.l}" y1="${yRef}" x2="${pad.l + innerW}" y2="${yRef}" stroke="#bbb" stroke-dasharray="5 4"/>`;
+      svg += `<text x="${pad.l + innerW + 4}" y="${yRef + 3}" font-size="10" fill="#656d76">baseline</text>`;
 
-        let svg = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${fam.family} scatter">`;
-        svg += `<rect x="${pad.l}" y="${pad.t}" width="${innerW}" height="${innerH}" fill="#fff" stroke="#e6eaef"/>`;
-        if (!lowerIsBetter && yMin < 0 && yMax > 0) {
-          const y0 = yScale(0);
-          svg += `<line x1="${pad.l}" y1="${y0}" x2="${pad.l + innerW}" y2="${y0}" stroke="#bbb" stroke-dasharray="4 3"/>`;
-        }
-        for (let i = 0; i <= 4; i++) {
-          const tx = xMin + (i / 4) * (xMax - xMin);
-          const ty = yMin + (i / 4) * (yMax - yMin);
-          svg += `<text x="${xScale(tx)}" y="${height - 8}" text-anchor="middle" font-size="10" fill="#656d76">${Math.round(tx)}</text>`;
-          svg += `<text x="8" y="${yScale(ty) + 3}" text-anchor="start" font-size="10" fill="#656d76">${ty.toFixed(2)}</text>`;
-        }
-        svg += `<text x="${pad.l + innerW / 2}" y="${height - 2}" text-anchor="middle" font-size="11" fill="#1f2328">Training rows (mean)</text>`;
-        svg += `<text x="14" y="${pad.t + innerH / 2}" text-anchor="middle" font-size="11" fill="#1f2328" transform="rotate(-90 14 ${pad.t + innerH / 2})">${scatterMetricLabel(metricKey)}</text>`;
+      for (let i = 0; i <= 4; i++) {
+        const tx = xMin + (i / 4) * (xMax - xMin);
+        const ty = yMin + (i / 4) * (yMax - yMin);
+        svg += `<text x="${xScale(tx)}" y="${height - 10}" text-anchor="middle" font-size="10" fill="#656d76">${Math.round(tx)}</text>`;
+        svg += `<text x="10" y="${yScale(ty) + 3}" text-anchor="start" font-size="10" fill="#656d76">${ty.toFixed(2)}</text>`;
+      }
+      svg += `<text x="${pad.l + innerW / 2}" y="${height - 2}" text-anchor="middle" font-size="11" fill="#1f2328">Training rows (mean)</text>`;
+      svg += `<text x="16" y="${pad.t + innerH / 2}" text-anchor="middle" font-size="11" fill="#1f2328" transform="rotate(-90 16 ${pad.t + innerH / 2})">${scatterMetric.label || metricKey}</text>`;
 
-        points.forEach(p => {
+      series.forEach(fam => {
+        fam.points.forEach(p => {
           const cx = xScale(p.n_train);
-          const cy = yScale(p.metrics[metricKey]);
-          const col = modelColor(p.model, modelIdx[p.model]);
-          svg += `<circle cx="${cx}" cy="${cy}" r="5" fill="${col}" fill-opacity="0.85" stroke="#fff" stroke-width="1">
-            <title>${p.display_name} · ${p.dataset}\nTrain=${p.n_train}, ${metricKey}=${p.metrics[metricKey]}</title>
+          const cy = yScale(p[metricKey]);
+          svg += `<circle cx="${cx}" cy="${cy}" r="6" fill="${fam.color}" fill-opacity="0.82" stroke="#fff" stroke-width="1.2">
+            <title>${fam.family} · ${p.display_name} · ${p.dataset}
+Train=${p.n_train}, rel NRMSE=${p[metricKey]}
+(model=${p.nrmse}, baseline=${p.baseline_nrmse})</title>
           </circle>`;
         });
-        svg += "</svg>";
+      });
+      svg += "</svg>";
 
-        const legend = models.map(m => {
-          const label = points.find(p => p.model === m)?.display_name || m;
-          const col = modelColor(m, modelIdx[m]);
-          return `<span style="color:${col}">${label}</span>`;
-        }).join("");
+      const legend = series.map(fam =>
+        `<span style="color:${fam.color}"><strong>${fam.family}</strong> · ${fam.display_name}</span>`
+      ).join("");
 
-        return `<div class="scatter-panel"><h3>${fam.family}</h3>${svg}<div class="scatter-legend">${legend}</div></div>`;
-      }).join("");
+      scatterPanel.innerHTML = `${svg}<div class="scatter-legend">${legend}</div>`;
     }
 
     function renderTable(families) {
@@ -444,7 +400,7 @@
       renderRadar(families);
       renderLegend(families);
       renderTable(families);
-      renderScatterFamilies();
+      renderScatter();
     }
 
     horizonSelect.addEventListener("change", () => {
@@ -452,7 +408,6 @@
       render();
     });
     cropSelect.addEventListener("change", render);
-    scatterMetricSelect.addEventListener("change", renderScatterFamilies);
 
     renderViewList();
     populateCropOptions();

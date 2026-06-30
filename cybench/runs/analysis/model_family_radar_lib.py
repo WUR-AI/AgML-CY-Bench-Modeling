@@ -8,7 +8,12 @@ from typing import Any
 import pandas as pd
 
 from cybench.runs.analysis.benchmark_run_catalog import HIGHER_IS_BETTER, LOWER_IS_BETTER
-from cybench.runs.analysis.global_insights_lib import discover_summary_tables, load_summary_frame
+from cybench.runs.analysis.global_insights_lib import (
+    attach_baseline_metrics,
+    discover_summary_tables,
+    is_baseline_model,
+    load_summary_frame,
+)
 
 # Scientific views → headline metric per axis (from aggregated_metrics / METRIC_KEYS).
 EVALUATION_VIEWS: tuple[dict[str, str], ...] = (
@@ -95,10 +100,13 @@ def _median_per_model(df: pd.DataFrame, metrics: tuple[str, ...]) -> pd.DataFram
     """Median metric per model (one value per crop×country row in *df*)."""
     if df.empty or "model" not in df.columns:
         return pd.DataFrame()
-    present = [m for m in metrics if m in df.columns]
+    work = df[~df["model"].apply(is_baseline_model)]
+    if work.empty:
+        return pd.DataFrame()
+    present = [m for m in metrics if m in work.columns]
     if not present:
         return pd.DataFrame()
-    grouped = df.groupby("model", sort=True)[present].median()
+    grouped = work.groupby("model", sort=True)[present].median()
     return grouped
 
 
@@ -194,15 +202,13 @@ def family_for_model(model: str) -> str | None:
     return None
 
 
-SAMPLE_SCATTER_METRICS: tuple[dict[str, str], ...] = (
-    {"key": "nrmse", "label": "Overall NRMSE", "lower_is_better": True},
-    {"key": "r2", "label": "Overall R²", "lower_is_better": False},
-    {"key": "r2_spatial", "label": "Spatial R² (med/yr)", "lower_is_better": False},
-    {"key": "r2_spatial_agg", "label": "Spatial R² (agg)", "lower_is_better": False},
-    {"key": "r2_temporal", "label": "Temporal R² (med/reg)", "lower_is_better": False},
-    {"key": "r2_temporal_agg", "label": "Temporal R² (agg)", "lower_is_better": False},
-    {"key": "r2_anomaly", "label": "Anomaly R² (med/reg)", "lower_is_better": False},
-)
+SAMPLE_SCATTER_METRIC: dict[str, Any] = {
+    "key": "relative_nrmse",
+    "label": "NRMSE / average yield",
+    "baseline_model": "average_yield",
+    "lower_is_better": True,
+    "reference": 1.0,
+}
 
 
 def build_sample_scatter_slice(
@@ -210,49 +216,56 @@ def build_sample_scatter_slice(
     *,
     batch_horizon: str,
     crop: str | None = None,
+    representatives: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Per-family points for performance vs mean walk-forward training set size."""
+    """One representative per family: relative NRMSE vs average_yield by training size."""
     work = df[df["batch_horizon"] == batch_horizon].copy() if "batch_horizon" in df.columns else df
     if crop:
         work = work[work["crop"] == crop]
     if work.empty:
         return []
 
-    metric_keys = [m["key"] for m in SAMPLE_SCATTER_METRICS]
-    for key in metric_keys + ["n_train"]:
+    for key in ("nrmse", "n_train"):
         if key in work.columns:
             work[key] = pd.to_numeric(work[key], errors="coerce")
 
+    work = attach_baseline_metrics(work)
+    reps = pick_representatives(work, overrides=representatives)
+
     families_out: list[dict[str, Any]] = []
-    for family, members in MODEL_FAMILIES.items():
-        sub = work[work["model"].isin(members)].copy()
+    for family, model in reps.items():
+        sub = work[work["model"] == model]
         if sub.empty:
             continue
         points: list[dict[str, Any]] = []
         for _, row in sub.iterrows():
             n_train = row.get("n_train")
+            baseline_nrmse = row.get("baseline_nrmse")
+            nrmse = row.get("nrmse")
             if pd.isna(n_train) or int(n_train) <= 0:
                 continue
-            model = str(row["model"])
-            point: dict[str, Any] = {
-                "model": model,
-                "display_name": MODEL_DISPLAY_NAMES.get(model, model),
-                "country": str(row.get("country", "")),
-                "crop": str(row.get("crop", "")),
-                "dataset": f"{row.get('crop', '')}_{row.get('country', '')}",
-                "n_train": int(n_train),
-                "metrics": {},
-            }
-            for metric in metric_keys:
-                val = row.get(metric)
-                point["metrics"][metric] = (
-                    None if val is None or pd.isna(val) else round(float(val), 4)
-                )
-            points.append(point)
+            if pd.isna(baseline_nrmse) or float(baseline_nrmse) <= 0 or pd.isna(nrmse):
+                continue
+            rel = float(nrmse) / float(baseline_nrmse)
+            points.append(
+                {
+                    "model": model,
+                    "display_name": MODEL_DISPLAY_NAMES.get(model, model),
+                    "country": str(row.get("country", "")),
+                    "crop": str(row.get("crop", "")),
+                    "dataset": f"{row.get('crop', '')}_{row.get('country', '')}",
+                    "n_train": int(n_train),
+                    "nrmse": round(float(nrmse), 4),
+                    "baseline_nrmse": round(float(baseline_nrmse), 4),
+                    "relative_nrmse": round(rel, 4),
+                }
+            )
         if points:
             families_out.append(
                 {
                     "family": family,
+                    "model": model,
+                    "display_name": MODEL_DISPLAY_NAMES.get(model, model),
                     "color": FAMILY_COLORS.get(family, "#666"),
                     "points": points,
                 }
@@ -260,17 +273,25 @@ def build_sample_scatter_slice(
     return families_out
 
 
-def build_sample_scatter_payload(df: pd.DataFrame) -> dict[str, dict[str, list[dict[str, Any]]]]:
+def build_sample_scatter_payload(
+    df: pd.DataFrame,
+    *,
+    representatives: dict[str, str] | None = None,
+) -> dict[str, dict[str, list[dict[str, Any]]]]:
     by_horizon: dict[str, dict[str, list[dict[str, Any]]]] = {}
     for hz in ("eos", "mid"):
         if "batch_horizon" in df.columns and hz not in set(df["batch_horizon"].astype(str)):
             continue
         by_crop: dict[str, list[dict[str, Any]]] = {
-            "all": build_sample_scatter_slice(df, batch_horizon=hz),
+            "all": build_sample_scatter_slice(
+                df, batch_horizon=hz, representatives=representatives
+            ),
         }
         if "crop" in df.columns:
             for crop in sorted({str(c) for c in df["crop"].dropna().unique()}):
-                by_crop[crop] = build_sample_scatter_slice(df, batch_horizon=hz, crop=crop)
+                by_crop[crop] = build_sample_scatter_slice(
+                    df, batch_horizon=hz, crop=crop, representatives=representatives
+                )
         by_horizon[hz] = by_crop
     return by_horizon
 
@@ -338,8 +359,8 @@ def build_radar_payload(
             for family, models in MODEL_FAMILIES.items()
         },
         "by_horizon": by_horizon,
-        "sample_scatter_metrics": list(SAMPLE_SCATTER_METRICS),
-        "sample_scatter": build_sample_scatter_payload(df),
+        "sample_scatter_metric": SAMPLE_SCATTER_METRIC,
+        "sample_scatter": build_sample_scatter_payload(df, representatives=representatives),
         "normalization_note": (
             "Each axis is min–max normalized across all models in the selected horizon "
             "and crop filter. Radar vertices show one representative per family; radii "
