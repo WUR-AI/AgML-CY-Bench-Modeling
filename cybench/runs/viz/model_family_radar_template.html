@@ -57,6 +57,26 @@
       font: inherit;
       background: #fff;
     }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .toolbar button {
+      padding: 0.35rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      font: inherit;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .toolbar button.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
     .layout {
       display: grid;
       grid-template-columns: minmax(280px, 1fr) minmax(260px, 360px);
@@ -139,6 +159,7 @@
     <header>
       <h1>Model family comparison</h1>
       <p class="lead">NRMSE (Overall) and Pearson r (Spatial, Temporal, Anomaly) — one best-NRMSE representative per modeling paradigm (five families).</p>
+      <p class="muted">Paper-level summary. For every model and crop×country drill-down, see <a href="insights.html">Global insights</a> (leaderboard and model×country heatmap).</p>
     </header>
 
     <div class="card">
@@ -149,6 +170,11 @@
         <label>Crop
           <select id="crop-select"></select>
         </label>
+        <span class="muted">Radar scale</span>
+        <div class="toolbar" id="radar-mode-toolbar">
+          <button type="button" data-mode="relative" class="active">Relative</button>
+          <button type="button" data-mode="absolute">Absolute</button>
+        </div>
       </div>
       <p class="muted" id="norm-note"></p>
     </div>
@@ -176,16 +202,6 @@
     </div>
 
     <div class="card">
-      <h2>Crop × country detail (family representatives)</h2>
-      <div class="table-scroll">
-        <table id="dataset-table">
-          <thead></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
       <h2>Performance vs training set size</h2>
       <p class="muted" id="scatter-note">Each point is one crop×country dataset for the family representative. Y-axis: model NRMSE ÷ average yield NRMSE (1.0 = baseline; lower is better). X-axis: log₁₀(mean training rows); view spans the 5th–95th percentile range.</p>
       <div class="scatter-panel" id="scatter-panel"></div>
@@ -202,9 +218,11 @@
     const legendEl = document.getElementById("legend");
     const viewList = document.getElementById("view-list");
     const metricsTable = document.getElementById("metrics-table");
-    const datasetTable = document.getElementById("dataset-table");
     const scatterPanel = document.getElementById("scatter-panel");
     const scatterNote = document.getElementById("scatter-note");
+    const radarModeToolbar = document.getElementById("radar-mode-toolbar");
+
+    let radarMode = "relative";
 
     const scatterMetric = DATA.sample_scatter_metric || {
       key: "relative_nrmse",
@@ -213,7 +231,34 @@
       lower_is_better: true,
     };
 
-    normNote.textContent = DATA.normalization_note || "";
+    normNote.textContent = DATA.relative_note || DATA.normalization_note || "";
+
+    function updateRadarNote() {
+      normNote.textContent = radarMode === "absolute"
+        ? (DATA.absolute_note || "")
+        : (DATA.relative_note || DATA.normalization_note || "");
+    }
+
+    function radarBucket(fam) {
+      if (radarMode === "absolute") return fam.absolute || {};
+      return fam.relative || {};
+    }
+
+    function rawValueForView(fam, view) {
+      const raw = fam.raw || {};
+      return raw[view.metric];
+    }
+
+    radarModeToolbar.addEventListener("click", ev => {
+      const btn = ev.target.closest("button[data-mode]");
+      if (!btn) return;
+      radarMode = btn.dataset.mode;
+      radarModeToolbar.querySelectorAll("button").forEach(b => {
+        b.classList.toggle("active", b === btn);
+      });
+      updateRadarNote();
+      render();
+    });
 
     const horizonLabels = { eos: "End of season", mid: "Mid-season" };
     Object.keys(DATA.by_horizon).forEach(hz => {
@@ -263,13 +308,15 @@
         return;
       }
 
-      const size = 420;
+      const absoluteScales = ((DATA.radar_scales || {}).absolute) || {};
+      const size = 460;
       const cx = size / 2;
       const cy = size / 2;
-      const maxR = size * 0.36;
+      const maxR = size * 0.34;
       const angles = labels.map((_, i) => (2 * Math.PI * i) / n);
+      const modeLabel = radarMode === "absolute" ? "absolute fixed-scale" : "relative min–max";
 
-      let svg = `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Model family radar chart">`;
+      let svg = `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Model family radar chart (${modeLabel})">`;
 
       for (let ring = 0.25; ring <= 1.001; ring += 0.25) {
         const r = maxR * ring;
@@ -277,21 +324,38 @@
         svg += `<polygon points="${pts}" fill="none" stroke="#e6eaef" stroke-width="1"/>`;
         if (ring < 1) {
           const [lx, ly] = polarPoint(cx, cy, r, -0.08);
-          svg += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="10" fill="#656d76">${ring.toFixed(2)}</text>`;
+          const tick = radarMode === "absolute" ? ring.toFixed(2) : ring.toFixed(2);
+          svg += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="10" fill="#656d76">${tick}</text>`;
         }
       }
 
       angles.forEach((a, i) => {
         const [x2, y2] = polarPoint(cx, cy, maxR, a);
         svg += `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" stroke="#e6eaef" stroke-width="1"/>`;
-        const [lx, ly] = polarPoint(cx, cy, maxR + 22, a);
+        const [lx, ly] = polarPoint(cx, cy, maxR + 24, a);
+        const view = DATA.views[i];
         svg += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="600" fill="#1f2328">${labels[i]}</text>`;
+        if (radarMode === "absolute" && absoluteScales[labels[i]]) {
+          const sc = absoluteScales[labels[i]];
+          const [hx, hy] = polarPoint(cx, cy, maxR + 40, a);
+          svg += `<text x="${hx}" y="${hy}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="#656d76">${sc.display} ${sc.outer_label}→${sc.center_label}</text>`;
+        }
       });
 
       families.forEach(fam => {
-        const vals = labels.map(l => fam.relative[l] ?? 0);
+        const bucket = radarBucket(fam);
+        const vals = labels.map(l => bucket[l] ?? 0);
         const pts = vals.map((v, i) => polarPoint(cx, cy, maxR * v, angles[i]).join(",")).join(" ");
         svg += `<polygon points="${pts}" fill="${fam.color}" fill-opacity="0.12" stroke="${fam.color}" stroke-width="2.2" stroke-linejoin="round"/>`;
+        vals.forEach((v, i) => {
+          const [px, py] = polarPoint(cx, cy, maxR * v, angles[i]);
+          const view = DATA.views[i];
+          const raw = rawValueForView(fam, view);
+          const rawTxt = raw == null ? "—" : Number(raw).toFixed(3);
+          svg += `<circle cx="${px}" cy="${py}" r="4" fill="${fam.color}" stroke="#fff" stroke-width="1">
+            <title>${fam.family} · ${view.label}: ${rawTxt}</title>
+          </circle>`;
+        });
       });
 
       svg += "</svg>";
@@ -473,40 +537,12 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       }).join("");
     }
 
-    function renderDatasetTable(datasetRows) {
-      const viewHeaders = DATA.views.map(v => `${v.label} (${v.display || v.metric})`);
-      const headers = ["Family", "Representative", "Crop", "Country", ...viewHeaders];
-      datasetTable.querySelector("thead").innerHTML =
-        `<tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
-
-      if (!datasetRows.length) {
-        datasetTable.querySelector("tbody").innerHTML =
-          `<tr><td colspan="${headers.length}" class="muted">No crop×country rows for this selection.</td></tr>`;
-        return;
-      }
-
-      datasetTable.querySelector("tbody").innerHTML = datasetRows.map(row => {
-        const cells = DATA.views.map(v => {
-          const raw = (row.metrics || {})[v.metric];
-          return raw == null ? "—" : raw.toFixed(3);
-        });
-        return `<tr>
-          <td>${row.family}</td>
-          <td>${row.display_name}</td>
-          <td>${row.crop}</td>
-          <td>${row.country}</td>
-          ${cells.map(c => `<td>${c}</td>`).join("")}
-        </tr>`;
-      }).join("");
-    }
-
     function render() {
       const slice = currentSlice();
       const families = slice.families || [];
       renderRadar(families);
       renderLegend(families);
       renderTable(families);
-      renderDatasetTable(slice.dataset_rows || []);
       renderScatter();
     }
 

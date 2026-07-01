@@ -74,9 +74,22 @@ FAMILY_COLORS: dict[str, str] = {
 }
 
 RADAR_NORMALIZATION_NOTE = (
-    "Each axis is independently normalized to highlight the relative strengths of "
-    "each modeling paradigm (NRMSE on Overall, Pearson r on other views). "
-    "Absolute values are reported in the tables below."
+    "Relative: each axis is min–max normalized across the five family representatives "
+    "(best paradigm on that axis reaches the outer ring). "
+    "Absolute values are in the table below."
+)
+
+RADAR_ABSOLUTE_SCALES: dict[str, dict[str, Any]] = {
+    "nrmse": {"lo": 0.1, "hi": 0.30, "higher_better": False, "display": "NRMSE"},
+    "r_spatial": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "r"},
+    "r_temporal": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "r"},
+    "r_res": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "r"},
+}
+
+RADAR_ABSOLUTE_NOTE = (
+    "Absolute: fixed scales per axis — NRMSE 0.10 (outer, best) to 0.30 (center, worst); "
+    "Pearson r axes 0 (center) to 1 (outer). Values outside the range are clamped; "
+    "negative r is shown at 0."
 )
 
 MODEL_DISPLAY_NAMES: dict[str, str] = {
@@ -180,10 +193,54 @@ def relative_scores(raw: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def absolute_scores(raw: pd.DataFrame) -> pd.DataFrame:
+    """Map raw metrics to 0–1 radar radius using fixed CY-Bench scales (higher radius = better)."""
+    out = raw.copy()
+    for view in EVALUATION_VIEWS:
+        label = view["label"]
+        metric = view["metric"]
+        spec = RADAR_ABSOLUTE_SCALES.get(metric)
+        if spec is None or metric not in out.columns:
+            out[label] = float("nan")
+            continue
+        lo = float(spec["lo"])
+        hi = float(spec["hi"])
+        higher = bool(spec.get("higher_better", True))
+        vals = out[metric].astype(float).clip(lower=lo, upper=hi)
+        if hi == lo:
+            out[label] = 0.5
+        else:
+            norm = (vals - lo) / (hi - lo)
+            out[label] = norm if higher else 1.0 - norm
+    return out
+
+
+def radar_scales_payload() -> dict[str, Any]:
+    """JSON-serializable absolute radar scale definitions per view label."""
+    by_label: dict[str, Any] = {}
+    for view in EVALUATION_VIEWS:
+        spec = RADAR_ABSOLUTE_SCALES.get(view["metric"], {})
+        lo = float(spec.get("lo", 0.0))
+        hi = float(spec.get("hi", 1.0))
+        higher = bool(spec.get("higher_better", True))
+        by_label[view["label"]] = {
+            "metric": view["metric"],
+            "display": spec.get("display", view["display"]),
+            "lo": lo,
+            "hi": hi,
+            "higher_better": higher,
+            "outer_label": f"{lo:.2f}" if view["metric"] == "nrmse" else f"{lo:g}",
+            "center_label": f"{hi:.2f}" if view["metric"] == "nrmse" else f"{hi:g}",
+        }
+    return {"absolute": by_label}
+
+
 def _records_from_medians(
     medians: pd.DataFrame,
     rel_all: pd.DataFrame,
     entries: list[tuple[str, str, str, str, bool]],
+    *,
+    abs_all: pd.DataFrame | None = None,
 ) -> list[dict[str, Any]]:
     """Build radar rows from median table. *entries*: (index, family, display, color, is_naive)."""
     view_labels = [v["label"] for v in EVALUATION_VIEWS]
@@ -206,6 +263,16 @@ def _records_from_medians(
             )
             for label in view_labels
         }
+        absolute: dict[str, float | None] = {}
+        if abs_all is not None:
+            absolute = {
+                label: (
+                    round(float(abs_all[label].loc[model_key]), 4)
+                    if label in abs_all.columns and model_key in abs_all.index
+                    else None
+                )
+                for label in view_labels
+            }
         rows.append(
             {
                 "family": family,
@@ -215,6 +282,7 @@ def _records_from_medians(
                 "is_naive": is_naive,
                 "raw": raw,
                 "relative": relative,
+                "absolute": absolute,
             }
         )
     return rows
@@ -225,9 +293,12 @@ def _family_records(
     representatives: dict[str, str],
     *,
     rel_all: pd.DataFrame | None = None,
+    abs_all: pd.DataFrame | None = None,
 ) -> list[dict[str, Any]]:
     if rel_all is None:
         rel_all = relative_scores(medians.copy()) if not medians.empty else pd.DataFrame()
+    if abs_all is None:
+        abs_all = absolute_scores(medians.copy()) if not medians.empty else pd.DataFrame()
     entries = [
         (
             representatives[family],
@@ -239,7 +310,7 @@ def _family_records(
         for family in FAMILY_ORDER
         if family in representatives
     ]
-    return _records_from_medians(medians, rel_all, entries)
+    return _records_from_medians(medians, rel_all, entries, abs_all=abs_all)
 
 
 def family_for_model(model: str) -> str | None:
@@ -460,7 +531,8 @@ def build_radar_slice(
     rep_models = list(reps.values())
     medians = _median_for_models(work, rep_models, VIEW_METRICS)
     rel_all = relative_scores(medians.copy()) if not medians.empty else pd.DataFrame()
-    families = _family_records(medians, reps, rel_all=rel_all)
+    abs_all = absolute_scores(medians.copy()) if not medians.empty else pd.DataFrame()
+    families = _family_records(medians, reps, rel_all=rel_all, abs_all=abs_all)
     return {
         "batch_horizon": batch_horizon,
         "crop": crop or "all",
@@ -514,6 +586,9 @@ def build_radar_payload(
         "by_horizon": by_horizon,
         "sample_scatter_metric": SAMPLE_SCATTER_METRIC,
         "sample_scatter": build_sample_scatter_payload(df, representatives=representatives),
+        "radar_scales": radar_scales_payload(),
+        "relative_note": RADAR_NORMALIZATION_NOTE,
+        "absolute_note": RADAR_ABSOLUTE_NOTE,
         "normalization_note": RADAR_NORMALIZATION_NOTE,
         "representative_selection": (
             "One model per family: lowest median NRMSE across datasets in the selection; "

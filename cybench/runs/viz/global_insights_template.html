@@ -163,6 +163,7 @@
   <div class="page">
     <h1>CY-Bench global insights</h1>
     <p class="lead">Cross-country model comparison and end-of-season vs mid-season walk-forward results.</p>
+    <p class="muted">Every model in the benchmark. For a five-paradigm summary (radar chart), see <a href="model_families.html">Model families (paper summary)</a>.</p>
     <p class="muted" id="meta"></p>
 
     <div class="card">
@@ -245,7 +246,10 @@
       </p>
     </div>
 
-    <p class="muted"><a href="index.html">← Back to country dashboards</a></p>
+    <p class="muted">
+      <a href="model_families.html">Model families (paper summary)</a> ·
+      <a href="index.html">← Back to country dashboards</a>
+    </p>
   </div>
 
   <script>
@@ -372,8 +376,8 @@
           { id: "nrmse", label: "NRMSE", higher_better: false },
         ],
       },
-      { id: "spatial", label: "Spatial", note: "Pearson r on regional means (aggregate).", metrics: [{ id: "r", label: "r", higher_better: true }] },
-      { id: "temporal", label: "Temporal", note: "Pearson r on yearly national means (aggregate).", metrics: [{ id: "r", label: "r", higher_better: true }] },
+      { id: "spatial", label: "Spatial", note: "Median per-year r across regions (typical-year slice).", metrics: [{ id: "r", label: "r", higher_better: true }] },
+      { id: "temporal", label: "Temporal", note: "Median per-region r across years (typical-region slice).", metrics: [{ id: "r", label: "r", higher_better: true }] },
       { id: "anomaly", label: "Anomaly", note: "Pooled Pearson r on de-meaned yields.", metrics: [{ id: "r", label: "r", higher_better: true }] },
     ];
 

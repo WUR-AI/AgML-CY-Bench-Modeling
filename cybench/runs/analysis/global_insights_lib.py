@@ -28,17 +28,17 @@ MODEL_COUNTRY_AXES: tuple[dict[str, Any], ...] = (
     {
         "id": "spatial",
         "label": "Spatial",
-        "note": "Pearson r on regional means (aggregate across years).",
+        "note": "Median per-year Pearson r across regions (typical-year slice).",
         "metrics": (
-            {"id": "r", "column": "r_spatial_agg", "label": "r", "higher_better": True},
+            {"id": "r", "column": "r_spatial", "label": "r", "higher_better": True},
         ),
     },
     {
         "id": "temporal",
         "label": "Temporal",
-        "note": "Pearson r on yearly national means (aggregate across regions).",
+        "note": "Median per-region Pearson r across years (typical-region slice).",
         "metrics": (
-            {"id": "r", "column": "r_temporal_agg", "label": "r", "higher_better": True},
+            {"id": "r", "column": "r_temporal", "label": "r", "higher_better": True},
         ),
     },
     {

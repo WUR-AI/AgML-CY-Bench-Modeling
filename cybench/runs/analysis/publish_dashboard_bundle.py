@@ -257,19 +257,19 @@ def build_index_html_cards(entries: list[IndexEntry], *, publish_root: Path | No
     if publish_root and (publish_root / "insights.html").is_file():
         insights_card = """
   <section class="block">
-    <h2>Global insights</h2>
+    <h2>Global benchmarks</h2>
     <div class="grid">
       <a class="link-card" href="insights.html">
         <div class="link-card-top"><span class="badge badge-neutral">ALL</span><span class="arrow" aria-hidden="true">→</span></div>
-        <h3>Cross-country model ranking</h3>
-        <p class="muted">NRMSE leaderboard and end-of-season vs mid-season comparison</p>
+        <h3>Global insights</h3>
+        <p class="muted">All models — leaderboard, model×country heatmap, end-of-season vs mid-season</p>
       </a>"""
         if (publish_root / "model_families.html").is_file():
             insights_card += """
       <a class="link-card" href="model_families.html">
         <div class="link-card-top"><span class="badge badge-neutral">ALL</span><span class="arrow" aria-hidden="true">→</span></div>
-        <h3>Model family radar</h3>
-        <p class="muted">Relative performance across overall, spatial, temporal, and anomaly views</p>
+        <h3>Model families (paper summary)</h3>
+        <p class="muted">Five paradigms — radar chart, median metrics, performance vs training size</p>
       </a>"""
         insights_card += """
     </div>

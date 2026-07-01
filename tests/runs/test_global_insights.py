@@ -208,8 +208,7 @@ def test_build_model_country_matrix_spatial_axis():
                 "batch_horizon": "eos",
                 "nrmse": 0.10,
                 "r2": 0.9,
-                "r2_spatial_agg": 0.55,
-                "r_spatial_agg": 0.62,
+                "r_spatial": 0.62,
                 "n_samples": 50,
             },
             {
@@ -219,8 +218,7 @@ def test_build_model_country_matrix_spatial_axis():
                 "batch_horizon": "eos",
                 "nrmse": 0.20,
                 "r2": 0.7,
-                "r2_spatial_agg": 0.35,
-                "r_spatial_agg": 0.35,
+                "r_spatial": 0.35,
                 "n_samples": 50,
             },
         ]

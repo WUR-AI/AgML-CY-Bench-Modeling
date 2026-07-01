@@ -10,7 +10,9 @@ import pytest
 from cybench.runs.analysis.build_model_family_radar_dashboard import build_radar_html
 from cybench.runs.analysis.global_insights_lib import compat_legacy_summary_columns
 from cybench.runs.analysis.model_family_radar_lib import (
+    RADAR_ABSOLUTE_NOTE,
     RADAR_NORMALIZATION_NOTE,
+    absolute_scores,
     build_family_dataset_rows,
     build_radar_payload,
     build_sample_scatter_slice,
@@ -88,6 +90,36 @@ def test_relative_scores_span_unit_interval():
     assert rel["Overall"].min() == 0.0
     assert rel["Overall"].max() == 1.0
     assert rel["Anomaly"].tolist() == [0.0, 1.0]
+
+
+def test_absolute_scores_use_fixed_scales():
+    raw = pd.DataFrame(
+        {
+            "nrmse": [0.1, 0.2, 0.30],
+            "r_spatial": [-0.2, 0.5, 1.0],
+            "r_temporal": [0.0, 0.5, 1.0],
+            "r_res": [0.25, 0.5, 0.75],
+        }
+    )
+    abs_scores = absolute_scores(raw)
+    assert abs_scores["Overall"].tolist() == pytest.approx([1.0, 0.5, 0.0])
+    assert abs_scores["Spatial"].tolist() == [0.0, 0.5, 1.0]
+    assert abs_scores["Temporal"].tolist() == [0.0, 0.5, 1.0]
+    assert abs_scores["Anomaly"].tolist() == [0.25, 0.5, 0.75]
+
+
+def test_absolute_scores_clamps_out_of_range_nrmse():
+    raw = pd.DataFrame(
+        {
+            "nrmse": [0.05, 0.40],
+            "r_spatial": [0.5, 0.5],
+            "r_temporal": [0.5, 0.5],
+            "r_res": [0.5, 0.5],
+        }
+    )
+    abs_scores = absolute_scores(raw)
+    assert abs_scores["Overall"].iloc[0] == 1.0
+    assert abs_scores["Overall"].iloc[1] == 0.0
 
 
 def test_legacy_summary_columns_map_to_agg_metrics():
@@ -180,9 +212,13 @@ def test_build_radar_payload_structure(tmp_path: Path):
     assert families["Naive baselines"]["display_name"] == "Trend"
     assert families["Feature-Engineered ML"]["relative"]["Overall"] == 1.0
     assert families["Process-Based"]["relative"]["Overall"] == pytest.approx(0.0, abs=0.01)
+    assert families["Feature-Engineered ML"]["absolute"]["Overall"] == pytest.approx(0.75, abs=0.01)
+    assert "absolute" in families["Naive baselines"]
     assert len(eos_all["dataset_rows"]) == 5
     assert eos_all["dataset_rows"][0]["metrics"]["nrmse"] is not None
-    assert RADAR_NORMALIZATION_NOTE in payload["normalization_note"]
+    assert RADAR_NORMALIZATION_NOTE in payload["relative_note"]
+    assert RADAR_ABSOLUTE_NOTE in payload["absolute_note"]
+    assert payload["radar_scales"]["absolute"]["Overall"]["lo"] == 0.1
     assert "sample_scatter" in payload
     eos_scatter = payload["sample_scatter"]["eos"]["all"]
     assert "families" in eos_scatter
@@ -253,3 +289,4 @@ def test_build_radar_html_embeds_payload(tmp_path: Path):
     html = build_radar_html(payload)
     assert "Model family comparison" in html
     assert '"Feature-Engineered ML"' in html
+    assert "data-mode=\"absolute\"" in html

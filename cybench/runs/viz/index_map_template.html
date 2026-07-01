@@ -159,10 +159,10 @@
 
     const topLinks = document.getElementById("top-links");
     if (DATA.has_insights) {
-      topLinks.innerHTML += `<a class="pill" href="insights.html">Global insights</a>`;
+      topLinks.innerHTML += `<a class="pill" href="insights.html">Global insights (all models)</a>`;
     }
     if (DATA.has_model_families) {
-      topLinks.innerHTML += `<a class="pill" href="model_families.html">Model families</a>`;
+      topLinks.innerHTML += `<a class="pill" href="model_families.html">Model families (paper)</a>`;
     }
     if (DATA.has_screening && DATA.screening_href) {
       topLinks.innerHTML += `<a class="pill" href="${DATA.screening_href}">Screening (all)</a>`;
