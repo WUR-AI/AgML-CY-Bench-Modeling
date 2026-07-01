@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from cybench.runs.analysis.global_insights_lib import (
     aggregate_model_leaderboard,
@@ -16,6 +17,7 @@ from cybench.runs.analysis.global_insights_lib import (
     dashboard_href_for_paper_dir,
     is_baseline_model,
     load_summary_frame,
+    median_model_metrics_across_countries,
     parse_paper_dir_name,
 )
 
@@ -368,3 +370,80 @@ def test_build_insights_payload_structure(tmp_path: Path):
     assert ridge_board["median_nrmse"] == ridge_matrix
     assert len(payload["matrix_axes"]) == 4
     assert payload["matrix_axes"][0]["id"] == "overall"
+
+
+def test_median_model_metrics_matches_insights_matrix():
+    from cybench.runs.analysis.model_family_radar_lib import build_radar_slice
+
+    df = pd.DataFrame(
+        [
+            {
+                "model": "trend",
+                "crop": "maize",
+                "country": "DE",
+                "batch_horizon": "eos",
+                "nrmse": 0.22,
+                "r_spatial": 0.90,
+                "r_temporal": 0.3,
+                "r_res": 0.2,
+                "n_samples": 50,
+            },
+            {
+                "model": "trend",
+                "crop": "wheat",
+                "country": "DE",
+                "batch_horizon": "eos",
+                "nrmse": 0.22,
+                "r_spatial": 0.50,
+                "r_temporal": 0.3,
+                "r_res": 0.2,
+                "n_samples": 50,
+            },
+            {
+                "model": "trend",
+                "crop": "maize",
+                "country": "US",
+                "batch_horizon": "eos",
+                "nrmse": 0.22,
+                "r_spatial": 0.71,
+                "r_temporal": 0.3,
+                "r_res": 0.2,
+                "n_samples": 50,
+            },
+            {
+                "model": "trend",
+                "crop": "wheat",
+                "country": "US",
+                "batch_horizon": "eos",
+                "nrmse": 0.22,
+                "r_spatial": 0.71,
+                "r_temporal": 0.3,
+                "r_res": 0.2,
+                "n_samples": 50,
+            },
+            {
+                "model": "trend",
+                "crop": "soy",
+                "country": "US",
+                "batch_horizon": "eos",
+                "nrmse": 0.22,
+                "r_spatial": 0.71,
+                "r_temporal": 0.3,
+                "r_res": 0.2,
+                "n_samples": 50,
+            },
+        ]
+    )
+    matrix = build_model_country_matrix(df, batch_horizon="eos")
+    insights_spatial = matrix["model_totals"]["trend"]["spatial"]["r"]
+
+    medians = median_model_metrics_across_countries(df, ["r_spatial"], models=["trend"])
+    assert medians.loc["trend", "r_spatial"] == insights_spatial
+
+    radar = build_radar_slice(
+        df, batch_horizon="eos", representatives={"Naive baselines": "trend"}
+    )
+    trend = next(f for f in radar["families"] if f["model"] == "trend")
+    assert trend["raw"]["r_spatial"] == insights_spatial
+    # DE=0.70, US=0.71 -> 0.705; pooled row median would be 0.71
+    assert insights_spatial == pytest.approx(0.705, abs=0.001)

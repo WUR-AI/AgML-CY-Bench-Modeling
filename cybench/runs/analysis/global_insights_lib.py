@@ -169,6 +169,49 @@ def _median_in_group(grp: pd.DataFrame, column: str) -> float | None:
     return float(vals.median())
 
 
+def median_model_metrics_across_countries(
+    work: pd.DataFrame,
+    metrics: tuple[str, ...] | list[str],
+    *,
+    models: list[str] | None = None,
+) -> pd.DataFrame:
+    """Per-model medians using the same rule as the insights matrix Median column.
+
+    For each country, take the median within that country (across crops when crop=all).
+    The model summary is the median across those country values — each country weighs equally.
+    """
+    if work.empty or "model" not in work.columns:
+        return pd.DataFrame()
+    frame = work
+    if models:
+        frame = frame[frame["model"].isin(models)]
+    if frame.empty:
+        return pd.DataFrame()
+    present = [m for m in metrics if m in frame.columns]
+    if not present:
+        return pd.DataFrame()
+
+    rows: dict[str, dict[str, float]] = {}
+    for model, model_grp in frame.groupby("model", sort=True):
+        row: dict[str, float] = {}
+        for metric in present:
+            country_vals: list[float] = []
+            if "country" in model_grp.columns:
+                for _, country_grp in model_grp.groupby("country", sort=True):
+                    val = _median_in_group(country_grp, metric)
+                    if val is not None:
+                        country_vals.append(val)
+            else:
+                val = _median_in_group(model_grp, metric)
+                if val is not None:
+                    country_vals.append(val)
+            row[metric] = (
+                float(pd.Series(country_vals).median()) if country_vals else float("nan")
+            )
+        rows[str(model)] = row
+    return pd.DataFrame.from_dict(rows, orient="index")
+
+
 def _axis_metrics_for_group(grp: pd.DataFrame) -> dict[str, dict[str, float | None]]:
     axes: dict[str, dict[str, float | None]] = {}
     for axis in MODEL_COUNTRY_AXES:

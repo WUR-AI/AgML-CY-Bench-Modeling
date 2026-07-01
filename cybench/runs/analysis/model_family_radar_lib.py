@@ -12,6 +12,8 @@ from cybench.runs.analysis.global_insights_lib import (
     attach_baseline_metrics,
     discover_summary_tables,
     load_summary_frame,
+    median_model_metrics_across_countries,
+    _filter_summary_work,
 )
 
 # Radar axes (normalized) and raw table columns per evaluation view.
@@ -128,20 +130,6 @@ def _metric_higher_is_better(metric: str) -> bool:
         return False
     return True
 
-
-def _median_for_models(
-    df: pd.DataFrame, models: list[str], metrics: tuple[str, ...]
-) -> pd.DataFrame:
-    """Median metric per model slug (one value per crop×country row in *df*)."""
-    if df.empty or "model" not in df.columns or not models:
-        return pd.DataFrame()
-    work = df[df["model"].isin(models)]
-    if work.empty:
-        return pd.DataFrame()
-    present = [m for m in metrics if m in work.columns]
-    if not present:
-        return pd.DataFrame()
-    return work.groupby("model", sort=True)[present].median()
 
 
 def pick_representatives(
@@ -524,12 +512,10 @@ def build_radar_slice(
     crop: str | None = None,
     representatives: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    work = df[df["batch_horizon"] == batch_horizon].copy() if "batch_horizon" in df.columns else df
-    if crop:
-        work = work[work["crop"] == crop]
+    work = _filter_summary_work(df, batch_horizon=batch_horizon, crop=crop)
     reps = pick_representatives(work, overrides=representatives)
     rep_models = list(reps.values())
-    medians = _median_for_models(work, rep_models, VIEW_METRICS)
+    medians = median_model_metrics_across_countries(work, VIEW_METRICS, models=rep_models)
     rel_all = relative_scores(medians.copy()) if not medians.empty else pd.DataFrame()
     abs_all = absolute_scores(medians.copy()) if not medians.empty else pd.DataFrame()
     families = _family_records(medians, reps, rel_all=rel_all, abs_all=abs_all)
