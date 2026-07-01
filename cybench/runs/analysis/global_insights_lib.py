@@ -44,9 +44,9 @@ MODEL_COUNTRY_AXES: tuple[dict[str, Any], ...] = (
     {
         "id": "anomaly",
         "label": "Anomaly",
-        "note": "Pooled Pearson r on location-de-meaned yields.",
+        "note": "Median per-region Pearson r on test-period de-meaned yields (typical-region slice).",
         "metrics": (
-            {"id": "r", "column": "r_res", "label": "r", "higher_better": True},
+            {"id": "r", "column": "r_anomaly", "label": "r", "higher_better": True},
         ),
     },
 )
@@ -152,11 +152,7 @@ def compat_legacy_summary_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _series_for_matrix_column(grp: pd.DataFrame, column: str) -> pd.Series:
-    """Return numeric series for a matrix column, with anomaly fallbacks."""
-    if column == "r_res":
-        if "r_res" in grp.columns:
-            return pd.to_numeric(grp["r_res"], errors="coerce")
-        return pd.Series(dtype=float)
+    """Return numeric series for a matrix column."""
     if column not in grp.columns:
         return pd.Series(dtype=float)
     return pd.to_numeric(grp[column], errors="coerce")

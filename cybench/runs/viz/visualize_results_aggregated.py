@@ -871,7 +871,7 @@ def process_dataset(
                 metrics_note=metrics_note,
             )
         elif panel_name == "temporal":
-            r2_med_reg = report["temporal"]["r2_typical_region"]
+            r_med_reg = report["temporal"]["r_typical_region"]
             actual_yr = _yearly_cross_region_stats(df_filtered, KEY_TARGET)
             model_yr = _yearly_cross_region_stats(df_filtered, model)
             _plot_mean_std_band(
@@ -882,8 +882,8 @@ def process_dataset(
                 label="Actual (mean ± std across regions)",
             )
             model_label = (
-                f"Model (mean ± std, R² med/reg = {r2_med_reg:.2f})"
-                if pd.notnull(r2_med_reg)
+                f"Model (mean ± std, r med/reg = {r_med_reg:.2f})"
+                if pd.notnull(r_med_reg)
                 else "Model (mean ± std across regions)"
             )
             _plot_mean_std_band(

@@ -378,7 +378,7 @@
       },
       { id: "spatial", label: "Spatial", note: "Median per-year r across regions (typical-year slice).", metrics: [{ id: "r", label: "r", higher_better: true }] },
       { id: "temporal", label: "Temporal", note: "Median per-region r across years (typical-region slice).", metrics: [{ id: "r", label: "r", higher_better: true }] },
-      { id: "anomaly", label: "Anomaly", note: "Pooled Pearson r on de-meaned yields.", metrics: [{ id: "r", label: "r", higher_better: true }] },
+      { id: "anomaly", label: "Anomaly", note: "Median per-region r on test-period de-meaned yields (typical-region slice).", metrics: [{ id: "r", label: "r", higher_better: true }] },
     ];
 
     function syncCropSelects(value) {

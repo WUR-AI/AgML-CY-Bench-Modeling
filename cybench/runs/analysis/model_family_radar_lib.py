@@ -38,9 +38,9 @@ EVALUATION_VIEWS: tuple[dict[str, Any], ...] = (
     },
     {
         "label": "Anomaly",
-        "metric": "r_res",
+        "metric": "r_anomaly",
         "display": "r",
-        "question": "Can it predict location-de-meaned deviations (pooled r on residuals)?",
+        "question": "For a typical region, can it predict yield anomalies (median per-region r on de-meaned yields)?",
     },
 )
 
@@ -85,7 +85,7 @@ RADAR_ABSOLUTE_SCALES: dict[str, dict[str, Any]] = {
     "nrmse": {"lo": 0.1, "hi": 0.30, "higher_better": False, "display": "NRMSE"},
     "r_spatial": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "r"},
     "r_temporal": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "r"},
-    "r_res": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "r"},
+    "r_anomaly": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "r"},
 }
 
 RADAR_ABSOLUTE_NOTE = (
