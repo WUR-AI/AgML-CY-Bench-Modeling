@@ -138,7 +138,7 @@
     <p class="back"><a href="index.html">← All dashboards</a></p>
     <header>
       <h1>Model family comparison</h1>
-      <p class="lead">Pearson r across Overall, Spatial, Temporal, and Anomaly views — one best-NRMSE representative per modeling paradigm (five families).</p>
+      <p class="lead">NRMSE (Overall) and Pearson r (Spatial, Temporal, Anomaly) — one best-NRMSE representative per modeling paradigm (five families).</p>
     </header>
 
     <div class="card">
@@ -166,9 +166,19 @@
     </div>
 
     <div class="card">
-      <h2>Raw metrics (median across datasets, Pearson r)</h2>
+      <h2>Median across datasets (family representatives)</h2>
       <div class="table-scroll">
         <table id="metrics-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Crop × country detail (family representatives)</h2>
+      <div class="table-scroll">
+        <table id="dataset-table">
           <thead></thead>
           <tbody></tbody>
         </table>
@@ -192,6 +202,7 @@
     const legendEl = document.getElementById("legend");
     const viewList = document.getElementById("view-list");
     const metricsTable = document.getElementById("metrics-table");
+    const datasetTable = document.getElementById("dataset-table");
     const scatterPanel = document.getElementById("scatter-panel");
     const scatterNote = document.getElementById("scatter-note");
 
@@ -444,8 +455,8 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
     }
 
     function renderTable(families) {
-      const metricByLabel = Object.fromEntries(DATA.views.map(v => [v.label, v.metric]));
-      const headers = ["Family", "Representative", ...DATA.views.map(v => v.label)];
+      const viewHeaders = DATA.views.map(v => `${v.label} (${v.display || v.metric})`);
+      const headers = ["Family", "Representative", ...viewHeaders];
       metricsTable.querySelector("thead").innerHTML =
         `<tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
 
@@ -462,12 +473,40 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       }).join("");
     }
 
+    function renderDatasetTable(datasetRows) {
+      const viewHeaders = DATA.views.map(v => `${v.label} (${v.display || v.metric})`);
+      const headers = ["Family", "Representative", "Crop", "Country", ...viewHeaders];
+      datasetTable.querySelector("thead").innerHTML =
+        `<tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
+
+      if (!datasetRows.length) {
+        datasetTable.querySelector("tbody").innerHTML =
+          `<tr><td colspan="${headers.length}" class="muted">No crop×country rows for this selection.</td></tr>`;
+        return;
+      }
+
+      datasetTable.querySelector("tbody").innerHTML = datasetRows.map(row => {
+        const cells = DATA.views.map(v => {
+          const raw = (row.metrics || {})[v.metric];
+          return raw == null ? "—" : raw.toFixed(3);
+        });
+        return `<tr>
+          <td>${row.family}</td>
+          <td>${row.display_name}</td>
+          <td>${row.crop}</td>
+          <td>${row.country}</td>
+          ${cells.map(c => `<td>${c}</td>`).join("")}
+        </tr>`;
+      }).join("");
+    }
+
     function render() {
       const slice = currentSlice();
       const families = slice.families || [];
       renderRadar(families);
       renderLegend(families);
       renderTable(families);
+      renderDatasetTable(slice.dataset_rows || []);
       renderScatter();
     }
 

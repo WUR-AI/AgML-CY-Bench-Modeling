@@ -14,31 +14,36 @@ from cybench.runs.analysis.global_insights_lib import (
     load_summary_frame,
 )
 
-# Scientific views → Pearson r (slice medians for spatial/temporal where noted).
-EVALUATION_VIEWS: tuple[dict[str, str], ...] = (
+# Radar axes (normalized) and raw table columns per evaluation view.
+EVALUATION_VIEWS: tuple[dict[str, Any], ...] = (
     {
         "label": "Overall",
-        "metric": "r",
-        "question": "Can the model predict crop yields accurately (pooled region×year r)?",
+        "metric": "nrmse",
+        "display": "NRMSE",
+        "question": "Can the model predict crop yields accurately (pooled region×year NRMSE)?",
     },
     {
         "label": "Spatial",
         "metric": "r_spatial",
+        "display": "r",
         "question": "For a typical year, can it reproduce spatial patterns (median per-year r across regions)?",
     },
     {
         "label": "Temporal",
         "metric": "r_temporal",
+        "display": "r",
         "question": "For a typical region, can it reproduce year-to-year dynamics (median per-region r across years)?",
     },
     {
         "label": "Anomaly",
         "metric": "r_res",
+        "display": "r",
         "question": "Can it predict location-de-meaned deviations (pooled r on residuals)?",
     },
 )
 
-VIEW_METRICS: tuple[str, ...] = tuple(v["metric"] for v in EVALUATION_VIEWS)
+RAW_TABLE_METRICS: tuple[str, ...] = tuple(v["metric"] for v in EVALUATION_VIEWS)
+VIEW_METRICS: tuple[str, ...] = RAW_TABLE_METRICS
 
 MODEL_FAMILIES: dict[str, list[str]] = {
     "Naive baselines": ["average", "average_yield", "trend"],
@@ -70,7 +75,8 @@ FAMILY_COLORS: dict[str, str] = {
 
 RADAR_NORMALIZATION_NOTE = (
     "Each axis is independently normalized to highlight the relative strengths of "
-    "each modeling paradigm (Pearson r). Absolute R² and NRMSE values are reported in Table X."
+    "each modeling paradigm (NRMSE on Overall, Pearson r on other views). "
+    "Absolute values are reported in the tables below."
 )
 
 MODEL_DISPLAY_NAMES: dict[str, str] = {
@@ -90,6 +96,12 @@ MODEL_DISPLAY_NAMES: dict[str, str] = {
     "tabdpt": "TabDPT",
     "trend": "Trend",
 }
+
+# Fixed representatives where auto-selection is misleading (coverage / comparability).
+DEFAULT_FAMILY_REPRESENTATIVES: dict[str, str] = {
+    "Process-Based": "lpjml_bc",  # TWSO has sparse country coverage vs LPJmL
+}
+
 
 def is_naive_radar_model(model: object) -> bool:
     slug = str(model).lower().replace("-", "_")
@@ -126,13 +138,13 @@ def pick_representatives(
     overrides: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Pick one model slug per family (default: lowest median NRMSE in frame)."""
-    overrides = dict(overrides or {})
+    merged_overrides = {**DEFAULT_FAMILY_REPRESENTATIVES, **(overrides or {})}
     chosen: dict[str, str] = {}
     models_in_frame = set(df["model"].astype(str)) if "model" in df.columns else set()
     higher_is_better = _metric_higher_is_better(selection_metric)
 
     for family, candidates in MODEL_FAMILIES.items():
-        override = overrides.get(family)
+        override = merged_overrides.get(family)
         if override and override in models_in_frame:
             chosen[family] = override
             continue
@@ -181,9 +193,11 @@ def _records_from_medians(
             continue
         raw_row = medians.loc[model_key]
         raw: dict[str, float | None] = {}
-        for view in EVALUATION_VIEWS:
-            val = raw_row.get(view["metric"])
-            raw[view["metric"]] = None if pd.isna(val) else round(float(val), 4)
+        for col in RAW_TABLE_METRICS:
+            if col not in raw_row.index:
+                continue
+            val = raw_row.get(col)
+            raw[col] = None if pd.isna(val) else round(float(val), 4)
         relative = {
             label: (
                 round(float(rel_all[label].loc[model_key]), 4)
@@ -384,6 +398,54 @@ def build_sample_scatter_payload(
     return by_horizon
 
 
+def _metric_cell(row: pd.Series, metric: str) -> float | None:
+    if metric not in row.index:
+        return None
+    val = row[metric]
+    if pd.isna(val):
+        return None
+    return round(float(val), 4)
+
+
+def build_family_dataset_rows(
+    df: pd.DataFrame,
+    representatives: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Per crop×country rows for family representatives with all view metrics."""
+    if df.empty or not representatives:
+        return []
+    model_to_family = {
+        representatives[family]: family
+        for family in FAMILY_ORDER
+        if family in representatives
+    }
+    rep_models = set(model_to_family)
+    rows: list[dict[str, Any]] = []
+    for _, row in df.iterrows():
+        model = str(row.get("model", ""))
+        if model not in rep_models:
+            continue
+        family = model_to_family[model]
+        crop = str(row.get("crop", ""))
+        country = str(row.get("country", ""))
+        metrics: dict[str, float | None] = {
+            view["metric"]: _metric_cell(row, view["metric"]) for view in EVALUATION_VIEWS
+        }
+        rows.append(
+            {
+                "family": family,
+                "model": model,
+                "display_name": MODEL_DISPLAY_NAMES.get(model, model),
+                "crop": crop,
+                "country": country,
+                "dataset": f"{crop}_{country}" if crop and country else crop or country,
+                "metrics": metrics,
+            }
+        )
+    rows.sort(key=lambda r: (r["family"], r["crop"], r["country"]))
+    return rows
+
+
 def build_radar_slice(
     df: pd.DataFrame,
     *,
@@ -405,6 +467,7 @@ def build_radar_slice(
         "n_datasets": int(len(work)),
         "representatives": reps,
         "families": families,
+        "dataset_rows": build_family_dataset_rows(work, reps),
     }
 
 
@@ -453,6 +516,7 @@ def build_radar_payload(
         "sample_scatter": build_sample_scatter_payload(df, representatives=representatives),
         "normalization_note": RADAR_NORMALIZATION_NOTE,
         "representative_selection": (
-            "One model per family: lowest median NRMSE across datasets in the selection."
+            "One model per family: lowest median NRMSE across datasets in the selection; "
+            "Process-Based is fixed to LPJmL (broader coverage than TWSO)."
         ),
     }

@@ -11,6 +11,7 @@ from cybench.runs.analysis.build_model_family_radar_dashboard import build_radar
 from cybench.runs.analysis.global_insights_lib import compat_legacy_summary_columns
 from cybench.runs.analysis.model_family_radar_lib import (
     RADAR_NORMALIZATION_NOTE,
+    build_family_dataset_rows,
     build_radar_payload,
     build_sample_scatter_slice,
     pick_representatives,
@@ -56,7 +57,7 @@ def test_pick_representatives_by_lowest_nrmse():
         ]
     )
     reps = pick_representatives(df)
-    assert reps["Process-Based"] == "twso_bc"
+    assert reps["Process-Based"] == "lpjml_bc"
     assert reps["Feature-Engineered ML"] == "xgboost"
     assert reps["Naive baselines"] == "trend"
 
@@ -76,13 +77,14 @@ def test_pick_representatives_prefers_override():
 def test_relative_scores_span_unit_interval():
     raw = pd.DataFrame(
         {
-            "r": [0.2, 0.8],
+            "nrmse": [0.2, 0.8],
             "r_spatial": [0.1, 0.9],
             "r_temporal": [0.3, 0.7],
             "r_res": [0.0, 1.0],
         }
     )
     rel = relative_scores(raw)
+    assert rel["Overall"].tolist() == [1.0, 0.0]
     assert rel["Overall"].min() == 0.0
     assert rel["Overall"].max() == 1.0
     assert rel["Anomaly"].tolist() == [0.0, 1.0]
@@ -110,45 +112,55 @@ def test_legacy_summary_columns_map_to_agg_metrics():
     assert "r_temporal" not in out.columns
 
 
+def test_build_family_dataset_rows_includes_all_view_metrics():
+    df = pd.DataFrame(
+        [
+            _summary_row("lightgbm", crop="maize", country="DE"),
+            _summary_row("xgboost", crop="maize", country="FR"),
+        ]
+    )
+    reps = {"Feature-Engineered ML": "lightgbm"}
+    rows = build_family_dataset_rows(df, reps)
+    assert len(rows) == 1
+    assert rows[0]["dataset"] == "maize_DE"
+    assert set(rows[0]["metrics"]) == {"nrmse", "r_spatial", "r_temporal", "r_res"}
+
+
 def test_build_radar_payload_structure(tmp_path: Path):
     for hz in ("eos", "mid"):
         d = tmp_path / f"paper_walk_forward_de_{hz}_v1"
         d.mkdir(parents=True)
         pd.DataFrame(
             [
-                _summary_row("average", r=0.2, nrmse=0.25),
-                _summary_row("trend", r=0.3, nrmse=0.22),
+                _summary_row("average", nrmse=0.25),
+                _summary_row("trend", nrmse=0.22),
                 _summary_row(
                     "lpjml_bc",
-                    r=0.5,
+                    nrmse=0.22,
                     r_spatial=0.62,
                     r_temporal=0.33,
                     r_res=0.2,
-                    nrmse=0.22,
                 ),
                 _summary_row(
                     "lightgbm",
-                    r=0.8,
+                    nrmse=0.15,
                     r_spatial=0.74,
                     r_temporal=0.1,
                     r_res=0.5,
-                    nrmse=0.15,
                 ),
                 _summary_row(
                     "transformer_lf",
-                    r=0.7,
+                    nrmse=0.17,
                     r_spatial=0.73,
                     r_temporal=0.21,
                     r_res=0.4,
-                    nrmse=0.17,
                 ),
                 _summary_row(
                     "tabpfn",
-                    r=0.75,
+                    nrmse=0.16,
                     r_spatial=0.77,
                     r_temporal=0.31,
                     r_res=0.45,
-                    nrmse=0.16,
                 ),
             ]
         ).to_csv(d / "walk_forward_summary.csv", index=False)
@@ -167,7 +179,9 @@ def test_build_radar_payload_structure(tmp_path: Path):
     }
     assert families["Naive baselines"]["display_name"] == "Trend"
     assert families["Feature-Engineered ML"]["relative"]["Overall"] == 1.0
-    assert families["Process-Based"]["relative"]["Overall"] == pytest.approx(0.4, abs=0.01)
+    assert families["Process-Based"]["relative"]["Overall"] == pytest.approx(0.0, abs=0.01)
+    assert len(eos_all["dataset_rows"]) == 5
+    assert eos_all["dataset_rows"][0]["metrics"]["nrmse"] is not None
     assert RADAR_NORMALIZATION_NOTE in payload["normalization_note"]
     assert "sample_scatter" in payload
     eos_scatter = payload["sample_scatter"]["eos"]["all"]
