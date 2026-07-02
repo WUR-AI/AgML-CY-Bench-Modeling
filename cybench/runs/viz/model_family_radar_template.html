@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CY-Bench Model Families</title>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <style>
     :root {
       --bg: #f6f8fa;
@@ -151,6 +152,42 @@
       background: currentColor;
       vertical-align: middle;
     }
+    .world-map-wrap { width: 100%; overflow: hidden; }
+    .world-map-wrap svg { display: block; width: 100%; height: auto; }
+    .country {
+      stroke: #fff;
+      stroke-width: 0.5px;
+      transition: fill 0.15s;
+    }
+    .winner-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem 0.75rem;
+      margin-top: 0.5rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .winner-legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .winner-summary { margin-top: 0.45rem; }
+    .benefit-legend {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      margin-top: 0.5rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .benefit-gradient {
+      width: 180px;
+      height: 12px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: linear-gradient(to right, #d73027, #fee08b, #1a9850);
+    }
   </style>
 </head>
 <body>
@@ -207,6 +244,27 @@
       <p class="muted" id="scatter-note">Each point is one crop×country dataset for the family representative. Y-axis: model NRMSE ÷ average yield NRMSE (1.0 = baseline; lower is better). X-axis: log₁₀(mean training rows); view spans the 5th–95th percentile range.</p>
       <div class="scatter-panel" id="scatter-panel"></div>
     </div>
+
+    <div class="card">
+      <h2>World map</h2>
+      <div class="controls">
+        <span class="muted">Map</span>
+        <div class="toolbar" id="map-mode-toolbar">
+          <button type="button" data-mode="winner" class="active">Winning family</button>
+          <button type="button" data-mode="benefit">AI error reduction</button>
+        </div>
+        <span class="muted" id="winner-aspect-label">Aspect</span>
+        <div class="toolbar" id="winner-aspect-toolbar"></div>
+      </div>
+      <p class="muted" id="map-mode-note">Colors show which model family wins in each country for the selected evaluation aspect.</p>
+      <div class="world-map-wrap" id="winner-map-wrap"><p class="muted">Loading map…</p></div>
+      <div class="winner-legend" id="winner-legend"></div>
+      <div class="benefit-legend" id="benefit-legend" style="display:none;">
+        <span class="benefit-gradient" aria-hidden="true"></span>
+        <span id="benefit-legend-label">−40% · 0% · +40%</span>
+      </div>
+      <p class="muted winner-summary" id="winner-summary"></p>
+    </div>
   </div>
 
   <script>
@@ -222,8 +280,19 @@
     const scatterPanel = document.getElementById("scatter-panel");
     const scatterNote = document.getElementById("scatter-note");
     const radarModeToolbar = document.getElementById("radar-mode-toolbar");
+    const mapModeToolbar = document.getElementById("map-mode-toolbar");
+    const mapModeNote = document.getElementById("map-mode-note");
+    const winnerAspectLabel = document.getElementById("winner-aspect-label");
+    const winnerAspectToolbar = document.getElementById("winner-aspect-toolbar");
+    const winnerMapWrap = document.getElementById("winner-map-wrap");
+    const winnerLegend = document.getElementById("winner-legend");
+    const benefitLegend = document.getElementById("benefit-legend");
+    const benefitLegendLabel = document.getElementById("benefit-legend-label");
+    const winnerSummary = document.getElementById("winner-summary");
 
     let radarMode = "relative";
+    let mapMode = "winner";
+    let winnerAspect = (DATA.views || [])[0]?.label || "Overall";
 
     const scatterMetric = DATA.sample_scatter_metric || {
       key: "relative_nrmse",
@@ -288,6 +357,20 @@
       return (DATA.by_horizon[hz] || {})[crop] || { families: [] };
     }
 
+    function currentWinnerSlice() {
+      const hz = horizonSelect.value;
+      const crop = cropSelect.value;
+      const root = (DATA.winner_maps || {})[hz] || {};
+      return root[crop] || root.all || {};
+    }
+
+    function currentBenefitSlice() {
+      const hz = horizonSelect.value;
+      const crop = cropSelect.value;
+      const root = (DATA.ai_benefit_maps || {})[hz] || {};
+      return root[crop] || root.all || { countries: [] };
+    }
+
     function renderViewList() {
       viewList.innerHTML = DATA.views.map(v => `
         <li>
@@ -295,6 +378,46 @@
           <span class="muted">${v.question}</span>
         </li>
       `).join("");
+    }
+
+    function initMapModeToolbar() {
+      mapModeToolbar.addEventListener("click", ev => {
+        const btn = ev.target.closest("button[data-mode]");
+        if (!btn) return;
+        mapMode = btn.dataset.mode;
+        mapModeToolbar.querySelectorAll("button").forEach(b => {
+          b.classList.toggle("active", b === btn);
+        });
+        updateMapModeUi();
+        renderWorldMap();
+      });
+      updateMapModeUi();
+    }
+
+    function updateMapModeUi() {
+      const isBenefit = mapMode === "benefit";
+      winnerAspectLabel.style.display = isBenefit ? "none" : "";
+      winnerAspectToolbar.style.display = isBenefit ? "none" : "";
+      winnerLegend.style.display = isBenefit ? "none" : "";
+      benefitLegend.style.display = isBenefit ? "flex" : "none";
+      mapModeNote.textContent = isBenefit
+        ? (DATA.ai_benefit_note || "100 × (1 − NRMSE_AI / NRMSE_Traditional). Positive ⇒ AI reduced error.")
+        : "Colors show which model family wins in each country for the selected evaluation aspect.";
+    }
+
+    function initWinnerAspectToolbar() {
+      winnerAspectToolbar.innerHTML = (DATA.views || []).map((v, idx) => `
+        <button type="button" data-aspect="${v.label}"${idx === 0 ? ' class="active"' : ''}>${v.label}</button>
+      `).join("");
+      winnerAspectToolbar.addEventListener("click", ev => {
+        const btn = ev.target.closest("button[data-aspect]");
+        if (!btn) return;
+        winnerAspect = btn.dataset.aspect;
+        winnerAspectToolbar.querySelectorAll("button").forEach(b => {
+          b.classList.toggle("active", b === btn);
+        });
+        renderWorldMap();
+      });
     }
 
     function polarPoint(cx, cy, radius, angleRad) {
@@ -538,6 +661,131 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       }).join("");
     }
 
+    const MAP_WIDTH = 960;
+    const MAP_HEIGHT = 520;
+    const mapSvg = d3.select("#winner-map-wrap").html("").append("svg")
+      .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
+      .attr("role", "img")
+      .attr("aria-label", "World map of winning model families");
+    const mapProjection = d3.geoNaturalEarth1().fitSize([MAP_WIDTH, MAP_HEIGHT], { type: "Sphere" });
+    const mapPath = d3.geoPath(mapProjection);
+    let worldFeatures = null;
+
+    function winnerColorMap() {
+      const out = {};
+      Object.entries(DATA.family_catalog || {}).forEach(([fam, obj]) => {
+        out[fam] = obj.color || "#999";
+      });
+      return out;
+    }
+
+    function benefitColor(pct, lo, hi) {
+      const clamped = Math.max(lo, Math.min(hi, pct));
+      const norm = (clamped - lo) / (hi - lo || 1);
+      return d3.interpolateRdYlGn(norm);
+    }
+
+    function renderWorldMap() {
+      if (!worldFeatures) return;
+      if (mapMode === "benefit") {
+        renderBenefitMap();
+      } else {
+        renderWinnerMap();
+      }
+    }
+
+    function renderWinnerMap() {
+      if (!worldFeatures) return;
+      const slice = currentWinnerSlice();
+      const byAspect = slice[winnerAspect] || { countries: [] };
+      const winners = new Map((byAspect.countries || []).map(r => [r.map_cc || r.country, r]));
+      const colors = winnerColorMap();
+
+      const countriesSel = mapSvg.selectAll("path.country")
+        .data(worldFeatures)
+        .join("path")
+        .attr("class", "country")
+        .attr("d", mapPath)
+        .attr("fill", d => {
+          const rec = winners.get(d.properties.ISO_A2);
+          if (!rec) return "#f0f0f0";
+          return colors[rec.winner_family] || "#999";
+        });
+
+      countriesSel.selectAll("title")
+        .data(d => [d])
+        .join("title")
+        .text(d => {
+          const rec = winners.get(d.properties.ISO_A2);
+          if (!rec) return `${d.properties.NAME || d.properties.ISO_A2}: no data`;
+          return `${rec.country}: ${rec.winner_family} (${rec.winner_model}), ${byAspect.metric}=${rec.value.toFixed(3)}`;
+        });
+
+      const familiesPresent = Array.from(
+        new Set((byAspect.countries || []).map(r => r.winner_family))
+      );
+      winnerLegend.innerHTML = familiesPresent.map(fam => {
+        const color = colors[fam] || "#999";
+        return `<span><i class="swatch" style="background:${color}"></i>${fam}</span>`;
+      }).join("");
+      winnerSummary.textContent = `${winnerAspect}: ${byAspect.countries?.length || 0} countries with winners for this horizon/crop.`;
+    }
+
+    function renderBenefitMap() {
+      const slice = currentBenefitSlice();
+      const rows = slice.countries || [];
+      const byCountry = new Map(rows.map(r => [r.map_cc || r.country, r]));
+      const vals = rows.map(r => r.benefit_pct).filter(v => v != null);
+      const lo = vals.length ? Math.min(-40, Math.floor(Math.min(...vals) / 10) * 10) : -40;
+      const hi = vals.length ? Math.max(40, Math.ceil(Math.max(...vals) / 10) * 10) : 40;
+      benefitLegendLabel.textContent = `${lo}% · 0% · ${hi}%`;
+
+      const countriesSel = mapSvg.selectAll("path.country")
+        .data(worldFeatures)
+        .join("path")
+        .attr("class", "country")
+        .attr("d", mapPath)
+        .attr("fill", d => {
+          const rec = byCountry.get(d.properties.ISO_A2);
+          if (!rec || rec.benefit_pct == null) return "#f0f0f0";
+          return benefitColor(rec.benefit_pct, lo, hi);
+        });
+
+      countriesSel.selectAll("title")
+        .data(d => [d])
+        .join("title")
+        .text(d => {
+          const rec = byCountry.get(d.properties.ISO_A2);
+          if (!rec) return `${d.properties.NAME || d.properties.ISO_A2}: no data`;
+          return `${rec.country}: ${rec.benefit_pct.toFixed(1)}% error reduction\n`
+            + `Traditional (${rec.traditional_family} · ${rec.traditional_model}) NRMSE=${rec.nrmse_traditional.toFixed(3)}\n`
+            + `AI (${rec.ai_family} · ${rec.ai_model}) NRMSE=${rec.nrmse_ai.toFixed(3)}`;
+        });
+
+      if (!rows.length) {
+        winnerSummary.textContent = "No AI vs traditional comparison for this horizon/crop.";
+        return;
+      }
+      const medianBenefit = d3.median(vals);
+      const nPositive = rows.filter(r => r.benefit_pct > 0).length;
+      winnerSummary.textContent =
+        `Median error reduction ${medianBenefit == null ? "—" : medianBenefit.toFixed(1)}% across `
+        + `${rows.length} countries (${nPositive} with AI better than traditional).`;
+    }
+
+    function loadWinnerMapGeometry() {
+      if (!DATA.geojson_href) {
+        winnerMapWrap.innerHTML = '<p class="muted">Map geometry not available.</p>';
+        return;
+      }
+      d3.json(DATA.geojson_href).then(geo => {
+        worldFeatures = geo.features || [];
+        renderWorldMap();
+      }).catch(err => {
+        winnerMapWrap.innerHTML = `<p class="muted">Could not load map (${err}).</p>`;
+      });
+    }
+
     function render() {
       const slice = currentSlice();
       const families = slice.families || [];
@@ -545,6 +793,7 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       renderLegend(families);
       renderTable(families);
       renderScatter();
+      renderWorldMap();
     }
 
     horizonSelect.addEventListener("change", () => {
@@ -554,7 +803,10 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
     cropSelect.addEventListener("change", render);
 
     renderViewList();
+    initMapModeToolbar();
+    initWinnerAspectToolbar();
     populateCropOptions();
+    loadWinnerMapGeometry();
     render();
   </script>
 </body>

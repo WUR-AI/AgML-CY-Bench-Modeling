@@ -15,6 +15,7 @@ from cybench.runs.analysis.global_insights_lib import (
     median_model_metrics_across_countries,
     _filter_summary_work,
 )
+from cybench.runs.analysis.index_map_lib import map_iso_for_cybencH
 
 # Radar axes (normalized) and raw table columns per evaluation view.
 EVALUATION_VIEWS: tuple[dict[str, Any], ...] = (
@@ -116,6 +117,15 @@ MODEL_DISPLAY_NAMES: dict[str, str] = {
 DEFAULT_FAMILY_REPRESENTATIVES: dict[str, str] = {
     "Process-Based": "lpjml_bc",  # TWSO has sparse country coverage vs LPJmL
 }
+
+TRADITIONAL_FAMILIES: tuple[str, ...] = ("Naive baselines", "Process-Based")
+
+AI_BENEFIT_NOTE = (
+    "Error reduction (%) = 100 × (1 − NRMSE_AI / NRMSE_Traditional). "
+    "Traditional = best of Naive baselines and LPJmL (lowest NRMSE) in that country; "
+    "AI = best non-traditional family representative (lowest NRMSE). "
+    "Positive ⇒ AI reduced error; negative ⇒ traditional approaches were better."
+)
 
 
 def is_naive_radar_model(model: object) -> bool:
@@ -529,6 +539,214 @@ def build_radar_slice(
     }
 
 
+def _winner_map_slice(
+    df: pd.DataFrame,
+    *,
+    batch_horizon: str,
+    crop: str | None = None,
+    representatives: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Per-country winning family for each evaluation view."""
+    work = _filter_summary_work(df, batch_horizon=batch_horizon, crop=crop)
+    reps = pick_representatives(work, overrides=representatives)
+    model_to_family = {
+        reps[family]: family
+        for family in FAMILY_ORDER
+        if family in reps
+    }
+    rep_models = set(model_to_family)
+    if work.empty or not rep_models:
+        return {}
+
+    by_view: dict[str, Any] = {}
+    for view in EVALUATION_VIEWS:
+        metric = view["metric"]
+        label = view["label"]
+        higher = _metric_higher_is_better(metric)
+        rows: list[dict[str, Any]] = []
+        if metric not in work.columns:
+            by_view[label] = {"metric": metric, "countries": rows}
+            continue
+
+        sub = work[work["model"].isin(rep_models)].copy()
+        if sub.empty:
+            by_view[label] = {"metric": metric, "countries": rows}
+            continue
+        sub[metric] = pd.to_numeric(sub[metric], errors="coerce")
+
+        for country, cc_grp in sub.groupby("country", sort=True):
+            family_vals: list[tuple[str, str, float]] = []
+            for model, fam in model_to_family.items():
+                m_grp = cc_grp[cc_grp["model"] == model]
+                if m_grp.empty:
+                    continue
+                vals = pd.to_numeric(m_grp[metric], errors="coerce").dropna()
+                if vals.empty:
+                    continue
+                family_vals.append((fam, model, float(vals.median())))
+            if not family_vals:
+                continue
+            winner = (
+                max(family_vals, key=lambda x: x[2])
+                if higher
+                else min(family_vals, key=lambda x: x[2])
+            )
+            rows.append(
+                {
+                    "country": str(country),
+                    "map_cc": map_iso_for_cybencH(str(country)),
+                    "winner_family": winner[0],
+                    "winner_model": winner[1],
+                    "value": round(winner[2], 4),
+                }
+            )
+        by_view[label] = {"metric": metric, "countries": rows}
+    return by_view
+
+
+def ai_error_reduction_pct(nrmse_ai: float, nrmse_traditional: float) -> float | None:
+    """Percent NRMSE reduction: 100 × (1 − NRMSE_AI / NRMSE_Traditional)."""
+    if pd.isna(nrmse_ai) or pd.isna(nrmse_traditional) or float(nrmse_traditional) <= 0:
+        return None
+    return round(100.0 * (1.0 - float(nrmse_ai) / float(nrmse_traditional)), 2)
+
+
+def _country_median_metric(
+    grp: pd.DataFrame,
+    model: str,
+    metric: str,
+) -> float | None:
+    vals = grp.loc[grp["model"] == model, metric].dropna()
+    if vals.empty:
+        return None
+    return float(vals.median())
+
+
+def _country_family_candidates(
+    grp: pd.DataFrame,
+    family: str,
+    reps: dict[str, str],
+    metric: str,
+) -> list[tuple[str, str, float]]:
+    """Best model in *family* for this country (representative if present, else lowest metric)."""
+    candidates = MODEL_FAMILIES.get(family, [])
+    rep = reps.get(family)
+    if rep:
+        val = _country_median_metric(grp, rep, metric)
+        if val is not None:
+            return [(family, rep, val)]
+
+    found: list[tuple[str, str, float]] = []
+    for model in candidates:
+        val = _country_median_metric(grp, model, metric)
+        if val is not None:
+            found.append((family, model, val))
+    if not found:
+        return []
+    best_val = min(v for _, _, v in found)
+    return [item for item in found if item[2] == best_val]
+
+
+def _ai_benefit_map_slice(
+    df: pd.DataFrame,
+    *,
+    batch_horizon: str,
+    crop: str | None = None,
+    representatives: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Per-country AI vs traditional NRMSE benefit (% error reduction)."""
+    work = _filter_summary_work(df, batch_horizon=batch_horizon, crop=crop)
+    reps = pick_representatives(work, overrides=representatives)
+    if work.empty or "nrmse" not in work.columns:
+        return {"metric": "nrmse", "countries": []}
+
+    ai_families = [f for f in FAMILY_ORDER if f not in TRADITIONAL_FAMILIES]
+    sub = work.copy()
+    sub["nrmse"] = pd.to_numeric(sub["nrmse"], errors="coerce")
+
+    rows: list[dict[str, Any]] = []
+    for country, cc_grp in sub.groupby("country", sort=True):
+        trad_candidates: list[tuple[str, str, float]] = []
+        for family in TRADITIONAL_FAMILIES:
+            trad_candidates.extend(
+                _country_family_candidates(cc_grp, family, reps, "nrmse")
+            )
+        if not trad_candidates:
+            continue
+        trad_family, trad_model, nrmse_traditional = min(trad_candidates, key=lambda x: x[2])
+
+        ai_candidates: list[tuple[str, str, float]] = []
+        for family in ai_families:
+            ai_candidates.extend(
+                _country_family_candidates(cc_grp, family, reps, "nrmse")
+            )
+        if not ai_candidates:
+            continue
+
+        ai_family, ai_model, nrmse_ai = min(ai_candidates, key=lambda x: x[2])
+        benefit = ai_error_reduction_pct(nrmse_ai, nrmse_traditional)
+        if benefit is None:
+            continue
+        rows.append(
+            {
+                "country": str(country),
+                "map_cc": map_iso_for_cybencH(str(country)),
+                "traditional_family": trad_family,
+                "traditional_model": trad_model,
+                "nrmse_traditional": round(nrmse_traditional, 4),
+                "ai_family": ai_family,
+                "ai_model": ai_model,
+                "nrmse_ai": round(nrmse_ai, 4),
+                "benefit_pct": benefit,
+            }
+        )
+    return {"metric": "nrmse", "countries": rows}
+
+
+def build_ai_benefit_map_payload(
+    df: pd.DataFrame,
+    *,
+    representatives: dict[str, str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """AI error-reduction map payload indexed by horizon and crop."""
+    out: dict[str, dict[str, Any]] = {}
+    for hz in ("eos", "mid"):
+        if "batch_horizon" in df.columns and hz not in set(df["batch_horizon"].astype(str)):
+            continue
+        by_crop: dict[str, Any] = {
+            "all": _ai_benefit_map_slice(df, batch_horizon=hz, representatives=representatives),
+        }
+        if "crop" in df.columns:
+            for crop in sorted({str(c) for c in df["crop"].dropna().unique()}):
+                by_crop[crop] = _ai_benefit_map_slice(
+                    df, batch_horizon=hz, crop=crop, representatives=representatives
+                )
+        out[hz] = by_crop
+    return out
+
+
+def build_winner_map_payload(
+    df: pd.DataFrame,
+    *,
+    representatives: dict[str, str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Winner-by-country payload indexed by horizon and crop."""
+    out: dict[str, dict[str, Any]] = {}
+    for hz in ("eos", "mid"):
+        if "batch_horizon" in df.columns and hz not in set(df["batch_horizon"].astype(str)):
+            continue
+        by_crop: dict[str, Any] = {
+            "all": _winner_map_slice(df, batch_horizon=hz, representatives=representatives),
+        }
+        if "crop" in df.columns:
+            for crop in sorted({str(c) for c in df["crop"].dropna().unique()}):
+                by_crop[crop] = _winner_map_slice(
+                    df, batch_horizon=hz, crop=crop, representatives=representatives
+                )
+        out[hz] = by_crop
+    return out
+
+
 def build_radar_payload(
     output_root: Path,
     *,
@@ -572,6 +790,9 @@ def build_radar_payload(
         "by_horizon": by_horizon,
         "sample_scatter_metric": SAMPLE_SCATTER_METRIC,
         "sample_scatter": build_sample_scatter_payload(df, representatives=representatives),
+        "winner_maps": build_winner_map_payload(df, representatives=representatives),
+        "ai_benefit_maps": build_ai_benefit_map_payload(df, representatives=representatives),
+        "ai_benefit_note": AI_BENEFIT_NOTE,
         "radar_scales": radar_scales_payload(),
         "relative_note": RADAR_NORMALIZATION_NOTE,
         "absolute_note": RADAR_ABSOLUTE_NOTE,

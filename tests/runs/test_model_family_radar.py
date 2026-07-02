@@ -13,12 +13,14 @@ from cybench.runs.analysis.model_family_radar_lib import (
     RADAR_ABSOLUTE_NOTE,
     RADAR_NORMALIZATION_NOTE,
     absolute_scores,
+    ai_error_reduction_pct,
     build_family_dataset_rows,
     build_radar_payload,
     build_sample_scatter_slice,
     pick_representatives,
     relative_scores,
     summarize_sample_scatter,
+    _ai_benefit_map_slice,
 )
 
 
@@ -75,6 +77,37 @@ def test_pick_representatives_prefers_override():
     )
     reps = pick_representatives(df, overrides={"Process-Based": "lpjml_bc"})
     assert reps["Process-Based"] == "lpjml_bc"
+
+
+def test_ai_error_reduction_pct_formula():
+    assert ai_error_reduction_pct(0.15, 0.20) == 25.0
+    assert ai_error_reduction_pct(0.22, 0.20) == -10.0
+    assert ai_error_reduction_pct(0.20, 0.20) == 0.0
+    assert ai_error_reduction_pct(0.15, 0.0) is None
+
+
+def test_ai_benefit_map_uses_best_traditional_including_lpjml():
+    df = pd.DataFrame(
+        [
+            _summary_row("trend", nrmse=0.20, country="DE"),
+            _summary_row("lpjml_bc", nrmse=0.16, country="DE"),
+            _summary_row("lightgbm", nrmse=0.14, country="DE"),
+            _summary_row("average", nrmse=0.18, country="FR"),
+            _summary_row("lpjml_bc", nrmse=0.22, country="FR"),
+            _summary_row("xgboost", nrmse=0.19, country="FR"),
+        ]
+    )
+    slice_payload = _ai_benefit_map_slice(df, batch_horizon="eos")
+    by_country = {row["country"]: row for row in slice_payload["countries"]}
+    de = by_country["DE"]
+    assert de["traditional_family"] == "Process-Based"
+    assert de["traditional_model"] == "lpjml_bc"
+    assert de["nrmse_traditional"] == pytest.approx(0.16)
+    assert de["benefit_pct"] == pytest.approx(12.5)
+    fr = by_country["FR"]
+    assert fr["traditional_family"] == "Naive baselines"
+    assert fr["traditional_model"] == "average"
+    assert fr["benefit_pct"] == pytest.approx(-5.56, abs=0.01)
 
 
 def test_relative_scores_span_unit_interval():
@@ -228,6 +261,15 @@ def test_build_radar_payload_structure(tmp_path: Path):
     assert RADAR_ABSOLUTE_NOTE in payload["absolute_note"]
     assert payload["radar_scales"]["absolute"]["Overall"]["lo"] == 0.1
     assert "sample_scatter" in payload
+    assert "winner_maps" in payload
+    assert "ai_benefit_maps" in payload
+    assert "all" in payload["winner_maps"]["eos"]
+    assert "Overall" in payload["winner_maps"]["eos"]["all"]
+    benefit_rows = payload["ai_benefit_maps"]["eos"]["all"]["countries"]
+    assert isinstance(benefit_rows, list)
+    if benefit_rows:
+        assert "benefit_pct" in benefit_rows[0]
+        assert "nrmse_traditional" in benefit_rows[0]
     eos_scatter = payload["sample_scatter"]["eos"]["all"]
     assert "families" in eos_scatter
     assert any(f["family"] == "Tabular Foundation" for f in eos_scatter["families"])
@@ -298,3 +340,4 @@ def test_build_radar_html_embeds_payload(tmp_path: Path):
     assert "Model family comparison" in html
     assert '"Feature-Engineered ML"' in html
     assert "data-mode=\"absolute\"" in html
+    assert "data-mode=\"benefit\"" in html

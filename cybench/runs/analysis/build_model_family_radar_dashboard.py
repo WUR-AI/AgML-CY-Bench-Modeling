@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 
 from cybench.runs.analysis.model_family_radar_lib import build_radar_payload
+from cybench.runs.analysis.index_map_lib import ensure_world_geojson
 
 
 def build_radar_html(payload: dict) -> str:
@@ -40,6 +41,7 @@ def write_model_family_radar_dashboard(
         raise RuntimeError(f"No walk_forward_summary.csv files found under {output_root}")
     if not payload["by_horizon"]:
         raise RuntimeError("No eos/mid horizon slices in collected summaries")
+    payload["geojson_href"] = ensure_world_geojson(dest.parent)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(build_radar_html(payload), encoding="utf-8")
     return dest
