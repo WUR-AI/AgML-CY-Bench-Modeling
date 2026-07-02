@@ -424,6 +424,27 @@
       return [cx + radius * Math.sin(angleRad), cy - radius * Math.cos(angleRad)];
     }
 
+    function axisLabelAttrs(angleRad) {
+      const nx = Math.sin(angleRad);
+      const ny = -Math.cos(angleRad);
+      let anchor = "middle";
+      let dx = 0;
+      let dy = 0;
+      if (nx > 0.4) {
+        anchor = "start";
+        dx = 8;
+      } else if (nx < -0.4) {
+        anchor = "end";
+        dx = -8;
+      }
+      if (ny > 0.4) {
+        dy = 6;
+      } else if (ny < -0.4) {
+        dy = -6;
+      }
+      return { anchor, dx, dy };
+    }
+
     function renderRadar(families) {
       const labels = DATA.views.map(v => v.label);
       const n = labels.length;
@@ -433,10 +454,13 @@
       }
 
       const absoluteScales = ((DATA.radar_scales || {}).absolute) || {};
-      const size = 460;
+      const pad = 56;
+      const size = 460 + pad * 2;
       const cx = size / 2;
       const cy = size / 2;
-      const maxR = size * 0.34;
+      const maxR = (size - pad * 2) * 0.36;
+      const labelR = maxR + 30;
+      const sublabelR = maxR + 46;
       const angles = labels.map((_, i) => (2 * Math.PI * i) / n);
       const modeLabel = radarMode === "absolute" ? "absolute fixed-scale" : "relative min–max";
 
@@ -456,13 +480,14 @@
       angles.forEach((a, i) => {
         const [x2, y2] = polarPoint(cx, cy, maxR, a);
         svg += `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" stroke="#e6eaef" stroke-width="1"/>`;
-        const [lx, ly] = polarPoint(cx, cy, maxR + 24, a);
+        const { anchor, dx, dy } = axisLabelAttrs(a);
+        const [lx, ly] = polarPoint(cx, cy, labelR, a);
         const view = DATA.views[i];
-        svg += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="600" fill="#1f2328">${labels[i]}</text>`;
+        svg += `<text x="${lx + dx}" y="${ly + dy}" text-anchor="${anchor}" dominant-baseline="middle" font-size="12" font-weight="600" fill="#1f2328">${labels[i]}</text>`;
         if (radarMode === "absolute" && absoluteScales[labels[i]]) {
           const sc = absoluteScales[labels[i]];
-          const [hx, hy] = polarPoint(cx, cy, maxR + 40, a);
-          svg += `<text x="${hx}" y="${hy}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="#656d76">${sc.display} ${sc.outer_label}→${sc.center_label}</text>`;
+          const [hx, hy] = polarPoint(cx, cy, sublabelR, a);
+          svg += `<text x="${hx + dx}" y="${hy + dy}" text-anchor="${anchor}" dominant-baseline="middle" font-size="9" fill="#656d76">${sc.display} ${sc.outer_label}→${sc.center_label}</text>`;
         }
       });
 
