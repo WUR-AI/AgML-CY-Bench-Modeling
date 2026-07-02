@@ -246,6 +246,38 @@
       </p>
     </div>
 
+    <div class="card">
+      <h2>Research Q3 — Which crop is easier to predict (fair comparison)?</h2>
+      <p class="muted">
+        Pooling all countries biases crop rankings (e.g. maize-heavy regions may be harder).
+        Here we keep only <strong>countries with both crops</strong> and compare NRMSE within the same
+        country and model — a paired crop×country comparison.
+      </p>
+      <div class="controls">
+        <span class="muted">Horizon</span>
+        <div class="toolbar" id="rq3-horizon-toolbar">
+          <button type="button" data-horizon="eos" class="active">End of season</button>
+          <button type="button" data-horizon="mid">Mid-season</button>
+        </div>
+        <label>Crop pair
+          <select id="rq3-pair-filter"></select>
+        </label>
+      </div>
+      <p class="muted" id="crop-pair-note"></p>
+      <div class="stat-grid" id="crop-pair-stats"></div>
+      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">By model (paired countries only)</h3>
+      <div class="table-scroll" id="crop-pair-summary-wrap"></div>
+      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">Detail per country × model</h3>
+      <div class="controls">
+        <label>Model <input type="search" id="crop-detail-model-filter" placeholder="Filter…" /></label>
+        <label>Country
+          <select id="crop-detail-country-filter"><option value="">All</option></select>
+        </label>
+      </div>
+      <div class="table-scroll" id="crop-pair-detail-wrap"></div>
+      <p class="muted note" id="crop-pair-delta-note"></p>
+    </div>
+
     <p class="muted">
       <a href="model_families.html">Model families (paper summary)</a> ·
       <a href="index.html">← Back to country dashboards</a>
@@ -774,6 +806,150 @@
     countryFilter.addEventListener("change", renderHorizonDetail);
     modelFilter.addEventListener("input", renderHorizonDetail);
     renderHorizonDetail();
+
+    // Crop pair comparison (RQ3)
+    let rq3Horizon = "eos";
+    let rq3PairKey = "";
+    const rq3HorizonToolbar = document.getElementById("rq3-horizon-toolbar");
+    const rq3PairFilter = document.getElementById("rq3-pair-filter");
+    const cropPairNote = document.getElementById("crop-pair-note");
+    const cropPairStats = document.getElementById("crop-pair-stats");
+    const cropPairDeltaNote = document.getElementById("crop-pair-delta-note");
+    const cropDetailCountryFilter = document.getElementById("crop-detail-country-filter");
+    const cropDetailModelFilter = document.getElementById("crop-detail-model-filter");
+    const cpsWrap = document.getElementById("crop-pair-summary-wrap");
+    const cpdWrap = document.getElementById("crop-pair-detail-wrap");
+
+    function currentCropPairSlice() {
+      const hz = (DATA.crop_comparison || {})[rq3Horizon] || {};
+      const keys = Object.keys(hz).sort();
+      if (!rq3PairKey && keys.length) rq3PairKey = keys[0];
+      if (rq3PairKey && !hz[rq3PairKey] && keys.length) rq3PairKey = keys[0];
+      return hz[rq3PairKey] || null;
+    }
+
+    function populateCropPairOptions() {
+      const hz = (DATA.crop_comparison || {})[rq3Horizon] || {};
+      const keys = Object.keys(hz).sort();
+      rq3PairFilter.innerHTML = keys.length
+        ? keys.map(k => {
+            const p = hz[k];
+            const label = `${p.crop_a} vs ${p.crop_b}`;
+            return `<option value="${k}">${label}</option>`;
+          }).join("")
+        : `<option value="">No crop pairs</option>`;
+      if (keys.length && (!rq3PairKey || !hz[rq3PairKey])) rq3PairKey = keys[0];
+      rq3PairFilter.value = rq3PairKey || "";
+    }
+
+    let cpsSort = "weighted_delta_nrmse";
+    let cpsDir = "desc";
+    let cpdSort = "delta_nrmse";
+    let cpdDir = "desc";
+
+    function renderCropPairComparison() {
+      const slice = currentCropPairSlice();
+      const overall = slice ? (slice.overall || {}) : {};
+      const cropA = overall.crop_a || "crop A";
+      const cropB = overall.crop_b || "crop B";
+      const cropALabel = cropA.charAt(0).toUpperCase() + cropA.slice(1);
+      const cropBLabel = cropB.charAt(0).toUpperCase() + cropB.slice(1);
+
+      cropPairNote.textContent = overall.interpretation || "No paired crop comparison for this horizon.";
+      cropPairDeltaNote.textContent = slice
+        ? `Δ NRMSE = ${cropBLabel} − ${cropALabel}. Positive ⇒ ${cropALabel} has lower NRMSE. `
+          + `${cropALabel} win % = share of country×model pairs where ${cropALabel} wins.`
+        : "";
+
+      if (!overall.n_pairs) {
+        cropPairStats.innerHTML = `<p class="muted">No paired comparisons available.</p>`;
+        cpsWrap.innerHTML = "";
+        cpdWrap.innerHTML = "";
+        return;
+      }
+
+      const countries = overall.paired_countries || [];
+      cropPairStats.innerHTML = `
+        <div class="stat"><div class="label">Paired countries</div><div class="value">${overall.n_countries || countries.length}</div></div>
+        <div class="stat"><div class="label">Country×model pairs</div><div class="value">${overall.n_pairs}</div></div>
+        <div class="stat"><div class="label">${cropALabel} wins</div><div class="value good">${pct(overall.crop_a_win_rate)}</div></div>
+        <div class="stat"><div class="label">Mean ${cropALabel} NRMSE</div><div class="value">${fmt(overall.mean_crop_a_nrmse)}</div></div>
+        <div class="stat"><div class="label">Mean ${cropBLabel} NRMSE</div><div class="value">${fmt(overall.mean_crop_b_nrmse)}</div></div>
+        <div class="stat"><div class="label">Weighted Δ NRMSE</div><div class="value">${fmt(overall.weighted_delta_nrmse)}</div></div>`;
+
+      const cpsCols = [
+        { key: "model", label: "Model" },
+        { key: "n_countries", label: "Countries" },
+        { key: "n_pairs", label: "Pairs" },
+        { key: "crop_a_win_rate", label: `${cropALabel} win %`, format: pct },
+        { key: "weighted_delta_nrmse", label: "Weighted Δ NRMSE", bg: fixedDeltaBg },
+        { key: "mean_delta_nrmse", label: "Mean Δ NRMSE", bg: fixedDeltaBg },
+        { key: "mean_crop_a_nrmse", label: `Mean ${cropALabel} NRMSE`, bg: fixedNrmseBg },
+        { key: "mean_crop_b_nrmse", label: `Mean ${cropBLabel} NRMSE`, bg: fixedNrmseBg },
+      ];
+      const summaryRows = [...(slice.summary || [])].sort((a, b) => {
+        const dir = cpsDir === "asc" ? 1 : -1;
+        const cmp = compareSortValues(a, b, cpsSort);
+        if (cmp !== 0) return dir * cmp;
+        return a.model.localeCompare(b.model);
+      });
+      renderSortableTable(cpsWrap, cpsCols, summaryRows, cpsSort, cpsDir, (key) => {
+        if (cpsSort === key) cpsDir = cpsDir === "asc" ? "desc" : "asc";
+        else { cpsSort = key; cpsDir = key === "crop_a_win_rate" || key.includes("delta") ? "desc" : "asc"; }
+        renderCropPairComparison();
+      });
+
+      const detailCountries = [...new Set((slice.detail || []).map(r => r.country))].sort();
+      cropDetailCountryFilter.innerHTML = `<option value="">All</option>` +
+        detailCountries.map(c => `<option value="${c}">${c}</option>`).join("");
+
+      const cpdCols = [
+        { key: "country", label: "Country" },
+        { key: "model", label: "Model" },
+        { key: "crop_a_nrmse", label: `${cropALabel} NRMSE`, bg: fixedNrmseBg },
+        { key: "crop_b_nrmse", label: `${cropBLabel} NRMSE`, bg: fixedNrmseBg },
+        { key: "delta_nrmse", label: "Δ NRMSE", bg: fixedDeltaBg },
+        { key: "crop_a_r2", label: `${cropALabel} R²` },
+        { key: "crop_b_r2", label: `${cropBLabel} R²` },
+        { key: "crop_a_samples", label: `${cropALabel} samples`, format: (v) => v == null ? "—" : String(v) },
+        { key: "crop_b_samples", label: `${cropBLabel} samples`, format: (v) => v == null ? "—" : String(v) },
+      ];
+      const cq = cropDetailCountryFilter.value;
+      const mq = cropDetailModelFilter.value.trim().toLowerCase();
+      const detailRows = (slice.detail || []).filter(r => {
+        if (cq && r.country !== cq) return false;
+        if (mq && !r.model.toLowerCase().includes(mq)) return false;
+        return true;
+      }).sort((a, b) => {
+        const dir = cpdDir === "asc" ? 1 : -1;
+        const cmp = compareSortValues(a, b, cpdSort);
+        if (cmp !== 0) return dir * cmp;
+        return a.model.localeCompare(b.model);
+      });
+      renderSortableTable(cpdWrap, cpdCols, detailRows, cpdSort, cpdDir, (key) => {
+        if (cpdSort === key) cpdDir = cpdDir === "asc" ? "desc" : "asc";
+        else { cpdSort = key; cpdDir = key === "country" || key === "model" ? "asc" : "desc"; }
+        renderCropPairComparison();
+      });
+    }
+
+    rq3HorizonToolbar.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        rq3HorizonToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        rq3Horizon = btn.dataset.horizon;
+        populateCropPairOptions();
+        renderCropPairComparison();
+      });
+    });
+    rq3PairFilter.addEventListener("change", () => {
+      rq3PairKey = rq3PairFilter.value;
+      renderCropPairComparison();
+    });
+    cropDetailCountryFilter.addEventListener("change", renderCropPairComparison);
+    cropDetailModelFilter.addEventListener("input", renderCropPairComparison);
+    populateCropPairOptions();
+    renderCropPairComparison();
   </script>
 </body>
 </html>

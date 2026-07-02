@@ -12,7 +12,9 @@ from cybench.runs.analysis.global_insights_lib import (
     attach_baseline_metrics,
     build_dashboard_hrefs,
     build_insights_payload,
+    build_crop_comparison_payload,
     build_model_country_matrix,
+    compare_crops_pairwise,
     compare_horizons,
     dashboard_href_for_paper_dir,
     is_baseline_model,
@@ -305,6 +307,72 @@ def test_compare_horizons_eos_better():
     assert detail["delta_nrmse"].iloc[0] == 0.10
     assert bool(detail["eos_better"].iloc[0]) is True
     assert summary.loc[summary["model"] == "ridge", "eos_win_rate"].iloc[0] == 1.0
+
+
+def test_compare_crops_pairwise_shared_countries_only():
+    df = pd.DataFrame(
+        [
+            {
+                "crop": "maize",
+                "country": "DE",
+                "model": "ridge",
+                "batch_horizon": "eos",
+                "nrmse": 0.10,
+                "r2": 0.9,
+                "n_samples": 50,
+            },
+            {
+                "crop": "wheat",
+                "country": "DE",
+                "model": "ridge",
+                "batch_horizon": "eos",
+                "nrmse": 0.20,
+                "r2": 0.7,
+                "n_samples": 50,
+            },
+            {
+                "crop": "maize",
+                "country": "US",
+                "model": "ridge",
+                "batch_horizon": "eos",
+                "nrmse": 0.25,
+                "r2": 0.6,
+                "n_samples": 40,
+            },
+            {
+                "crop": "wheat",
+                "country": "US",
+                "model": "ridge",
+                "batch_horizon": "eos",
+                "nrmse": 0.15,
+                "r2": 0.8,
+                "n_samples": 40,
+            },
+            {
+                "crop": "maize",
+                "country": "FR",
+                "model": "ridge",
+                "batch_horizon": "eos",
+                "nrmse": 0.30,
+                "r2": 0.5,
+                "n_samples": 30,
+            },
+        ]
+    )
+    detail, summary = compare_crops_pairwise(df, crop_a="maize", crop_b="wheat")
+    assert len(detail) == 2
+    assert set(detail["country"]) == {"DE", "US"}
+    de = detail[detail["country"] == "DE"].iloc[0]
+    assert de["delta_nrmse"] == pytest.approx(0.10)
+    assert bool(de["crop_a_better"]) is True
+    us = detail[detail["country"] == "US"].iloc[0]
+    assert bool(us["crop_a_better"]) is False
+    assert summary.loc[summary["model"] == "ridge", "crop_a_win_rate"].iloc[0] == 0.5
+
+    payload = build_crop_comparison_payload(df)
+    overall = payload["eos"]["maize_vs_wheat"]["overall"]
+    assert overall["n_countries"] == 2
+    assert overall["crop_a_win_rate"] == 0.5
 
 
 def test_load_summary_frame_from_tmp(tmp_path: Path):

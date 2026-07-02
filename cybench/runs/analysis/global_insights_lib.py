@@ -600,6 +600,96 @@ def compare_horizons(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return detail, summary
 
 
+def compare_crops_pairwise(
+    df: pd.DataFrame,
+    *,
+    crop_a: str,
+    crop_b: str,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Compare NRMSE for two crops in countries that have both (inner join on country × model).
+
+    Returns (per_pair_detail, per_model_summary).
+    Delta = crop_b_nrmse − crop_a_nrmse (positive ⇒ crop_a has lower NRMSE).
+    """
+    if df.empty or crop_a == crop_b:
+        return pd.DataFrame(), pd.DataFrame()
+
+    key_cols = ["country", "model"]
+    for col in key_cols + ["crop", "nrmse"]:
+        if col not in df.columns:
+            return pd.DataFrame(), pd.DataFrame()
+
+    a_df = df[df["crop"] == crop_a][key_cols + ["nrmse", "r2", "n_samples"]].rename(
+        columns={"nrmse": "crop_a_nrmse", "r2": "crop_a_r2", "n_samples": "crop_a_samples"}
+    )
+    b_df = df[df["crop"] == crop_b][key_cols + ["nrmse", "r2", "n_samples"]].rename(
+        columns={"nrmse": "crop_b_nrmse", "r2": "crop_b_r2", "n_samples": "crop_b_samples"}
+    )
+    if a_df.empty or b_df.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    merged = a_df.merge(b_df, on=key_cols, how="inner")
+    merged = merged[merged["crop_a_nrmse"].notna() & merged["crop_b_nrmse"].notna()].copy()
+    if merged.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    merged["crop_a"] = crop_a
+    merged["crop_b"] = crop_b
+    merged["delta_nrmse"] = merged["crop_b_nrmse"] - merged["crop_a_nrmse"]
+    merged["delta_r2"] = merged["crop_b_r2"] - merged["crop_a_r2"]
+    merged["crop_a_better"] = merged["delta_nrmse"] > 0
+    merged["dataset_a"] = crop_a + "_" + merged["country"]
+    merged["dataset_b"] = crop_b + "_" + merged["country"]
+
+    pair_weights = merged[["crop_a_samples", "crop_b_samples"]].min(axis=1).fillna(1).clip(lower=1)
+    merged["pair_weight"] = pair_weights
+
+    model_rows: list[dict[str, Any]] = []
+    for model, grp in merged.groupby("model", sort=True):
+        weights = grp["pair_weight"]
+        model_rows.append(
+            {
+                "model": model,
+                "n_pairs": int(len(grp)),
+                "n_countries": int(grp["country"].nunique()),
+                "crop_a_win_rate": float(grp["crop_a_better"].mean()),
+                "mean_delta_nrmse": float(grp["delta_nrmse"].mean()),
+                "weighted_delta_nrmse": _weighted_mean(grp["delta_nrmse"], weights),
+                "mean_crop_a_nrmse": float(grp["crop_a_nrmse"].mean()),
+                "mean_crop_b_nrmse": float(grp["crop_b_nrmse"].mean()),
+            }
+        )
+    summary = pd.DataFrame(model_rows).sort_values(
+        ["weighted_delta_nrmse", "mean_delta_nrmse"], ascending=[False, False]
+    )
+    detail = merged.sort_values(["model", "country"]).reset_index(drop=True)
+    return detail, summary
+
+
+def build_crop_comparison_payload(df: pd.DataFrame) -> dict[str, dict[str, Any]]:
+    """Per horizon, pairwise crop NRMSE on shared countries only."""
+    if df.empty:
+        return {}
+    crops = _crop_keys(df)
+    out: dict[str, dict[str, Any]] = {}
+    for hz in ("eos", "mid"):
+        hz_df = df[df["batch_horizon"] == hz]
+        pairs: dict[str, Any] = {}
+        for i, crop_a in enumerate(crops):
+            for crop_b in crops[i + 1 :]:
+                detail, summary = compare_crops_pairwise(hz_df, crop_a=crop_a, crop_b=crop_b)
+                pair_key = f"{crop_a}_vs_{crop_b}"
+                pairs[pair_key] = {
+                    "crop_a": crop_a,
+                    "crop_b": crop_b,
+                    "detail": _df_records(detail),
+                    "summary": _df_records(summary),
+                    "overall": _overall_crop_pair_stats(detail, crop_a, crop_b),
+                }
+        out[hz] = pairs
+    return out
+
+
 def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, Any]:
     """Build JSON-serializable payload for the global insights dashboard."""
     paths = discover_summary_tables(output_root, version=version)
@@ -640,6 +730,7 @@ def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, 
         "horizon_summary": _df_records(horizon_summary),
         "horizon_detail": _df_records(horizon_detail),
         "overall_horizon": _overall_horizon_stats(horizon_detail),
+        "crop_comparison": build_crop_comparison_payload(df),
     }
 
 
@@ -655,6 +746,41 @@ def _overall_horizon_stats(detail: pd.DataFrame) -> dict[str, Any]:
         "interpretation": (
             "delta_nrmse = mid − eos; positive values mean end-of-season (nowcast) "
             "has lower NRMSE than mid-season."
+        ),
+    }
+
+
+def _overall_crop_pair_stats(
+    detail: pd.DataFrame, crop_a: str, crop_b: str
+) -> dict[str, Any]:
+    if detail.empty:
+        return {
+            "crop_a": crop_a,
+            "crop_b": crop_b,
+            "interpretation": (
+                f"No paired {crop_a}/{crop_b} comparisons in countries with both crops."
+            ),
+        }
+    weights = detail["pair_weight"]
+    paired_countries = sorted(detail["country"].unique())
+    crop_a_label = crop_a.replace("_", " ")
+    crop_b_label = crop_b.replace("_", " ")
+    return {
+        "crop_a": crop_a,
+        "crop_b": crop_b,
+        "n_pairs": int(len(detail)),
+        "n_countries": int(len(paired_countries)),
+        "paired_countries": paired_countries,
+        "crop_a_win_rate": float(detail["crop_a_better"].mean()),
+        "mean_delta_nrmse": float(detail["delta_nrmse"].mean()),
+        "weighted_delta_nrmse": float(_weighted_mean(detail["delta_nrmse"], weights)),
+        "mean_crop_a_nrmse": float(detail["crop_a_nrmse"].mean()),
+        "mean_crop_b_nrmse": float(detail["crop_b_nrmse"].mean()),
+        "interpretation": (
+            f"Paired comparison in countries with both crops. "
+            f"delta_nrmse = {crop_b_label} − {crop_a_label}; "
+            f"positive values mean {crop_a_label} has lower NRMSE. "
+            f"Crop A win % = share of country×model pairs where {crop_a_label} wins."
         ),
     }
 
