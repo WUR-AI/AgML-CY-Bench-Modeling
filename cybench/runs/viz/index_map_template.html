@@ -210,18 +210,33 @@
 
     const width = 960;
     const height = 520;
+    const margin = 8;
     const svg = d3.select("#map-wrap").html("").append("svg")
       .attr("viewBox", `0 0 ${width} ${height}`)
       .attr("role", "img")
       .attr("aria-label", "World map of CY-Bench dashboard countries");
 
     const g = svg.append("g");
-    const projection = d3.geoNaturalEarth1().fitSize([width, height], {type: "Sphere"});
-    const path = d3.geoPath(projection);
+    let projection = d3.geoNaturalEarth1();
+    let path = d3.geoPath(projection);
+
+    function mapFeaturesWithoutAntarctica(features) {
+      return (features || []).filter(f => f.properties.ISO_A2 !== "AQ");
+    }
+
+    function fitMapProjection(features) {
+      projection = d3.geoNaturalEarth1().fitExtent(
+        [[margin, margin], [width - margin, height - margin]],
+        { type: "FeatureCollection", features },
+      );
+      path = d3.geoPath(projection);
+    }
 
     d3.json(DATA.geojson_href).then(geo => {
+      const features = mapFeaturesWithoutAntarctica(geo.features);
+      fitMapProjection(features);
       g.selectAll("path")
-        .data(geo.features)
+        .data(features)
         .join("path")
         .attr("class", d => {
           const c = isoToCountry(d.properties.ISO_A2);

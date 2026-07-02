@@ -6,9 +6,12 @@ import json
 import re
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from cybench.runs.analysis.publish_dashboard_bundle import IndexEntry, _COUNTRY_NAMES
+
+if TYPE_CHECKING:
+    import geopandas as gpd
 
 _BUNDLED_GEOJSON = (
     Path(__file__).resolve().parent.parent / "viz" / "data" / "world_countries_110m.geojson"
@@ -29,6 +32,7 @@ _METROPOLITAN_BBOX_WGS84: dict[str, tuple[float, float, float, float]] = {
     "FR": (-5.5, 41.0, 10.0, 51.5),
 }
 _OVERSEAS_MAP_ISO = "XX"
+_EXCLUDED_MAP_ISOS = frozenset({"AQ"})
 
 
 def _explode_metropolitan_map_units(frame: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -157,6 +161,7 @@ def export_world_geojson(dest: Path, *, simplify: float = 0.08) -> Path:
         iso = iso.where(~bad, world[wb_col].astype(str))
     keep["ISO_A2"] = iso
     keep = keep[keep["ISO_A2"].notna() & (keep["ISO_A2"] != "-99") & (keep["ISO_A2"] != "nan")]
+    keep = keep[~keep["ISO_A2"].isin(_EXCLUDED_MAP_ISOS)]
     keep["geometry"] = keep.geometry.simplify(simplify, preserve_topology=True)
     keep = _explode_metropolitan_map_units(keep)
     dest.parent.mkdir(parents=True, exist_ok=True)

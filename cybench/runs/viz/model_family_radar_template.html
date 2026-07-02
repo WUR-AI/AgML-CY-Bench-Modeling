@@ -296,7 +296,7 @@
       <div class="benefit-legend" id="benefit-legend" style="display:none;">
         <span class="benefit-gradient" aria-hidden="true"></span>
         <span id="benefit-legend-label">−40% · 0% · +40%</span>
-        <span class="muted">red = traditional better · yellow = little gain · green = AI better · outliers saturated</span>
+        <span class="muted">red = traditional better · yellow = little gain · green = AI better · hover for exact %</span>
       </div>
       <p class="muted winner-summary" id="winner-summary"></p>
     </div>
@@ -845,13 +845,26 @@ ${bodyRows}
 
     const MAP_WIDTH = 960;
     const MAP_HEIGHT = 520;
+    const MAP_MARGIN = 8;
     const mapSvg = d3.select("#winner-map-wrap").html("").append("svg")
       .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
       .attr("role", "img")
       .attr("aria-label", "World map of winning model families");
-    const mapProjection = d3.geoNaturalEarth1().fitSize([MAP_WIDTH, MAP_HEIGHT], { type: "Sphere" });
-    const mapPath = d3.geoPath(mapProjection);
+    let mapProjection = d3.geoNaturalEarth1();
+    let mapPath = d3.geoPath(mapProjection);
     let worldFeatures = null;
+
+    function mapFeaturesWithoutAntarctica(features) {
+      return (features || []).filter(f => f.properties.ISO_A2 !== "AQ");
+    }
+
+    function fitMapProjection(features) {
+      mapProjection = d3.geoNaturalEarth1().fitExtent(
+        [[MAP_MARGIN, MAP_MARGIN], [MAP_WIDTH - MAP_MARGIN, MAP_HEIGHT - MAP_MARGIN]],
+        { type: "FeatureCollection", features },
+      );
+      mapPath = d3.geoPath(mapProjection);
+    }
 
     function winnerColorMap() {
       const out = {};
@@ -968,19 +981,8 @@ ${bodyRows}
           if (!rec || rec.benefit_pct == null) return MAP_FILL_NO_DATA;
           return benefitColor(rec.benefit_pct, extent);
         })
-        .attr("stroke", d => {
-          const iso = d.properties.ISO_A2;
-          if (!isBenchmarkIso(iso)) return "#d0d7de";
-          const rec = byCountry.get(iso);
-          if (rec && benefitOffScale(rec.benefit_pct, extent)) return "#1f2328";
-          return "#fff";
-        })
-        .attr("stroke-width", d => {
-          const iso = d.properties.ISO_A2;
-          if (!isBenchmarkIso(iso)) return 0.25;
-          const rec = byCountry.get(iso);
-          return rec && benefitOffScale(rec.benefit_pct, extent) ? 1.1 : 0.5;
-        });
+        .attr("stroke", d => isBenchmarkIso(d.properties.ISO_A2) ? "#fff" : "#d0d7de")
+        .attr("stroke-width", d => isBenchmarkIso(d.properties.ISO_A2) ? 0.5 : 0.25);
 
       countriesSel.selectAll("title")
         .data(d => [d])
@@ -1011,7 +1013,7 @@ ${bodyRows}
         + `${rows.length} countries (${nPositive} with AI better than traditional). `
         + `Color scale ±${extent}% (85th percentile, largest outlier excluded).`;
       if (nOffScale) {
-        summary += ` ${nOffScale} countr${nOffScale === 1 ? "y" : "ies"} beyond scale (dark border).`;
+        summary += ` ${nOffScale} countr${nOffScale === 1 ? "y" : "ies"} beyond scale (color clamped; hover for exact value).`;
       }
       winnerSummary.textContent = summary;
     }
@@ -1082,8 +1084,7 @@ ${bodyRows}
     function buildMapExportSvgString() {
       const mapNode = winnerMapWrap.querySelector("svg");
       if (!mapNode || !worldFeatures) return null;
-      const { hzLabel, cropLabel, modeLabel } = mapExportMeta();
-      const padT = 48;
+      const padT = 12;
       const padB = 72;
       const totalH = MAP_HEIGHT + padT + padB;
       const legendY = padT + MAP_HEIGHT + 16;
@@ -1094,8 +1095,6 @@ ${bodyRows}
       return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${totalH}" width="${MAP_WIDTH}" height="${totalH}">
   <rect width="100%" height="100%" fill="#ffffff"/>
-  <text x="24" y="28" font-size="16" font-weight="600" font-family="system-ui,sans-serif" fill="#1f2328">${escapeXml(`CY-Bench model families · ${hzLabel} · ${cropLabel}`)}</text>
-  <text x="24" y="44" font-size="12" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(modeLabel)}</text>
   <svg x="0" y="${padT}" width="${MAP_WIDTH}" height="${MAP_HEIGHT}" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}">
     ${mapContent}
   </svg>
@@ -1128,7 +1127,7 @@ ${bodyRows}
       if (!svg) return;
       const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
       const img = new Image();
-      const padT = 48;
+      const padT = 12;
       const padB = 72;
       const totalH = MAP_HEIGHT + padT + padB;
       const scale = 2;
@@ -1161,7 +1160,8 @@ ${bodyRows}
         return;
       }
       d3.json(DATA.geojson_href).then(geo => {
-        worldFeatures = geo.features || [];
+        worldFeatures = mapFeaturesWithoutAntarctica(geo.features);
+        fitMapProjection(worldFeatures);
         setMapExportEnabled(true);
         renderWorldMap();
       }).catch(err => {

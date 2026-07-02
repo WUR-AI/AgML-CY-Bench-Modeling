@@ -63,6 +63,7 @@ def test_export_world_geojson_includes_france(tmp_path: Path):
     export_world_geojson(dest, simplify=0.2)
     text = dest.read_text(encoding="utf-8")
     assert '"ISO_A2": "FR"' in text or '"ISO_A2":"FR"' in text
+    assert '"ISO_A2": "AQ"' not in text and '"ISO_A2":"AQ"' not in text
 
     import geopandas as gpd
 
