@@ -262,6 +262,7 @@
       <div class="benefit-legend" id="benefit-legend" style="display:none;">
         <span class="benefit-gradient" aria-hidden="true"></span>
         <span id="benefit-legend-label">−40% · 0% · +40%</span>
+        <span class="muted">red = traditional better · yellow = little gain · green = AI better</span>
       </div>
       <p class="muted winner-summary" id="winner-summary"></p>
     </div>
@@ -704,10 +705,18 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       return out;
     }
 
-    function benefitColor(pct, lo, hi) {
-      const clamped = Math.max(lo, Math.min(hi, pct));
-      const norm = (clamped - lo) / (hi - lo || 1);
-      return d3.interpolateRdYlGn(norm);
+    function benefitExtent(vals) {
+      if (!vals.length) return 40;
+      const neg = Math.abs(Math.min(0, ...vals));
+      const pos = Math.max(0, ...vals);
+      const raw = Math.max(neg, pos, 10);
+      return Math.ceil(raw / 5) * 5;
+    }
+
+    function benefitColor(pct, extent) {
+      const clamped = Math.max(-extent, Math.min(extent, pct));
+      const t = (clamped + extent) / (2 * extent);
+      return d3.interpolateRdYlGn(t);
     }
 
     function renderWorldMap() {
@@ -761,9 +770,8 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       const rows = slice.countries || [];
       const byCountry = new Map(rows.map(r => [r.map_cc || r.country, r]));
       const vals = rows.map(r => r.benefit_pct).filter(v => v != null);
-      const lo = vals.length ? Math.min(-40, Math.floor(Math.min(...vals) / 10) * 10) : -40;
-      const hi = vals.length ? Math.max(40, Math.ceil(Math.max(...vals) / 10) * 10) : 40;
-      benefitLegendLabel.textContent = `${lo}% · 0% · ${hi}%`;
+      const extent = benefitExtent(vals);
+      benefitLegendLabel.textContent = `−${extent}% · 0% · +${extent}%`;
 
       const countriesSel = mapSvg.selectAll("path.country")
         .data(worldFeatures)
@@ -773,7 +781,7 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
         .attr("fill", d => {
           const rec = byCountry.get(d.properties.ISO_A2);
           if (!rec || rec.benefit_pct == null) return "#f0f0f0";
-          return benefitColor(rec.benefit_pct, lo, hi);
+          return benefitColor(rec.benefit_pct, extent);
         });
 
       countriesSel.selectAll("title")
