@@ -13,6 +13,7 @@ from cybench.runs.analysis.global_insights_lib import (
     discover_summary_tables,
     load_summary_frame,
     median_model_metrics_across_countries,
+    quantile_model_metrics_across_countries,
     _filter_summary_work,
 )
 from cybench.runs.analysis.index_map_lib import map_iso_for_cybencH
@@ -148,7 +149,12 @@ def pick_representatives(
     selection_metric: str = "nrmse",
     overrides: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    """Pick one model slug per family (default: lowest median NRMSE in frame)."""
+    """Pick one model slug per family (default: lowest country-equal median NRMSE).
+
+    Uses the same country→median→median rule as the radar table and insights
+    leaderboard, not a plain median over all crop×country rows (which overweight
+    countries with more crops).
+    """
     merged_overrides = {**DEFAULT_FAMILY_REPRESENTATIVES, **(overrides or {})}
     chosen: dict[str, str] = {}
     models_in_frame = set(df["model"].astype(str)) if "model" in df.columns else set()
@@ -162,11 +168,16 @@ def pick_representatives(
         sub = df[df["model"].isin(candidates)] if "model" in df.columns else pd.DataFrame()
         if sub.empty or selection_metric not in sub.columns:
             continue
-        med = sub.groupby("model")[selection_metric].median()
-        med = med[med.notna()]
-        if med.empty:
+        if "country" in sub.columns:
+            med_table = median_model_metrics_across_countries(sub, [selection_metric])
+            if med_table.empty or selection_metric not in med_table.columns:
+                continue
+            series = med_table[selection_metric].dropna()
+        else:
+            series = sub.groupby("model")[selection_metric].median().dropna()
+        if series.empty:
             continue
-        chosen[family] = str(med.idxmin() if not higher_is_better else med.idxmax())
+        chosen[family] = str(series.idxmax() if higher_is_better else series.idxmin())
     return chosen
 
 
@@ -239,6 +250,8 @@ def _records_from_medians(
     entries: list[tuple[str, str, str, str, bool]],
     *,
     abs_all: pd.DataFrame | None = None,
+    q25_all: pd.DataFrame | None = None,
+    q75_all: pd.DataFrame | None = None,
 ) -> list[dict[str, Any]]:
     """Build radar rows from median table. *entries*: (index, family, display, color, is_naive)."""
     view_labels = [v["label"] for v in EVALUATION_VIEWS]
@@ -248,11 +261,21 @@ def _records_from_medians(
             continue
         raw_row = medians.loc[model_key]
         raw: dict[str, float | None] = {}
+        iqr: dict[str, dict[str, float | None]] = {}
         for col in RAW_TABLE_METRICS:
             if col not in raw_row.index:
                 continue
             val = raw_row.get(col)
             raw[col] = None if pd.isna(val) else round(float(val), 4)
+            q25 = q75 = None
+            if q25_all is not None and col in q25_all.columns and model_key in q25_all.index:
+                v25 = q25_all[col].loc[model_key]
+                q25 = None if pd.isna(v25) else round(float(v25), 4)
+            if q75_all is not None and col in q75_all.columns and model_key in q75_all.index:
+                v75 = q75_all[col].loc[model_key]
+                q75 = None if pd.isna(v75) else round(float(v75), 4)
+            if q25 is not None or q75 is not None:
+                iqr[col] = {"q25": q25, "q75": q75}
         relative = {
             label: (
                 round(float(rel_all[label].loc[model_key]), 4)
@@ -279,6 +302,7 @@ def _records_from_medians(
                 "color": color,
                 "is_naive": is_naive,
                 "raw": raw,
+                "iqr": iqr,
                 "relative": relative,
                 "absolute": absolute,
             }
@@ -292,6 +316,8 @@ def _family_records(
     *,
     rel_all: pd.DataFrame | None = None,
     abs_all: pd.DataFrame | None = None,
+    q25_all: pd.DataFrame | None = None,
+    q75_all: pd.DataFrame | None = None,
 ) -> list[dict[str, Any]]:
     if rel_all is None:
         rel_all = relative_scores(medians.copy()) if not medians.empty else pd.DataFrame()
@@ -308,7 +334,9 @@ def _family_records(
         for family in FAMILY_ORDER
         if family in representatives
     ]
-    return _records_from_medians(medians, rel_all, entries, abs_all=abs_all)
+    return _records_from_medians(
+        medians, rel_all, entries, abs_all=abs_all, q25_all=q25_all, q75_all=q75_all
+    )
 
 
 def family_for_model(model: str) -> str | None:
@@ -526,9 +554,14 @@ def build_radar_slice(
     reps = pick_representatives(work, overrides=representatives)
     rep_models = list(reps.values())
     medians = median_model_metrics_across_countries(work, VIEW_METRICS, models=rep_models)
+    q25_all, q75_all = quantile_model_metrics_across_countries(
+        work, VIEW_METRICS, models=rep_models
+    )
     rel_all = relative_scores(medians.copy()) if not medians.empty else pd.DataFrame()
     abs_all = absolute_scores(medians.copy()) if not medians.empty else pd.DataFrame()
-    families = _family_records(medians, reps, rel_all=rel_all, abs_all=abs_all)
+    families = _family_records(
+        medians, reps, rel_all=rel_all, abs_all=abs_all, q25_all=q25_all, q75_all=q75_all
+    )
     return {
         "batch_horizon": batch_horizon,
         "crop": crop or "all",

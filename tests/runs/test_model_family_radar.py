@@ -16,6 +16,7 @@ from cybench.runs.analysis.model_family_radar_lib import (
     ai_error_reduction_pct,
     build_family_dataset_rows,
     build_radar_payload,
+    build_radar_slice,
     build_sample_scatter_slice,
     pick_representatives,
     relative_scores,
@@ -65,6 +66,22 @@ def test_pick_representatives_by_lowest_nrmse():
     assert reps["Process-Based"] == "lpjml_bc"
     assert reps["Feature-Engineered ML"] == "xgboost"
     assert reps["Naive baselines"] == "trend"
+
+
+def test_pick_representatives_uses_country_equal_median_not_pooled_rows():
+    """Countries with more crops must not dominate representative selection."""
+    df = pd.DataFrame(
+        [
+            _summary_row("lstm_lf", nrmse=0.22, country="US", crop="maize"),
+            _summary_row("lstm_lf", nrmse=0.22, country="US", crop="wheat"),
+            _summary_row("lstm_lf", nrmse=0.22, country="US", crop="soy"),
+            _summary_row("lstm_lf", nrmse=0.40, country="DE", crop="maize"),
+            _summary_row("tst_lf", nrmse=0.226, country="US", crop="maize"),
+            _summary_row("tst_lf", nrmse=0.226, country="DE", crop="maize"),
+        ]
+    )
+    reps = pick_representatives(df)
+    assert reps["Sequence / Deep TS"] == "tst_lf"
 
 
 def test_pick_representatives_prefers_override():
@@ -190,6 +207,24 @@ def test_build_family_dataset_rows_includes_all_view_metrics():
     assert len(rows) == 1
     assert rows[0]["dataset"] == "maize_DE"
     assert set(rows[0]["metrics"]) == {"nrmse", "r_spatial", "r_temporal", "r_res"}
+
+
+def test_build_radar_slice_includes_country_iqr():
+    df = pd.DataFrame(
+        [
+            _summary_row("lightgbm", nrmse=0.10, country="DE"),
+            _summary_row("lightgbm", nrmse=0.30, country="FR"),
+            _summary_row("lightgbm", nrmse=0.20, country="US"),
+        ]
+    )
+    radar = build_radar_slice(
+        df, batch_horizon="eos", representatives={"Feature-Engineered ML": "lightgbm"}
+    )
+    fam = radar["families"][0]
+    country_vals = pd.Series([0.10, 0.20, 0.30])
+    assert fam["raw"]["nrmse"] == pytest.approx(0.20)
+    assert fam["iqr"]["nrmse"]["q25"] == pytest.approx(float(country_vals.quantile(0.25)))
+    assert fam["iqr"]["nrmse"]["q75"] == pytest.approx(float(country_vals.quantile(0.75)))
 
 
 def test_build_radar_payload_structure(tmp_path: Path):
@@ -340,3 +375,5 @@ def test_build_radar_html_embeds_payload(tmp_path: Path):
     assert '"Feature-Engineered ML"' in html
     assert "data-mode=\"absolute\"" in html
     assert "data-mode=\"benefit\"" in html
+    assert 'id="map-export-svg"' in html
+    assert 'id="map-export-png"' in html

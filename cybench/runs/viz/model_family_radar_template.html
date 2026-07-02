@@ -188,6 +188,30 @@
       border: 1px solid var(--border);
       background: linear-gradient(to right, #d73027, #fee08b, #1a9850);
     }
+    .map-export-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-top: 0.35rem;
+    }
+    .map-export-toolbar button {
+      font: inherit;
+      font-size: 0.85rem;
+      padding: 0.35rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .map-export-toolbar button:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .map-export-toolbar button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
@@ -230,7 +254,7 @@
 
     <div class="card">
       <h2>Median across countries (family representatives)</h2>
-      <p class="muted">One value per country (median across crops when all crops are selected), then median across countries — same rule as the insights model×country Median column.</p>
+      <p class="muted">Per country: median across crops when all crops are selected. Summary: median [IQR] across countries — same point estimate as insights; IQR shows geographic spread.</p>
       <div class="table-scroll">
         <table id="metrics-table">
           <thead></thead>
@@ -259,6 +283,10 @@
       <p class="muted" id="map-mode-note">Colors show which model family wins in each country for the selected evaluation aspect.</p>
       <p class="muted" id="map-coverage-note"></p>
       <div class="world-map-wrap" id="winner-map-wrap"><p class="muted">Loading map…</p></div>
+      <div class="map-export-toolbar">
+        <button type="button" id="map-export-svg" disabled>Download map (SVG)</button>
+        <button type="button" id="map-export-png" disabled>Download map (PNG)</button>
+      </div>
       <div class="winner-legend" id="winner-legend"></div>
       <div class="benefit-legend" id="benefit-legend" style="display:none;">
         <span class="benefit-gradient" aria-hidden="true"></span>
@@ -292,6 +320,8 @@
     const benefitLegendLabel = document.getElementById("benefit-legend-label");
     const winnerSummary = document.getElementById("winner-summary");
     const mapCoverageNote = document.getElementById("map-coverage-note");
+    const mapExportSvgBtn = document.getElementById("map-export-svg");
+    const mapExportPngBtn = document.getElementById("map-export-png");
 
     const MAP_FILL_OUTSIDE = "#e8eaed";
     const MAP_FILL_NO_DATA = "#f5f5f5";
@@ -687,6 +717,14 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       scatterPanel.innerHTML = `${svg}<div class="scatter-legend">${legend}</div>`;
     }
 
+    function formatMetricWithIqr(fam, metric) {
+      const raw = fam.raw[metric];
+      if (raw == null) return "—";
+      const band = (fam.iqr || {})[metric];
+      if (!band || band.q25 == null || band.q75 == null) return Number(raw).toFixed(3);
+      return `${Number(raw).toFixed(3)} [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
+    }
+
     function renderTable(families) {
       const viewHeaders = DATA.views.map(v => `${v.label} (${v.display || v.metric})`);
       const headers = ["Family", "Representative", ...viewHeaders];
@@ -694,10 +732,7 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
         `<tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
 
       metricsTable.querySelector("tbody").innerHTML = families.map(fam => {
-        const cells = DATA.views.map(v => {
-          const raw = fam.raw[v.metric];
-          return raw == null ? "—" : raw.toFixed(3);
-        });
+        const cells = DATA.views.map(v => formatMetricWithIqr(fam, v.metric));
         return `<tr>
           <td>${fam.family}</td>
           <td>${fam.display_name}</td>
@@ -879,15 +914,154 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       winnerSummary.textContent = summary;
     }
 
+    function setMapExportEnabled(enabled) {
+      if (mapExportSvgBtn) mapExportSvgBtn.disabled = !enabled;
+      if (mapExportPngBtn) mapExportPngBtn.disabled = !enabled;
+    }
+
+    function escapeXml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function mapExportMeta() {
+      const hz = horizonSelect.value;
+      const crop = cropSelect.value;
+      const hzLabel = horizonLabels[hz] || hz;
+      const cropLabel = crop === "all" ? "all crops" : crop;
+      const modeLabel = mapMode === "benefit"
+        ? "AI error reduction vs naive baselines / LPJmL"
+        : `Winning family · ${winnerAspect}`;
+      return { hz, crop, hzLabel, cropLabel, modeLabel };
+    }
+
+    function mapExportFilename(ext) {
+      const { hz, crop } = mapExportMeta();
+      const modeSlug = mapMode === "benefit"
+        ? "ai-benefit"
+        : `winner-${winnerAspect.toLowerCase().replace(/\s+/g, "-")}`;
+      return `cybench-map_${hz}_${crop}_${modeSlug}.${ext}`;
+    }
+
+    function buildWinnerLegendSvg(yBase) {
+      const items = winnerLegend.querySelectorAll("span");
+      if (!items.length) return "";
+      let x = 24;
+      let out = "";
+      items.forEach(span => {
+        const swatch = span.querySelector(".swatch");
+        const color = swatch ? (swatch.style.background || "#999") : "#999";
+        const text = span.textContent.trim();
+        out += `<rect x="${x}" y="${yBase}" width="12" height="12" fill="${color}" rx="2"/>`;
+        out += `<text x="${x + 16}" y="${yBase + 10}" font-size="12" font-family="system-ui,sans-serif" fill="#1f2328">${escapeXml(text)}</text>`;
+        x += Math.min(220, Math.max(72, text.length * 6.5 + 28));
+      });
+      return out;
+    }
+
+    function buildBenefitLegendSvg(yBase) {
+      const label = benefitLegendLabel ? benefitLegendLabel.textContent : "";
+      return `
+        <defs>
+          <linearGradient id="export-benefit-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#d73027"/>
+            <stop offset="50%" stop-color="#fee08b"/>
+            <stop offset="100%" stop-color="#1a9850"/>
+          </linearGradient>
+        </defs>
+        <rect x="24" y="${yBase}" width="200" height="14" fill="url(#export-benefit-grad)" stroke="#d8dee4"/>
+        <text x="232" y="${yBase + 11}" font-size="12" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(label)}</text>
+        <text x="24" y="${yBase + 30}" font-size="11" font-family="system-ui,sans-serif" fill="#656d76">red = traditional better · green = AI better</text>`;
+    }
+
+    function buildMapExportSvgString() {
+      const mapNode = winnerMapWrap.querySelector("svg");
+      if (!mapNode || !worldFeatures) return null;
+      const { hzLabel, cropLabel, modeLabel } = mapExportMeta();
+      const padT = 48;
+      const padB = 72;
+      const totalH = MAP_HEIGHT + padT + padB;
+      const legendY = padT + MAP_HEIGHT + 16;
+      const legendSvg = mapMode === "benefit"
+        ? buildBenefitLegendSvg(legendY)
+        : buildWinnerLegendSvg(legendY);
+      const mapContent = mapNode.innerHTML;
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${totalH}" width="${MAP_WIDTH}" height="${totalH}">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <text x="24" y="28" font-size="16" font-weight="600" font-family="system-ui,sans-serif" fill="#1f2328">${escapeXml(`CY-Bench model families · ${hzLabel} · ${cropLabel}`)}</text>
+  <text x="24" y="44" font-size="12" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(modeLabel)}</text>
+  <svg x="0" y="${padT}" width="${MAP_WIDTH}" height="${MAP_HEIGHT}" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}">
+    ${mapContent}
+  </svg>
+  ${legendSvg}
+</svg>`;
+    }
+
+    function triggerBlobDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    function downloadMapSvg() {
+      const svg = buildMapExportSvgString();
+      if (!svg) return;
+      triggerBlobDownload(
+        new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
+        mapExportFilename("svg"),
+      );
+    }
+
+    function downloadMapPng() {
+      const svg = buildMapExportSvgString();
+      if (!svg) return;
+      const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+      const img = new Image();
+      const padT = 48;
+      const padB = 72;
+      const totalH = MAP_HEIGHT + padT + padB;
+      const scale = 2;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = MAP_WIDTH * scale;
+        canvas.height = totalH * scale;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(blob => {
+          URL.revokeObjectURL(url);
+          if (blob) triggerBlobDownload(blob, mapExportFilename("png"));
+        }, "image/png");
+      };
+      img.onerror = () => URL.revokeObjectURL(url);
+      img.src = url;
+    }
+
+    if (mapExportSvgBtn) mapExportSvgBtn.addEventListener("click", downloadMapSvg);
+    if (mapExportPngBtn) mapExportPngBtn.addEventListener("click", downloadMapPng);
+
     function loadWinnerMapGeometry() {
       if (!DATA.geojson_href) {
+        setMapExportEnabled(false);
         winnerMapWrap.innerHTML = '<p class="muted">Map geometry not available.</p>';
         return;
       }
       d3.json(DATA.geojson_href).then(geo => {
         worldFeatures = geo.features || [];
+        setMapExportEnabled(true);
         renderWorldMap();
       }).catch(err => {
+        setMapExportEnabled(false);
         winnerMapWrap.innerHTML = `<p class="muted">Could not load map (${err}).</p>`;
       });
     }

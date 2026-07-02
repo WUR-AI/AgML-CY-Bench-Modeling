@@ -18,6 +18,7 @@ from cybench.runs.analysis.global_insights_lib import (
     is_baseline_model,
     load_summary_frame,
     median_model_metrics_across_countries,
+    quantile_model_metrics_across_countries,
     parse_paper_dir_name,
 )
 
@@ -445,5 +446,29 @@ def test_median_model_metrics_matches_insights_matrix():
     )
     trend = next(f for f in radar["families"] if f["model"] == "trend")
     assert trend["raw"]["r_spatial"] == insights_spatial
+    country_vals = pd.Series([0.70, 0.71])
+    assert trend["iqr"]["r_spatial"]["q25"] == pytest.approx(
+        float(country_vals.quantile(0.25)), abs=0.001
+    )
+    assert trend["iqr"]["r_spatial"]["q75"] == pytest.approx(
+        float(country_vals.quantile(0.75)), abs=0.001
+    )
     # DE=0.70, US=0.71 -> 0.705; pooled row median would be 0.71
     assert insights_spatial == pytest.approx(0.705, abs=0.001)
+
+
+def test_quantile_model_metrics_across_countries():
+    df = pd.DataFrame(
+        [
+            {"model": "m", "country": "DE", "crop": "maize", "nrmse": 0.10},
+            {"model": "m", "country": "DE", "crop": "wheat", "nrmse": 0.30},
+            {"model": "m", "country": "US", "crop": "maize", "nrmse": 0.20},
+            {"model": "m", "country": "FR", "crop": "maize", "nrmse": 0.40},
+        ]
+    )
+    medians = median_model_metrics_across_countries(df, ["nrmse"], models=["m"])
+    q25, q75 = quantile_model_metrics_across_countries(df, ["nrmse"], models=["m"])
+    country_vals = pd.Series([0.20, 0.20, 0.40])
+    assert medians.loc["m", "nrmse"] == pytest.approx(0.20)
+    assert q25.loc["m", "nrmse"] == pytest.approx(float(country_vals.quantile(0.25)))
+    assert q75.loc["m", "nrmse"] == pytest.approx(float(country_vals.quantile(0.75)))

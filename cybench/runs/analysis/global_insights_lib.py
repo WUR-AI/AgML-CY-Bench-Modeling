@@ -167,6 +167,21 @@ def _median_in_group(grp: pd.DataFrame, column: str) -> float | None:
     return float(vals.median())
 
 
+def _country_values_for_model(model_grp: pd.DataFrame, metric: str) -> list[float]:
+    """Per-country values: median within country (across crops when crop=all)."""
+    country_vals: list[float] = []
+    if "country" in model_grp.columns:
+        for _, country_grp in model_grp.groupby("country", sort=True):
+            val = _median_in_group(country_grp, metric)
+            if val is not None:
+                country_vals.append(val)
+    else:
+        val = _median_in_group(model_grp, metric)
+        if val is not None:
+            country_vals.append(val)
+    return country_vals
+
+
 def median_model_metrics_across_countries(
     work: pd.DataFrame,
     metrics: tuple[str, ...] | list[str],
@@ -193,21 +208,55 @@ def median_model_metrics_across_countries(
     for model, model_grp in frame.groupby("model", sort=True):
         row: dict[str, float] = {}
         for metric in present:
-            country_vals: list[float] = []
-            if "country" in model_grp.columns:
-                for _, country_grp in model_grp.groupby("country", sort=True):
-                    val = _median_in_group(country_grp, metric)
-                    if val is not None:
-                        country_vals.append(val)
-            else:
-                val = _median_in_group(model_grp, metric)
-                if val is not None:
-                    country_vals.append(val)
+            country_vals = _country_values_for_model(model_grp, metric)
             row[metric] = (
                 float(pd.Series(country_vals).median()) if country_vals else float("nan")
             )
         rows[str(model)] = row
     return pd.DataFrame.from_dict(rows, orient="index")
+
+
+def quantile_model_metrics_across_countries(
+    work: pd.DataFrame,
+    metrics: tuple[str, ...] | list[str],
+    *,
+    models: list[str] | None = None,
+    low_q: float = 0.25,
+    high_q: float = 0.75,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Per-model Q25/Q75 across per-country values (same country rule as median)."""
+    empty = pd.DataFrame()
+    if work.empty or "model" not in work.columns:
+        return empty, empty
+    frame = work
+    if models:
+        frame = frame[frame["model"].isin(models)]
+    if frame.empty:
+        return empty, empty
+    present = [m for m in metrics if m in frame.columns]
+    if not present:
+        return empty, empty
+
+    q25_rows: dict[str, dict[str, float]] = {}
+    q75_rows: dict[str, dict[str, float]] = {}
+    for model, model_grp in frame.groupby("model", sort=True):
+        row25: dict[str, float] = {}
+        row75: dict[str, float] = {}
+        for metric in present:
+            country_vals = _country_values_for_model(model_grp, metric)
+            if country_vals:
+                series = pd.Series(country_vals, dtype=float)
+                row25[metric] = float(series.quantile(low_q))
+                row75[metric] = float(series.quantile(high_q))
+            else:
+                row25[metric] = float("nan")
+                row75[metric] = float("nan")
+        q25_rows[str(model)] = row25
+        q75_rows[str(model)] = row75
+    return (
+        pd.DataFrame.from_dict(q25_rows, orient="index"),
+        pd.DataFrame.from_dict(q75_rows, orient="index"),
+    )
 
 
 def _axis_metrics_for_group(grp: pd.DataFrame) -> dict[str, dict[str, float | None]]:
