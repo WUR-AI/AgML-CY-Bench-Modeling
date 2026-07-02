@@ -220,7 +220,7 @@
       </div>
       <p class="muted" style="margin-top:0;" id="matrix-metric-note">
         Median column = median across countries per model (click column headers to sort). Green = better.
-        Pattern axes (spatial, temporal) show Pearson r; anomaly shows pooled residual R²; overall shows R²/NRMSE.
+        Pattern axes (spatial, temporal, anomaly) show Pearson r; overall shows R²/NRMSE.
         Country cells link to the matching country dashboard with that model pre-selected.
       </p>
       <div class="table-scroll" id="model-country-wrap"></div>
@@ -378,7 +378,7 @@
       },
       { id: "spatial", label: "Spatial", note: "Median per-year r across regions (typical-year slice).", metrics: [{ id: "r", label: "r", higher_better: true }] },
       { id: "temporal", label: "Temporal", note: "Median per-region r across years (typical-region slice).", metrics: [{ id: "r", label: "r", higher_better: true }] },
-      { id: "anomaly", label: "Anomaly", note: "Pooled residual R² on location-demeaned yields.", metrics: [{ id: "r2", label: "R²", higher_better: true }] },
+      { id: "anomaly", label: "Anomaly", note: "Pooled Pearson r on location-demeaned yields (r_res).", metrics: [{ id: "r", label: "r", higher_better: true }] },
     ];
 
     function syncCropSelects(value) {

@@ -241,7 +241,7 @@ def test_summary_rows_to_dashboard_records(tmp_path: Path):
     assert sp_agg["value"] == 0.12
     tm_agg = next(r for r in records if r["view"] == "temporal" and r["metric"] == "r_agg")
     assert tm_agg["value"] == 0.48
-    an_pool = next(r for r in records if r["view"] == "anomaly" and r["metric"] == "r_pooled")
+    an_pool = next(r for r in records if r["view"] == "anomaly" and r["metric"] == "r")
     assert an_pool["value"] == 0.05
     scatter_recs = [r for r in records if r.get("images", {}).get("scatter")]
     assert scatter_recs

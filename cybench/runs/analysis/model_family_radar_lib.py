@@ -39,9 +39,9 @@ EVALUATION_VIEWS: tuple[dict[str, Any], ...] = (
     },
     {
         "label": "Anomaly",
-        "metric": "r2_res",
-        "display": "R²",
-        "question": "How much interannual anomaly variance is explained after removing regional means (pooled residual R²)?",
+        "metric": "r_res",
+        "display": "r",
+        "question": "Across all regions and years, do anomalous years line up (pooled Pearson r on location-demeaned yields)?",
     },
 )
 
@@ -86,13 +86,13 @@ RADAR_ABSOLUTE_SCALES: dict[str, dict[str, Any]] = {
     "nrmse": {"lo": 0.1, "hi": 0.30, "higher_better": False, "display": "NRMSE"},
     "r_spatial": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "r"},
     "r_temporal": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "r"},
-    "r2_res": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "R²"},
+    "r_res": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "r"},
 }
 
 RADAR_ABSOLUTE_NOTE = (
     "Absolute: fixed scales per axis — NRMSE 0.10 (outer, best) to 0.30 (center, worst); "
-    "Pearson r axes and Anomaly R²: 0 (center) to 1 (outer). Values outside the range are clamped; "
-    "negative values are shown at 0 on the radar."
+    "Pearson r axes 0 (center) to 1 (outer). Values outside the range are clamped; "
+    "negative r is shown at 0."
 )
 
 MODEL_DISPLAY_NAMES: dict[str, str] = {
