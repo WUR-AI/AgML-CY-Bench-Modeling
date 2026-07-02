@@ -262,7 +262,7 @@
       <div class="benefit-legend" id="benefit-legend" style="display:none;">
         <span class="benefit-gradient" aria-hidden="true"></span>
         <span id="benefit-legend-label">−40% · 0% · +40%</span>
-        <span class="muted">red = traditional better · yellow = little gain · green = AI better</span>
+        <span class="muted">red = traditional better · yellow = little gain · green = AI better · outliers saturated</span>
       </div>
       <p class="muted winner-summary" id="winner-summary"></p>
     </div>
@@ -705,18 +705,36 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       return out;
     }
 
+    function percentileSorted(sorted, p) {
+      if (!sorted.length) return 0;
+      const idx = (sorted.length - 1) * p;
+      const lo = Math.floor(idx);
+      const hi = Math.ceil(idx);
+      if (lo === hi) return sorted[lo];
+      return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+    }
+
+    /** Symmetric color scale around 0%; ignores the largest |value| outlier when n≥4. */
     function benefitExtent(vals) {
-      if (!vals.length) return 40;
-      const neg = Math.abs(Math.min(0, ...vals));
-      const pos = Math.max(0, ...vals);
-      const raw = Math.max(neg, pos, 10);
-      return Math.ceil(raw / 5) * 5;
+      const DEFAULT = 40;
+      const MIN = 15;
+      const MAX = 40;
+      if (!vals.length) return DEFAULT;
+      const absSorted = vals.map(v => Math.abs(v)).sort((a, b) => a - b);
+      const trimmed = absSorted.length >= 4 ? absSorted.slice(0, -1) : absSorted;
+      const p85 = percentileSorted(trimmed, 0.85);
+      const rounded = Math.ceil(Math.max(p85, 10) / 5) * 5;
+      return Math.min(MAX, Math.max(MIN, rounded));
     }
 
     function benefitColor(pct, extent) {
       const clamped = Math.max(-extent, Math.min(extent, pct));
       const t = (clamped + extent) / (2 * extent);
       return d3.interpolateRdYlGn(t);
+    }
+
+    function benefitOffScale(pct, extent) {
+      return pct != null && Math.abs(pct) > extent + 1e-9;
     }
 
     function renderWorldMap() {
@@ -744,7 +762,9 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
           const rec = winners.get(d.properties.ISO_A2);
           if (!rec) return "#f0f0f0";
           return colors[rec.winner_family] || "#999";
-        });
+        })
+        .attr("stroke", null)
+        .attr("stroke-width", null);
 
       countriesSel.selectAll("title")
         .data(d => [d])
@@ -771,6 +791,7 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       const byCountry = new Map(rows.map(r => [r.map_cc || r.country, r]));
       const vals = rows.map(r => r.benefit_pct).filter(v => v != null);
       const extent = benefitExtent(vals);
+      const nOffScale = rows.filter(r => benefitOffScale(r.benefit_pct, extent)).length;
       benefitLegendLabel.textContent = `−${extent}% · 0% · +${extent}%`;
 
       const countriesSel = mapSvg.selectAll("path.country")
@@ -782,6 +803,15 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
           const rec = byCountry.get(d.properties.ISO_A2);
           if (!rec || rec.benefit_pct == null) return "#f0f0f0";
           return benefitColor(rec.benefit_pct, extent);
+        })
+        .attr("stroke", d => {
+          const rec = byCountry.get(d.properties.ISO_A2);
+          if (!rec || !benefitOffScale(rec.benefit_pct, extent)) return null;
+          return "#1f2328";
+        })
+        .attr("stroke-width", d => {
+          const rec = byCountry.get(d.properties.ISO_A2);
+          return rec && benefitOffScale(rec.benefit_pct, extent) ? 1.1 : null;
         });
 
       countriesSel.selectAll("title")
@@ -790,7 +820,10 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
         .text(d => {
           const rec = byCountry.get(d.properties.ISO_A2);
           if (!rec) return `${d.properties.NAME || d.properties.ISO_A2}: no data`;
-          return `${rec.country}: ${rec.benefit_pct.toFixed(1)}% error reduction\n`
+          const offScale = benefitOffScale(rec.benefit_pct, extent)
+            ? ` (color saturated; scale ±${extent}%)`
+            : "";
+          return `${rec.country}: ${rec.benefit_pct.toFixed(1)}% error reduction${offScale}\n`
             + `Traditional (${rec.traditional_family} · ${rec.traditional_model}) NRMSE=${rec.nrmse_traditional.toFixed(3)}\n`
             + `AI (${rec.ai_family} · ${rec.ai_model}) NRMSE=${rec.nrmse_ai.toFixed(3)}`;
         });
@@ -801,9 +834,14 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       }
       const medianBenefit = d3.median(vals);
       const nPositive = rows.filter(r => r.benefit_pct > 0).length;
-      winnerSummary.textContent =
+      let summary =
         `Median error reduction ${medianBenefit == null ? "—" : medianBenefit.toFixed(1)}% across `
-        + `${rows.length} countries (${nPositive} with AI better than traditional).`;
+        + `${rows.length} countries (${nPositive} with AI better than traditional). `
+        + `Color scale ±${extent}% (85th percentile, largest outlier excluded).`;
+      if (nOffScale) {
+        summary += ` ${nOffScale} countr${nOffScale === 1 ? "y" : "ies"} beyond scale (dark border).`;
+      }
+      winnerSummary.textContent = summary;
     }
 
     function loadWinnerMapGeometry() {
