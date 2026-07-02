@@ -397,7 +397,7 @@ def summary_rows_to_dashboard_records(
         ("spatial", "r_agg", "r_spatial_agg"),
         ("temporal", "r", "r_temporal"),
         ("temporal", "r_agg", "r_temporal_agg"),
-        ("anomaly", "r", "r_anomaly"),
+        ("anomaly", "r2", "r2_res"),
         ("anomaly", "r_pooled", "r_res"),
     ]
     records: list[dict[str, Any]] = []

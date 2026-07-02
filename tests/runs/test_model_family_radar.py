@@ -116,8 +116,7 @@ def test_relative_scores_span_unit_interval():
             "nrmse": [0.2, 0.8],
             "r_spatial": [0.1, 0.9],
             "r_temporal": [0.3, 0.7],
-            "r_res": [0.0, 1.0],
-            "r_anomaly": [0.0, 1.0],
+            "r2_res": [0.0, 1.0],
         }
     )
     rel = relative_scores(raw)
@@ -133,8 +132,7 @@ def test_absolute_scores_use_fixed_scales():
             "nrmse": [0.1, 0.2, 0.30],
             "r_spatial": [-0.2, 0.5, 1.0],
             "r_temporal": [0.0, 0.5, 1.0],
-            "r_res": [0.25, 0.5, 0.75],
-            "r_anomaly": [0.25, 0.5, 0.75],
+            "r2_res": [0.25, 0.5, 0.75],
         }
     )
     abs_scores = absolute_scores(raw)
@@ -150,8 +148,7 @@ def test_absolute_scores_clamps_out_of_range_nrmse():
             "nrmse": [0.05, 0.40],
             "r_spatial": [0.5, 0.5],
             "r_temporal": [0.5, 0.5],
-            "r_res": [0.5, 0.5],
-            "r_anomaly": [0.5, 0.5],
+            "r2_res": [0.5, 0.5],
         }
     )
     abs_scores = absolute_scores(raw)
@@ -192,7 +189,7 @@ def test_build_family_dataset_rows_includes_all_view_metrics():
     rows = build_family_dataset_rows(df, reps)
     assert len(rows) == 1
     assert rows[0]["dataset"] == "maize_DE"
-    assert set(rows[0]["metrics"]) == {"nrmse", "r_spatial", "r_temporal", "r_anomaly"}
+    assert set(rows[0]["metrics"]) == {"nrmse", "r_spatial", "r_temporal", "r2_res"}
 
 
 def test_build_radar_payload_structure(tmp_path: Path):
@@ -208,32 +205,32 @@ def test_build_radar_payload_structure(tmp_path: Path):
                     nrmse=0.22,
                     r_spatial=0.62,
                     r_temporal=0.33,
+                    r2_res=0.12,
                     r_res=0.2,
-                    r_anomaly=0.2,
                 ),
                 _summary_row(
                     "lightgbm",
                     nrmse=0.15,
                     r_spatial=0.74,
                     r_temporal=0.1,
+                    r2_res=0.28,
                     r_res=0.5,
-                    r_anomaly=0.5,
                 ),
                 _summary_row(
                     "transformer_lf",
                     nrmse=0.17,
                     r_spatial=0.73,
                     r_temporal=0.21,
+                    r2_res=0.18,
                     r_res=0.4,
-                    r_anomaly=0.4,
                 ),
                 _summary_row(
                     "tabpfn",
                     nrmse=0.16,
                     r_spatial=0.77,
                     r_temporal=0.31,
+                    r2_res=0.22,
                     r_res=0.45,
-                    r_anomaly=0.45,
                 ),
             ]
         ).to_csv(d / "walk_forward_summary.csv", index=False)

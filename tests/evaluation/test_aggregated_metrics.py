@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from cybench.config import KEY_LOC, KEY_TARGET, KEY_YEAR
 from cybench.evaluation.aggregated_metrics import (
@@ -86,6 +87,40 @@ def test_compute_report_metrics_views():
     assert np.isfinite(out["anomaly"]["r2_typical_region"])
     assert np.isfinite(out["spatial"]["r2_aggregate"])
     assert np.isfinite(out["temporal"]["r2_aggregate"])
+
+
+def test_pooled_residual_r2_differs_from_temporal_slice_r():
+    rng = np.random.default_rng(1)
+    rows = []
+    for loc in range(6):
+        for year in range(8):
+            base = loc * 1.5 + year * 0.2
+            y = 4 + base + rng.normal(0, 0.4)
+            yhat = 4 + base * 0.7 + year * 0.1 + rng.normal(0, 0.5)
+            rows.append({KEY_LOC: f"L{loc}", KEY_YEAR: 2000 + year, KEY_TARGET: y, "model": yhat})
+    df = pd.DataFrame(rows)
+    out = compute_report_metrics(df, KEY_TARGET, "model")
+    assert out["temporal"]["r_typical_region"] == pytest.approx(out["anomaly"]["r_typical_region"])
+    assert out["region_year"]["r2_res"] != pytest.approx(out["temporal"]["r2_typical_region"])
+
+
+def test_temporal_slice_r_equals_anomaly_slice_r():
+    """Pearson r is invariant when the same location mean is subtracted from y and ŷ."""
+    rng = np.random.default_rng(0)
+    rows = []
+    for loc in range(6):
+        for year in range(8):
+            base = loc * 1.5 + year * 0.2
+            y = 4 + base + rng.normal(0, 0.4)
+            yhat = 4 + base * 0.7 + year * 0.1 + rng.normal(0, 0.5)
+            rows.append({KEY_LOC: f"L{loc}", KEY_YEAR: 2000 + year, KEY_TARGET: y, "model": yhat})
+    df = pd.DataFrame(rows)
+    out = compute_report_metrics(df, KEY_TARGET, "model")
+    temporal_r = out["temporal"]["r_typical_region"]
+    anomaly_r = out["anomaly"]["r_typical_region"]
+    pooled_r = out["anomaly"]["r_pooled"]
+    assert temporal_r == pytest.approx(anomaly_r)
+    assert pooled_r != pytest.approx(temporal_r)
 
 
 def test_compute_report_metrics_ignores_nan_predictions():

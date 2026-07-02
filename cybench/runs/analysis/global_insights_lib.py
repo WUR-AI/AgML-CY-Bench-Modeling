@@ -44,9 +44,11 @@ MODEL_COUNTRY_AXES: tuple[dict[str, Any], ...] = (
     {
         "id": "anomaly",
         "label": "Anomaly",
-        "note": "Median per-region Pearson r on test-period de-meaned yields (typical-region slice).",
+        "note": "Pooled residual R² on location-demeaned yields (variance explained in anomalies). "
+        "Spatial and temporal axes use Pearson r because they assess pattern agreement; "
+        "anomaly uses R² because the objective is explained anomaly variance, not ranking alone.",
         "metrics": (
-            {"id": "r", "column": "r_anomaly", "label": "r", "higher_better": True},
+            {"id": "r2", "column": "r2_res", "label": "R²", "higher_better": True},
         ),
     },
 )
@@ -69,6 +71,7 @@ _NUMERIC_SUMMARY_COLS = (
     "r2_anomaly",
     "r_anomaly",
     "r2_res",
+    "r_res",
 )
 
 

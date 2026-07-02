@@ -269,6 +269,8 @@ def compute_report_metrics(
       - spatial: median per-year cross-region R²; regional-mean map r/R² (agg across years)
       - temporal: median per-region cross-year R²; mean-across-regions series r/R²
       - anomaly: typical-region R² on residuals; pooled anomaly r/R²
+        (slice median r on residuals equals temporal slice r — Pearson r is
+        invariant when the same location mean is subtracted from true and pred)
 
     Slice medians require at least MIN_SLICE_REGIONS / MIN_SLICE_YEARS points per
     slice. Aggregate metrics pool all region-years first and only need two aggregate
