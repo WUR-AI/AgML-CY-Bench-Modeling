@@ -775,12 +775,22 @@ def build_radar_payload(
         by_horizon[hz] = by_crop
 
     crops = sorted({str(c) for c in df["crop"].dropna().unique()}) if "crop" in df.columns else []
+    benchmark_map_isos = (
+        sorted({map_iso_for_cybencH(str(c)) for c in df["country"].dropna().unique()})
+        if "country" in df.columns
+        else []
+    )
     return {
         "output_root": str(output_root.resolve()),
         "n_summary_files": len(paths),
         "n_rows": int(len(df)),
         "n_countries": int(df["country"].nunique()) if "country" in df.columns else 0,
         "countries": sorted(df["country"].unique()) if "country" in df.columns else [],
+        "benchmark_map_isos": benchmark_map_isos,
+        "map_coverage_note": (
+            "Only CY-Bench countries are colored; all other land is neutral gray. "
+            "ISO country polygons are used as-is (e.g. the United States outline includes Alaska)."
+        ),
         "crops": crops,
         "views": list(EVALUATION_VIEWS),
         "family_catalog": {

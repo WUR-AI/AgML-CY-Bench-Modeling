@@ -258,6 +258,8 @@ def test_build_radar_payload_structure(tmp_path: Path):
     assert RADAR_ABSOLUTE_NOTE in payload["absolute_note"]
     assert payload["radar_scales"]["absolute"]["Overall"]["lo"] == 0.1
     assert "sample_scatter" in payload
+    assert "benchmark_map_isos" in payload
+    assert "DE" in payload["benchmark_map_isos"]
     assert "winner_maps" in payload
     assert "ai_benefit_maps" in payload
     assert "all" in payload["winner_maps"]["eos"]
