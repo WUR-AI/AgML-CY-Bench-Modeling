@@ -377,3 +377,6 @@ def test_build_radar_html_embeds_payload(tmp_path: Path):
     assert "data-mode=\"benefit\"" in html
     assert 'id="map-export-svg"' in html
     assert 'id="map-export-png"' in html
+    assert 'id="table-export-latex"' in html
+    assert "buildMetricsTableLatex" in html
+    assert "booktabs" in html

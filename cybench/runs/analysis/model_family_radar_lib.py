@@ -822,7 +822,8 @@ def build_radar_payload(
         "benchmark_map_isos": benchmark_map_isos,
         "map_coverage_note": (
             "Only CY-Bench countries are colored; all other land is neutral gray. "
-            "ISO country polygons are used as-is (e.g. the United States outline includes Alaska)."
+            "ISO country polygons are used as-is (e.g. the United States outline includes Alaska). "
+            "France is metropolitan only (French Guiana is not colored)."
         ),
         "crops": crops,
         "views": list(EVALUATION_VIEWS),

@@ -64,6 +64,20 @@ def test_export_world_geojson_includes_france(tmp_path: Path):
     text = dest.read_text(encoding="utf-8")
     assert '"ISO_A2": "FR"' in text or '"ISO_A2":"FR"' in text
 
+    import geopandas as gpd
+
+    world = gpd.read_file(dest)
+    fr = world[world["ISO_A2"] == "FR"]
+    assert not fr.empty
+    for _, row in fr.iterrows():
+        c = row.geometry.centroid
+        assert c.y > 30, f"FR polygon should be metropolitan Europe, got lat={c.y}"
+        assert c.x > -15, f"FR polygon should not be in South America, got lon={c.x}"
+    # French Guiana should be detached from FR (neutral gray on the map).
+    overseas = world[world["ISO_A2"] == "XX"]
+    assert not overseas.empty
+    assert any(row.geometry.centroid.x < -30 for _, row in overseas.iterrows())
+
 
 def test_build_index_map_payload(tmp_path: Path):
     (tmp_path / "insights.html").write_text("<html></html>", encoding="utf-8")

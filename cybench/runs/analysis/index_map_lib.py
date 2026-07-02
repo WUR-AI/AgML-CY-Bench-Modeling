@@ -22,6 +22,40 @@ _CYBENCH_TO_MAP_ISO: dict[str, str] = {
     "EL": "GR",
 }
 
+# Natural Earth admin-0 polygons sometimes include overseas departments under the
+# parent ISO (e.g. French Guiana under FR). CY-Bench countries are metropolitan;
+# clip to these WGS84 bounding boxes (min_lon, min_lat, max_lon, max_lat).
+_METROPOLITAN_BBOX_WGS84: dict[str, tuple[float, float, float, float]] = {
+    "FR": (-5.5, 41.0, 10.0, 51.5),
+}
+_OVERSEAS_MAP_ISO = "XX"
+
+
+def _explode_metropolitan_map_units(frame: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Explode multipolygons; re-tag overseas parts so they are not benchmark-colored."""
+    if frame.empty:
+        return frame
+    exploded = frame.explode(index_parts=True).reset_index(drop=True)
+    if not _METROPOLITAN_BBOX_WGS84:
+        return exploded
+
+    iso = exploded["ISO_A2"].astype(str)
+    centroids = exploded.geometry.representative_point()
+    for map_iso, (min_lon, min_lat, max_lon, max_lat) in _METROPOLITAN_BBOX_WGS84.items():
+        parent = iso == map_iso
+        if not parent.any():
+            continue
+        inside = (
+            (centroids.x >= min_lon)
+            & (centroids.x <= max_lon)
+            & (centroids.y >= min_lat)
+            & (centroids.y <= max_lat)
+        )
+        overseas = parent & ~inside
+        if overseas.any():
+            exploded.loc[overseas, "ISO_A2"] = _OVERSEAS_MAP_ISO
+    return exploded
+
 
 def map_iso_for_cybencH(cc: str) -> str:
     key = cc.upper()
@@ -124,6 +158,7 @@ def export_world_geojson(dest: Path, *, simplify: float = 0.08) -> Path:
     keep["ISO_A2"] = iso
     keep = keep[keep["ISO_A2"].notna() & (keep["ISO_A2"] != "-99") & (keep["ISO_A2"] != "nan")]
     keep["geometry"] = keep.geometry.simplify(simplify, preserve_topology=True)
+    keep = _explode_metropolitan_map_units(keep)
     dest.parent.mkdir(parents=True, exist_ok=True)
     keep.to_file(dest, driver="GeoJSON")
     return dest
