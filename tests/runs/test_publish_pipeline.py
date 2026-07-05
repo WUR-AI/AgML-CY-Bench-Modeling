@@ -135,6 +135,22 @@ def test_filter_publish_targets_by_version(tmp_path: Path):
     assert filtered[0].batch_name == "baselines_DE_eos_v2"
 
 
+def test_filter_publish_targets_keeps_latest_version_by_default(tmp_path: Path):
+    targets = [
+        PublishTarget(country="DE", batch_horizon="eos", version=1, output_root=tmp_path),
+        PublishTarget(country="DE", batch_horizon="eos", version=2, output_root=tmp_path),
+        PublishTarget(country="DE", batch_horizon="mid", version=1, output_root=tmp_path),
+        PublishTarget(country="DE", batch_horizon="mid", version=2, output_root=tmp_path),
+    ]
+    filtered = filter_publish_targets(targets, keep_latest_version=True)
+    assert {t.batch_name for t in filtered} == {
+        "baselines_DE_eos_v2",
+        "baselines_DE_mid_v2",
+    }
+    all_versions = filter_publish_targets(targets, keep_latest_version=False)
+    assert len(all_versions) == 4
+
+
 def test_discover_baselines_batches_from_monolithic(tmp_path: Path):
     import pandas as pd
 

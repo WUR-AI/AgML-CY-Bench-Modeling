@@ -479,8 +479,14 @@ def filter_publish_targets(
     countries: list[str] | None = None,
     horizons: list[str] | None = None,
     version: int | None = None,
+    keep_latest_version: bool = True,
 ) -> list[PublishTarget]:
-    """Narrow targets by country, horizon (eos|mid|qtr), and optional batch version."""
+    """Narrow targets by country, horizon (eos|mid|qtr), and optional batch version.
+
+    When ``version`` is omitted and ``keep_latest_version`` is true (default), only the
+    highest ``vN`` per (country, horizon) is kept — avoids publishing duplicate v1+v2
+    bundles that blow the GitHub Pages 1 GB artifact limit.
+    """
     if countries:
         wanted = {c.upper() for c in countries}
         targets = [t for t in targets if t.country_upper in wanted]
@@ -489,6 +495,17 @@ def filter_publish_targets(
         targets = [t for t in targets if t.batch_horizon in wanted_hz]
     if version is not None:
         targets = [t for t in targets if t.version == version]
+    elif keep_latest_version:
+        latest: dict[tuple[str, str], PublishTarget] = {}
+        for target in targets:
+            key = (target.country_upper, target.batch_horizon)
+            prev = latest.get(key)
+            if prev is None or target.version > prev.version:
+                latest[key] = target
+        targets = sorted(
+            latest.values(),
+            key=lambda t: (t.country_upper, t.batch_horizon, t.version),
+        )
     return targets
 
 

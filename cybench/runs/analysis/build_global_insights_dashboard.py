@@ -2,7 +2,7 @@
 """Build a cross-country insights dashboard from collected walk-forward summaries.
 
 Scans ``paper_walk_forward_*`` directories under an output root and writes
-``insights.html`` for GitHub Pages (model leaderboard + eos vs mid-season).
+``insights.html`` for GitHub Pages (model leaderboard, horizon skill curves, eos vs mid-season).
 
 Example::
 

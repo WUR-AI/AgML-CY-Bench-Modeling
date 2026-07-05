@@ -11,12 +11,14 @@ from cybench.runs.analysis.global_insights_lib import (
     aggregate_model_leaderboard,
     attach_baseline_metrics,
     build_dashboard_hrefs,
+    build_horizon_skill_curves_payload,
     build_insights_payload,
     build_crop_comparison_payload,
     build_model_country_matrix,
     compare_crops_pairwise,
     compare_horizons,
     dashboard_href_for_paper_dir,
+    horizons_in_data,
     is_baseline_model,
     load_summary_frame,
     median_model_metrics_across_countries,
@@ -28,6 +30,7 @@ from cybench.runs.analysis.global_insights_lib import (
 def test_parse_paper_dir_name():
     assert parse_paper_dir_name("paper_walk_forward_de_eos_v1") == ("DE", "eos", 1)
     assert parse_paper_dir_name("paper_walk_forward_pl_mid_v1") == ("PL", "mid", 1)
+    assert parse_paper_dir_name("paper_walk_forward_br_qtr_v2") == ("BR", "qtr", 2)
     assert parse_paper_dir_name("paper_walk_forward") is None
 
 
@@ -439,6 +442,109 @@ def test_build_insights_payload_structure(tmp_path: Path):
     assert ridge_board["median_nrmse"] == ridge_matrix
     assert len(payload["matrix_axes"]) == 4
     assert payload["matrix_axes"][0]["id"] == "overall"
+
+
+def _three_horizon_fixture(tmp_path: Path) -> pd.DataFrame:
+    """DE+FR with eos/mid/qtr; US only eos (excluded from curves)."""
+    rows_by_hz = {
+        "qtr": {"ridge": 0.28, "trend": 0.32, "xgboost": 0.26},
+        "mid": {"ridge": 0.22, "trend": 0.30, "xgboost": 0.20},
+        "eos": {"ridge": 0.15, "trend": 0.28, "xgboost": 0.14},
+    }
+    for cc, hz in [("de", "eos"), ("de", "mid"), ("de", "qtr"), ("fr", "eos"), ("fr", "mid"), ("fr", "qtr")]:
+        d = tmp_path / f"paper_walk_forward_{cc}_{hz}_v1"
+        d.mkdir(parents=True, exist_ok=True)
+        metrics = rows_by_hz[hz]
+        pd.DataFrame(
+            [
+                {
+                    "crop": "maize",
+                    "country": cc.upper(),
+                    "model": "ridge",
+                    "nrmse": metrics["ridge"],
+                    "r2": 0.7,
+                    "n_samples": 40,
+                },
+                {
+                    "crop": "maize",
+                    "country": cc.upper(),
+                    "model": "trend",
+                    "nrmse": metrics["trend"],
+                    "r2": 0.3,
+                    "n_samples": 40,
+                },
+                {
+                    "crop": "maize",
+                    "country": cc.upper(),
+                    "model": "xgboost",
+                    "nrmse": metrics["xgboost"],
+                    "r2": 0.75,
+                    "n_samples": 40,
+                },
+                {
+                    "crop": "maize",
+                    "country": cc.upper(),
+                    "model": "average",
+                    "nrmse": metrics["trend"] + 0.02,
+                    "r2": 0.2,
+                    "n_samples": 40,
+                },
+                {
+                    "crop": "maize",
+                    "country": cc.upper(),
+                    "model": "lstm_lf",
+                    "nrmse": metrics["ridge"] + 0.05,
+                    "r2": 0.6,
+                    "n_samples": 40,
+                },
+            ]
+        ).to_csv(d / "walk_forward_summary.csv", index=False)
+    # US: eos only
+    us = tmp_path / "paper_walk_forward_us_eos_v1"
+    us.mkdir(parents=True)
+    pd.DataFrame(
+        [
+            {
+                "crop": "maize",
+                "country": "US",
+                "model": "ridge",
+                "nrmse": 0.12,
+                "r2": 0.8,
+                "n_samples": 50,
+            }
+        ]
+    ).to_csv(us / "walk_forward_summary.csv", index=False)
+    from cybench.runs.analysis.global_insights_lib import discover_summary_tables, load_summary_frame
+
+    paths = discover_summary_tables(tmp_path, version=1)
+    return load_summary_frame(paths)
+
+
+def test_horizon_skill_curves_inner_join_countries():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        df = _three_horizon_fixture(Path(tmp))
+        payload = build_horizon_skill_curves_payload(df)
+        assert len(payload["horizons"]) == 3
+        assert [h["id"] for h in payload["horizons"]] == ["qtr", "mid", "eos"]
+        maize = payload["by_crop"]["maize"]
+        assert maize["n_countries"] == 2
+        assert set(maize["countries"]) == {"DE", "FR"}
+        assert "US" in maize["excluded_countries"]
+
+        xgb = next(f for f in maize["families"] if f["model"] == "xgboost")
+        nrmse_by_hz = {p["horizon"]: p["median_nrmse"] for p in xgb["points"]}
+        assert nrmse_by_hz["qtr"] > nrmse_by_hz["mid"] > nrmse_by_hz["eos"]
+
+
+def test_build_insights_payload_includes_qtr_and_curves(tmp_path: Path):
+    _three_horizon_fixture(tmp_path)
+    payload = build_insights_payload(tmp_path, version=1)
+    assert "qtr" in payload["available_horizons"]
+    assert "qtr" in payload["leaderboards"]
+    assert payload["horizon_skill_curves"]["horizons"]
+    assert payload["horizon_skill_curves"]["by_crop"]["maize"]["n_countries"] == 2
 
 
 def test_median_model_metrics_matches_insights_matrix():

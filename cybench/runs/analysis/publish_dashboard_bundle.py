@@ -100,6 +100,55 @@ def _resolve_html_and_assets(source_dir: Path) -> tuple[Path, Path | None]:
     )
 
 
+_SLUG_RE = re.compile(
+    r"^(?P<country>[a-z]{2})_walk_forward_(?P<horizon>eos|mid|qtr)_v(?P<version>\d+)$"
+)
+
+
+def parse_publish_slug(name: str) -> tuple[str, str, int] | None:
+    """Parse ``de_walk_forward_mid_v2`` → (``DE``, ``mid``, 2)."""
+    match = _SLUG_RE.match(name)
+    if not match:
+        return None
+    return match.group("country").upper(), match.group("horizon"), int(match.group("version"))
+
+
+def prune_obsolete_dashboard_dirs(
+    publish_root: Path,
+    *,
+    dry_run: bool = False,
+) -> list[Path]:
+    """Remove published folders superseded by a newer ``vN`` (same country × horizon).
+
+    GitHub Pages artifacts are limited to 1 GB; keeping only the latest version per
+    country×horizon avoids duplicate v1+v2 asset trees (~30% of the bundle).
+    """
+    by_key: dict[tuple[str, str], list[tuple[int, Path]]] = {}
+    for child in publish_root.iterdir():
+        if not child.is_dir() or child.name == "assets":
+            continue
+        parsed = parse_publish_slug(child.name)
+        if parsed is None:
+            continue
+        cc, hz, ver = parsed
+        by_key.setdefault((cc, hz), []).append((ver, child))
+
+    removed: list[Path] = []
+    for entries in by_key.values():
+        if len(entries) < 2:
+            continue
+        max_ver = max(ver for ver, _ in entries)
+        for ver, path in entries:
+            if ver < max_ver:
+                removed.append(path)
+                if dry_run:
+                    print(f"[DRY-RUN] prune {path.name}")
+                else:
+                    shutil.rmtree(path)
+                    print(f"[OK] pruned {path.name}")
+    return sorted(removed, key=lambda p: p.name)
+
+
 def publish_bundle(
     *,
     source_dir: Path,
@@ -419,16 +468,39 @@ def main() -> None:
         action="store_true",
         help="Only rebuild index.html (no bundle copy)",
     )
+    parser.add_argument(
+        "--prune-obsolete",
+        action="store_true",
+        help="Remove older vN dashboard folders for the same country×horizon before updating index",
+    )
+    parser.add_argument(
+        "--prune-only",
+        action="store_true",
+        help="Only prune obsolete dashboard folders (no bundle copy)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print prune actions without deleting",
+    )
     args = parser.parse_args()
 
     publish_root = args.publish_root.resolve()
     publish_root.mkdir(parents=True, exist_ok=True)
 
+    if args.prune_only:
+        removed = prune_obsolete_dashboard_dirs(publish_root, dry_run=args.dry_run)
+        print(f"[DONE] Pruned {len(removed)} obsolete folder(s)")
+        if not args.dry_run:
+            index_path = update_index(publish_root, discover_index_entries(publish_root))
+            print(f"[DONE] Index: {index_path}")
+        return
+
     if args.index_only:
         if not args.update_index:
             args.update_index = True
     elif not args.source_dir or not args.slug:
-        parser.error("--source-dir and --slug are required unless --index-only")
+        parser.error("--source-dir and --slug are required unless --index-only or --prune-only")
 
     if not args.index_only:
         source_dir = args.source_dir.resolve()
@@ -442,6 +514,11 @@ def main() -> None:
         if (dest_dir / "assets").is_dir():
             n_assets = sum(1 for _ in (dest_dir / "assets").glob("*"))
             print(f"[DONE] Assets: {dest_dir / 'assets'} ({n_assets} files)")
+
+    if args.prune_obsolete:
+        removed = prune_obsolete_dashboard_dirs(publish_root, dry_run=args.dry_run)
+        if removed:
+            print(f"[INFO] Pruned {len(removed)} obsolete folder(s)")
 
     if args.update_index:
         index_path = update_index(publish_root, discover_index_entries(publish_root))

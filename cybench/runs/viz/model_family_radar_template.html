@@ -389,7 +389,7 @@
       render();
     });
 
-    const horizonLabels = { eos: "End of season", mid: "Mid-season" };
+    const horizonLabels = DATA.horizon_labels || { eos: "End of season", mid: "Mid-season", qtr: "Quarter-season (~75%)" };
     Object.keys(DATA.by_horizon).forEach(hz => {
       const opt = document.createElement("option");
       opt.value = hz;

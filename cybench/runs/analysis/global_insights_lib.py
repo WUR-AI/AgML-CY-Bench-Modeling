@@ -818,10 +818,11 @@ def build_horizon_skill_curves_payload(
             continue
 
         countries = sorted(wide["country"].astype(str).unique())
-        all_countries = (
-            sorted(work["country"].astype(str).unique()) if "country" in work.columns else []
+        crop_work = _filter_summary_work(df, crop=crop_filter)
+        any_countries = (
+            set(crop_work["country"].astype(str).unique()) if "country" in crop_work.columns else set()
         )
-        excluded = sorted(set(all_countries) - set(countries))
+        excluded = sorted(any_countries - set(countries))
 
         families: list[dict[str, Any]] = []
         for family in FAMILY_ORDER:

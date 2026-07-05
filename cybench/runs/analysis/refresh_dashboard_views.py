@@ -27,17 +27,25 @@ _PAPER_RE = re.compile(
 )
 
 
-def paper_dirs(output_root: Path, *, version: int = 1) -> list[Path]:
-    dirs: list[Path] = []
+def paper_dirs(output_root: Path, *, version: int | None = None) -> list[Path]:
+    """Collected paper dirs; keeps latest vN per country×horizon unless ``version`` is set."""
+    by_key: dict[tuple[str, str], tuple[int, Path]] = {}
     for entry in sorted(output_root.iterdir()):
         if not entry.is_dir():
             continue
         parsed = parse_paper_dir_name(entry.name)
-        if parsed is None or parsed[2] != version:
+        if parsed is None:
             continue
-        if (entry / "walk_forward_summary.csv").is_file():
-            dirs.append(entry)
-    return dirs
+        country, hz, ver = parsed
+        if version is not None and ver != version:
+            continue
+        if not (entry / "walk_forward_summary.csv").is_file():
+            continue
+        key = (country, hz)
+        prev = by_key.get(key)
+        if prev is None or ver > prev[0]:
+            by_key[key] = (ver, entry)
+    return [path for _, path in sorted(by_key.values(), key=lambda x: x[1].name)]
 
 
 def publish_slug(paper_dir: Path) -> str:
@@ -68,7 +76,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--publish-root", type=Path, required=True)
-    parser.add_argument("--version", type=int, default=1)
+    parser.add_argument("--version", type=int, default=2, help="Batch version (default: 2)")
     parser.add_argument("--country", action="append", dest="countries", metavar="CC")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -90,22 +98,26 @@ def main() -> int:
 
     if not args.dry_run:
         from cybench.runs.analysis.build_global_insights_dashboard import write_insights_dashboard
-        from cybench.runs.analysis.publish_dashboard_bundle import discover_index_entries, update_index
+        from cybench.runs.analysis.build_model_family_radar_dashboard import (
+            write_model_family_radar_dashboard,
+        )
+        from cybench.runs.analysis.publish_dashboard_bundle import (
+            discover_index_entries,
+            prune_obsolete_dashboard_dirs,
+            update_index,
+        )
 
         write_insights_dashboard(
             output_root=output_root,
             dest=publish_root / "insights.html",
             version=args.version,
         )
-        from cybench.runs.analysis.build_model_family_radar_dashboard import (
-            write_model_family_radar_dashboard,
-        )
-
         write_model_family_radar_dashboard(
             output_root=output_root,
             dest=publish_root / "model_families.html",
             version=args.version,
         )
+        prune_obsolete_dashboard_dirs(publish_root)
         update_index(publish_root, discover_index_entries(publish_root))
         print(f"[OK] insights.html, model_families.html, index.html")
 
