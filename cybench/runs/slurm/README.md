@@ -159,6 +159,25 @@ manifest. Use `--cpu` on large GPU batches if the queue is backed up.
 `baselines_DE_eos_v1` (orchestrated). Completion resolves output/manifest paths
 case-insensitively and submits using the on-disk folder name.
 
+**Restore full manifests after `--submit`:** `orchestrate_benchmark_complete.sh`
+overwrites `manifests/<batch>/benchmark_jobs.txt` with the incomplete retry list.
+Regenerate the full crop×model list before the next `--list` audit:
+
+```bash
+export CYBENCH_OUTPUT_ROOT=/lustre/backup/SHARED/AIN/agml/output
+
+# All countries with baselines_*_qtr_v2 on disk
+cybench/runs/slurm/refresh_batch_manifests.sh --horizon qtr --version 2 --backup
+
+# Or specific countries (e.g. after partial qtr GPU reruns)
+cybench/runs/slurm/refresh_batch_manifests.sh \
+  --countries BR BG CN FR --horizon qtr --version 2 --backup
+
+# Then re-audit
+cybench/runs/slurm/orchestrate_benchmark_complete.sh \
+  --all-countries --horizons qtr --version 2 --list
+```
+
 Manual per-manifest submits (fine-grained control) are below.
 
 ## 2. Submit screening

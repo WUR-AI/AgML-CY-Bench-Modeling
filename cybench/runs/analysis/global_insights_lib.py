@@ -879,6 +879,129 @@ def build_horizon_skill_curves_payload(
     }
 
 
+def report_model_horizon_pairs(
+    df: pd.DataFrame,
+    model: str,
+    *,
+    crop: str | None = None,
+    min_sample_ratio: float | None = None,
+) -> dict[str, Any]:
+    """Paired mid/qtr/eos report for one model (fair country intersection).
+
+    Inner-joins on (country, model) across all horizons present in ``df``.
+    Optional ``min_sample_ratio`` drops pairs where min(n_samples)/max(n_samples)
+    across horizons falls below the threshold (e.g. 0.95).
+    """
+    horizons = horizons_in_data(df)
+    if len(horizons) < 2:
+        return {"model": model, "error": "Need at least two horizons in summaries."}
+
+    work = _filter_summary_work(df, crop=crop)
+    work = work[work["model"] == model]
+    if work.empty:
+        return {"model": model, "crop": crop, "error": f"No rows for model {model!r}."}
+
+    group_keys = ["country", "model"]
+    wide: pd.DataFrame | None = None
+    samples_wide: pd.DataFrame | None = None
+    for hz in horizons:
+        hz_df = work[work["batch_horizon"] == hz]
+        if hz_df.empty:
+            return {"model": model, "crop": crop, "error": f"No {hz} rows for {model}."}
+        nrmse_part = hz_df.groupby(group_keys, as_index=False)["nrmse"].median().rename(
+            columns={"nrmse": f"nrmse_{hz}"}
+        )
+        wide = nrmse_part if wide is None else wide.merge(nrmse_part, on=group_keys, how="inner")
+        if "n_samples" in hz_df.columns:
+            samp_part = hz_df.groupby(group_keys, as_index=False)["n_samples"].sum().rename(
+                columns={"n_samples": f"n_samples_{hz}"}
+            )
+            samples_wide = (
+                samp_part if samples_wide is None else samples_wide.merge(samp_part, on=group_keys, how="inner")
+            )
+
+    if wide is None or wide.empty:
+        return {"model": model, "crop": crop, "error": "No country intersection across horizons."}
+
+    if samples_wide is not None:
+        for _, row in samples_wide.iterrows():
+            vals = [row.get(f"n_samples_{hz}") for hz in horizons]
+            vals = [float(v) for v in vals if pd.notna(v) and float(v) > 0]
+            if len(vals) >= 2:
+                ratio = min(vals) / max(vals)
+                wide.loc[wide["country"] == row["country"], "_sample_ratio"] = ratio
+
+    if min_sample_ratio is not None and "_sample_ratio" in wide.columns:
+        wide = wide[wide["_sample_ratio"].fillna(0) >= min_sample_ratio].copy()
+
+    crop_work = _filter_summary_work(df, crop=crop)
+    any_countries = (
+        set(crop_work[crop_work["model"] == model]["country"].astype(str).unique())
+        if "country" in crop_work.columns
+        else set()
+    )
+    paired_countries = sorted(wide["country"].astype(str).unique())
+    excluded = sorted(any_countries - set(paired_countries))
+
+    detail_rows: list[dict[str, Any]] = []
+    for _, row in wide.sort_values("country").iterrows():
+        country = str(row["country"])
+        nrmse_by_hz = {hz: float(row[f"nrmse_{hz}"]) for hz in horizons}
+        best_hz = min(nrmse_by_hz, key=nrmse_by_hz.get)  # type: ignore[arg-type]
+        entry: dict[str, Any] = {
+            "country": country,
+            **{f"nrmse_{hz}": round(nrmse_by_hz[hz], 4) for hz in horizons},
+            "best_horizon": best_hz,
+        }
+        if samples_wide is not None:
+            sw = samples_wide[samples_wide["country"] == country]
+            if not sw.empty:
+                for hz in horizons:
+                    col = f"n_samples_{hz}"
+                    if col in sw.columns:
+                        val = sw.iloc[0][col]
+                        entry[col] = int(val) if pd.notna(val) else None
+                if "_sample_ratio" in row.index and pd.notna(row["_sample_ratio"]):
+                    entry["sample_ratio"] = round(float(row["_sample_ratio"]), 4)
+        detail_rows.append(entry)
+
+    summary: dict[str, Any] = {"n_paired_countries": len(paired_countries)}
+    for hz in horizons:
+        col = f"nrmse_{hz}"
+        vals = wide[col].astype(float)
+        summary[f"median_{col}"] = round(float(vals.median()), 4)
+        summary[f"mean_{col}"] = round(float(vals.mean()), 4)
+
+    if "eos" in horizons:
+        for hz in horizons:
+            if hz == "eos":
+                continue
+            col = f"nrmse_{hz}"
+            delta = wide[col] - wide["nrmse_eos"]
+            wins = delta > 0  # lower NRMSE is better; positive delta => eos better
+            summary[f"eos_better_than_{hz}_rate"] = round(float(wins.mean()), 4)
+            summary[f"mean_delta_{hz}_minus_eos"] = round(float(delta.mean()), 4)
+            summary[f"median_delta_{hz}_minus_eos"] = round(float(delta.median()), 4)
+
+    return {
+        "model": model,
+        "crop": crop or "all",
+        "horizons": list(horizons),
+        "horizon_labels": {hz: HORIZON_DISPLAY_LABELS.get(hz, hz) for hz in horizons},
+        "n_paired_countries": len(paired_countries),
+        "paired_countries": paired_countries,
+        "excluded_countries": excluded,
+        "summary": summary,
+        "detail": detail_rows,
+        "interpretation": (
+            f"Paired comparison for {model}: only countries with walk-forward summaries "
+            f"at all horizons ({', '.join(horizons)}). "
+            "delta = horizon_nrmse − eos_nrmse; positive ⇒ end-of-season has lower NRMSE. "
+            "best_horizon = lowest NRMSE within country."
+        ),
+    }
+
+
 def build_crop_comparison_payload(df: pd.DataFrame) -> dict[str, dict[str, Any]]:
     """Per horizon, pairwise crop NRMSE on shared countries only."""
     if df.empty:
