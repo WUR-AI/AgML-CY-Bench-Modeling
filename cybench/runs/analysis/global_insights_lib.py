@@ -14,6 +14,23 @@ _PAPER_DIR_RE = re.compile(
 
 _BASELINE_MODELS = frozenset({"average", "averageyieldmodel", "average_yield"})
 
+# Lead time increases left → right (less season observed → more observed).
+BATCH_HORIZON_ORDER: tuple[str, ...] = ("qtr", "mid", "eos")
+
+HORIZON_DISPLAY_LABELS: dict[str, str] = {
+    "qtr": "Quarter-season (~75%)",
+    "mid": "Mid-season (~50%)",
+    "eos": "End of season",
+}
+
+
+def horizons_in_data(df: pd.DataFrame) -> tuple[str, ...]:
+    """Horizons present in a summary frame, ordered by increasing season progress."""
+    if df.empty or "batch_horizon" not in df.columns:
+        return ()
+    present = set(df["batch_horizon"].astype(str))
+    return tuple(hz for hz in BATCH_HORIZON_ORDER if hz in present)
+
 # Evaluation views for the model×country heatmap (aligned with country dashboards / radar).
 MODEL_COUNTRY_AXES: tuple[dict[str, Any], ...] = (
     {
@@ -666,13 +683,207 @@ def compare_crops_pairwise(
     return detail, summary
 
 
+def _wide_country_model_nrmse(
+    work: pd.DataFrame,
+    horizons: tuple[str, ...],
+    *,
+    crop: str | None,
+) -> pd.DataFrame:
+    """Inner-join median NRMSE across horizons on country×model (and crop when set)."""
+    frame = work[work["nrmse"].notna()].copy()
+    if crop:
+        frame = frame[frame["crop"] == crop]
+    group_keys = ["country", "model"]
+
+    wide: pd.DataFrame | None = None
+    for hz in horizons:
+        hz_df = frame[frame["batch_horizon"] == hz]
+        if hz_df.empty:
+            return pd.DataFrame()
+        agg = hz_df.groupby(group_keys, as_index=False)["nrmse"].median()
+        part = agg.rename(columns={"nrmse": f"nrmse_{hz}"})
+        wide = part if wide is None else wide.merge(part, on=group_keys, how="inner")
+    if wide is None:
+        return pd.DataFrame()
+    if crop:
+        wide.insert(0, "crop", crop)
+    return wide
+
+
+def _family_curve_points(
+    wide: pd.DataFrame,
+    *,
+    model: str,
+    trend_model: str,
+    horizons: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    model_rows = wide[wide["model"] == model]
+    trend_rows = wide[wide["model"] == trend_model]
+    if model_rows.empty:
+        return []
+
+    trend_by_country: dict[tuple[str, str], float] = {}
+    for _, row in trend_rows.iterrows():
+        country = str(row["country"])
+        for hz in horizons:
+            col = f"nrmse_{hz}"
+            val = row.get(col)
+            if pd.notna(val):
+                trend_by_country[(country, hz)] = float(val)
+
+    points: list[dict[str, Any]] = []
+    for hz in horizons:
+        col = f"nrmse_{hz}"
+        country_nrmse: list[float] = []
+        country_skill: list[float] = []
+        for _, row in model_rows.iterrows():
+            country = str(row["country"])
+            val = row.get(col)
+            if pd.isna(val):
+                continue
+            nrmse = float(val)
+            country_nrmse.append(nrmse)
+            trend_val = trend_by_country.get((country, hz))
+            if trend_val and trend_val > 0:
+                country_skill.append(1.0 - nrmse / trend_val)
+        nrmse_series = pd.Series(country_nrmse, dtype=float)
+        skill_series = pd.Series(country_skill, dtype=float)
+        points.append(
+            {
+                "horizon": hz,
+                "median_nrmse": (
+                    round(float(nrmse_series.median()), 4) if not nrmse_series.empty else None
+                ),
+                "q25_nrmse": (
+                    round(float(nrmse_series.quantile(0.25)), 4)
+                    if not nrmse_series.empty
+                    else None
+                ),
+                "q75_nrmse": (
+                    round(float(nrmse_series.quantile(0.75)), 4)
+                    if not nrmse_series.empty
+                    else None
+                ),
+                "median_skill_vs_trend": (
+                    round(float(skill_series.median()), 4) if not skill_series.empty else None
+                ),
+                "n_countries": int(len(country_nrmse)),
+            }
+        )
+    return points
+
+
+def build_horizon_skill_curves_payload(
+    df: pd.DataFrame,
+    *,
+    representatives: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Horizon vs performance curves for fixed family representatives (fair country set)."""
+    from cybench.runs.analysis.model_family_radar_lib import (
+        FAMILY_COLORS,
+        FAMILY_ORDER,
+        MODEL_DISPLAY_NAMES,
+        pick_representatives,
+    )
+
+    horizons = horizons_in_data(df)
+    if len(horizons) < 2:
+        return {
+            "horizons": [],
+            "by_crop": {},
+            "representatives": {},
+            "note": "Need at least two forecast horizons with collected summaries.",
+        }
+
+    rep_source_hz = "eos" if "eos" in horizons else horizons[-1]
+    rep_work = _filter_summary_work(df, batch_horizon=rep_source_hz)
+    reps = pick_representatives(rep_work, overrides=representatives)
+    trend_model = reps.get("Naive baselines", "trend")
+    rep_models = set(reps.values()) | {trend_model}
+
+    crop_keys = ["all", *_crop_keys(df)]
+    by_crop: dict[str, Any] = {}
+    for crop_key in crop_keys:
+        crop_filter = None if crop_key == "all" else crop_key
+        work = _filter_summary_work(df, crop=crop_filter)
+        work = work[work["model"].isin(rep_models)]
+        wide = _wide_country_model_nrmse(work, horizons, crop=crop_filter)
+        if wide.empty:
+            by_crop[crop_key] = {
+                "n_countries": 0,
+                "countries": [],
+                "excluded_countries": [],
+                "families": [],
+            }
+            continue
+
+        countries = sorted(wide["country"].astype(str).unique())
+        all_countries = (
+            sorted(work["country"].astype(str).unique()) if "country" in work.columns else []
+        )
+        excluded = sorted(set(all_countries) - set(countries))
+
+        families: list[dict[str, Any]] = []
+        for family in FAMILY_ORDER:
+            model = reps.get(family)
+            if not model or model == trend_model:
+                continue
+            points = _family_curve_points(
+                wide, model=model, trend_model=trend_model, horizons=horizons
+            )
+            if not points:
+                continue
+            families.append(
+                {
+                    "family": family,
+                    "model": model,
+                    "display": MODEL_DISPLAY_NAMES.get(model, model),
+                    "color": FAMILY_COLORS.get(family, "#666"),
+                    "points": points,
+                }
+            )
+
+        by_crop[crop_key] = {
+            "n_countries": len(countries),
+            "countries": countries,
+            "excluded_countries": excluded,
+            "families": families,
+        }
+
+    rep_labels = ", ".join(f"{f}: {m}" for f, m in reps.items())
+    return {
+        "horizons": [
+            {"id": hz, "label": HORIZON_DISPLAY_LABELS.get(hz, hz), "order": i}
+            for i, hz in enumerate(horizons)
+        ],
+        "representatives": reps,
+        "representatives_source_horizon": rep_source_hz,
+        "representatives_summary": rep_labels,
+        "by_crop": by_crop,
+        "note": (
+            "Fixed model per family (representatives chosen at "
+            f"{HORIZON_DISPLAY_LABELS.get(rep_source_hz, rep_source_hz)}). "
+            "Only countries with data at every plotted horizon are included "
+            "(inner join on country×model). Each country contributes one median NRMSE "
+            "(median across crops when crop=all). IQR band = spread across countries. "
+            "Hyperparameters are tuned per horizon (screening at each lead time)."
+        ),
+        "metric_notes": {
+            "nrmse": "Median pooled NRMSE across countries (lower is better).",
+            "skill_vs_trend": (
+                "Median skill = 1 − NRMSE_model / NRMSE_trend per country (higher is better)."
+            ),
+        },
+    }
+
+
 def build_crop_comparison_payload(df: pd.DataFrame) -> dict[str, dict[str, Any]]:
     """Per horizon, pairwise crop NRMSE on shared countries only."""
     if df.empty:
         return {}
     crops = _crop_keys(df)
     out: dict[str, dict[str, Any]] = {}
-    for hz in ("eos", "mid"):
+    for hz in horizons_in_data(df):
         hz_df = df[df["batch_horizon"] == hz]
         pairs: dict[str, Any] = {}
         for i, crop_a in enumerate(crops):
@@ -696,11 +907,12 @@ def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, 
     df = load_summary_frame(paths)
     horizon_detail, horizon_summary = compare_horizons(df)
 
+    available_horizons = horizons_in_data(df)
     leaderboards: dict[str, dict[str, list[dict[str, Any]]]] = {}
     leaderboards_skilled: dict[str, dict[str, list[dict[str, Any]]]] = {}
     model_country: dict[str, dict[str, dict[str, Any]]] = {}
     model_country_skilled: dict[str, dict[str, dict[str, Any]]] = {}
-    for hz in ("eos", "mid"):
+    for hz in available_horizons:
         leaderboards[hz] = build_leaderboards_by_crop(df, batch_horizon=hz, skilled_only=False)
         leaderboards_skilled[hz] = build_leaderboards_by_crop(
             df, batch_horizon=hz, skilled_only=True
@@ -713,10 +925,13 @@ def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, 
     countries = sorted(df["country"].unique()) if "country" in df.columns else []
     crops = _crop_keys(df)
     baseline_models = sorted({str(m) for m in df["model"].unique() if is_baseline_model(m)})
+    horizon_labels = {hz: HORIZON_DISPLAY_LABELS.get(hz, hz) for hz in available_horizons}
     return {
         "output_root": str(output_root.resolve()),
         "dashboard_hrefs": build_dashboard_hrefs(output_root, version=version),
         "matrix_axes": matrix_axes_payload(),
+        "available_horizons": list(available_horizons),
+        "horizon_labels": horizon_labels,
         "n_summary_files": len(paths),
         "n_rows": int(len(df)),
         "n_countries": int(df["country"].nunique()) if "country" in df.columns else 0,
@@ -730,6 +945,7 @@ def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, 
         "horizon_summary": _df_records(horizon_summary),
         "horizon_detail": _df_records(horizon_detail),
         "overall_horizon": _overall_horizon_stats(horizon_detail),
+        "horizon_skill_curves": build_horizon_skill_curves_payload(df),
         "crop_comparison": build_crop_comparison_payload(df),
     }
 

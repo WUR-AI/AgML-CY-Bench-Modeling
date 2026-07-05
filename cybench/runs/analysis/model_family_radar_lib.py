@@ -9,8 +9,10 @@ import pandas as pd
 
 from cybench.runs.analysis.benchmark_run_catalog import HIGHER_IS_BETTER, LOWER_IS_BETTER
 from cybench.runs.analysis.global_insights_lib import (
+    HORIZON_DISPLAY_LABELS,
     attach_baseline_metrics,
     discover_summary_tables,
+    horizons_in_data,
     load_summary_frame,
     median_model_metrics_across_countries,
     quantile_model_metrics_across_countries,
@@ -471,9 +473,7 @@ def build_sample_scatter_payload(
     representatives: dict[str, str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     by_horizon: dict[str, dict[str, list[dict[str, Any]]]] = {}
-    for hz in ("eos", "mid"):
-        if "batch_horizon" in df.columns and hz not in set(df["batch_horizon"].astype(str)):
-            continue
+    for hz in horizons_in_data(df):
         by_crop: dict[str, Any] = {}
         all_fams = build_sample_scatter_slice(
             df, batch_horizon=hz, representatives=representatives
@@ -743,9 +743,7 @@ def build_ai_benefit_map_payload(
 ) -> dict[str, dict[str, Any]]:
     """AI error-reduction map payload indexed by horizon and crop."""
     out: dict[str, dict[str, Any]] = {}
-    for hz in ("eos", "mid"):
-        if "batch_horizon" in df.columns and hz not in set(df["batch_horizon"].astype(str)):
-            continue
+    for hz in horizons_in_data(df):
         by_crop: dict[str, Any] = {
             "all": _ai_benefit_map_slice(df, batch_horizon=hz, representatives=representatives),
         }
@@ -765,9 +763,7 @@ def build_winner_map_payload(
 ) -> dict[str, dict[str, Any]]:
     """Winner-by-country payload indexed by horizon and crop."""
     out: dict[str, dict[str, Any]] = {}
-    for hz in ("eos", "mid"):
-        if "batch_horizon" in df.columns and hz not in set(df["batch_horizon"].astype(str)):
-            continue
+    for hz in horizons_in_data(df):
         by_crop: dict[str, Any] = {
             "all": _winner_map_slice(df, batch_horizon=hz, representatives=representatives),
         }
@@ -794,9 +790,7 @@ def build_radar_payload(
             df[metric] = pd.to_numeric(df[metric], errors="coerce")
 
     by_horizon: dict[str, dict[str, Any]] = {}
-    for hz in ("eos", "mid"):
-        if "batch_horizon" in df.columns and hz not in set(df["batch_horizon"].astype(str)):
-            continue
+    for hz in horizons_in_data(df):
         by_crop: dict[str, Any] = {
             "all": build_radar_slice(df, batch_horizon=hz, representatives=representatives),
         }
@@ -826,6 +820,7 @@ def build_radar_payload(
             "France is metropolitan only (French Guiana is not colored)."
         ),
         "crops": crops,
+        "horizon_labels": {hz: HORIZON_DISPLAY_LABELS.get(hz, hz) for hz in horizons_in_data(df)},
         "views": list(EVALUATION_VIEWS),
         "family_catalog": {
             family: {"models": models, "color": FAMILY_COLORS.get(family, "#666")}

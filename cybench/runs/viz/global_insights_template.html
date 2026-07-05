@@ -157,12 +157,39 @@
       border-right: 2px solid var(--border);
     }
     .heatmap-matrix tbody td.median-col { background: #f3f5f7; }
+    .curve-chart-wrap {
+      overflow-x: auto;
+      margin: 0.5rem 0 0.75rem;
+    }
+    .curve-chart-wrap svg {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+    .curve-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      margin: 0.5rem 0 0.75rem;
+      font-size: 0.85rem;
+    }
+    .curve-legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .curve-legend .swatch {
+      width: 0.85rem;
+      height: 0.85rem;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
   <div class="page">
     <h1>CY-Bench global insights</h1>
-    <p class="lead">Cross-country model comparison and end-of-season vs mid-season walk-forward results.</p>
+    <p class="lead">Cross-country model comparison and walk-forward results across forecast horizons (quarter-, mid-, and end-of-season).</p>
     <p class="muted">Every model in the benchmark. For a five-paradigm summary (radar chart), see <a href="model_families.html">Model families (paper summary)</a>.</p>
     <p class="muted" id="meta"></p>
 
@@ -178,10 +205,7 @@
       </p>
       <div class="controls">
         <span class="muted">Horizon</span>
-        <div class="toolbar" id="rq1-horizon-toolbar">
-          <button type="button" data-horizon="eos" class="active">End of season</button>
-          <button type="button" data-horizon="mid">Mid-season</button>
-        </div>
+        <div class="toolbar" id="rq1-horizon-toolbar"></div>
         <label>Crop
           <select id="rq1-crop-filter">
             <option value="all">All crops</option>
@@ -227,7 +251,26 @@
     </div>
 
     <div class="card">
-      <h2>Research Q2 — Is end-of-season (nowcast) better than mid-season?</h2>
+      <h2>Forecast horizon vs performance</h2>
+      <p class="muted" id="horizon-curves-note"></p>
+      <div class="controls">
+        <label>Crop
+          <select id="horizon-curves-crop"></select>
+        </label>
+        <label>Metric
+          <select id="horizon-curves-metric">
+            <option value="nrmse" selected>Median NRMSE</option>
+            <option value="skill_vs_trend">Skill vs trend</option>
+          </select>
+        </label>
+      </div>
+      <p class="muted" id="horizon-curves-meta"></p>
+      <div class="curve-chart-wrap" id="horizon-curves-chart"></div>
+      <div class="curve-legend" id="horizon-curves-legend"></div>
+      <p class="muted note" id="horizon-curves-metric-note"></p>
+    </div>
+
+    <div class="card">
       <p class="muted" id="horizon-note"></p>
       <div class="stat-grid" id="horizon-stats"></div>
       <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">By model (paired eos vs mid)</h3>
@@ -255,10 +298,7 @@
       </p>
       <div class="controls">
         <span class="muted">Horizon</span>
-        <div class="toolbar" id="rq3-horizon-toolbar">
-          <button type="button" data-horizon="eos" class="active">End of season</button>
-          <button type="button" data-horizon="mid">Mid-season</button>
-        </div>
+        <div class="toolbar" id="rq3-horizon-toolbar"></div>
         <label>Crop pair
           <select id="rq3-pair-filter"></select>
         </label>
@@ -371,6 +411,34 @@
       return av - bv;
     }
 
+    const HORIZON_LABELS = DATA.horizon_labels || {
+      qtr: "Quarter-season (~75%)",
+      mid: "Mid-season (~50%)",
+      eos: "End of season",
+    };
+    const AVAILABLE_HORIZONS = (DATA.available_horizons && DATA.available_horizons.length)
+      ? DATA.available_horizons
+      : Object.keys(DATA.leaderboards || {}).sort();
+
+    function initHorizonToolbar(toolbar, defaultHz, onChange) {
+      const horizons = AVAILABLE_HORIZONS.length ? AVAILABLE_HORIZONS : ["eos"];
+      toolbar.innerHTML = horizons.map(hz => {
+        const label = HORIZON_LABELS[hz] || hz;
+        const active = hz === defaultHz ? " active" : "";
+        return `<button type="button" data-horizon="${hz}" class="${active.trim()}">${label}</button>`;
+      }).join("");
+      toolbar.querySelectorAll("button").forEach(btn => {
+        btn.addEventListener("click", () => {
+          toolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          onChange(btn.dataset.horizon);
+        });
+      });
+      if (!toolbar.querySelector(".active") && toolbar.firstElementChild) {
+        toolbar.firstElementChild.classList.add("active");
+      }
+    }
+
     document.getElementById("meta").textContent =
       `${DATA.n_countries} countries · ${DATA.n_rows} dataset×model rows · ${DATA.n_summary_files} collected summaries`;
 
@@ -378,7 +446,7 @@
     document.getElementById("baseline-label").textContent = baselineLabel;
 
     // RQ1 — horizon + crop leaderboard + heatmap
-    let rq1Horizon = "eos";
+    let rq1Horizon = AVAILABLE_HORIZONS.includes("eos") ? "eos" : (AVAILABLE_HORIZONS[0] || "eos");
     let rq1Crop = "all";
     let rq1SkilledOnly = false;
     let rq1MatrixAxis = "overall";
@@ -678,14 +746,12 @@
       renderModelCountryHeatmap();
     }
 
-    rq1HorizonToolbar.querySelectorAll("button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        rq1HorizonToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        rq1Horizon = btn.dataset.horizon;
-        renderRq1();
-      });
+    rq1HorizonToolbar.innerHTML = "";
+    initHorizonToolbar(rq1HorizonToolbar, rq1Horizon, (hz) => {
+      rq1Horizon = hz;
+      renderRq1();
     });
+
     rq1CropFilter.addEventListener("change", () => {
       syncCropSelects(rq1CropFilter.value || "all");
       renderRq1();
@@ -718,6 +784,158 @@
     rq1ModelFilter.addEventListener("input", renderRq1);
     syncMatrixMetricControl();
     renderRq1();
+
+    // Horizon skill curves
+    const HSC = DATA.horizon_skill_curves || {};
+    const hscNote = document.getElementById("horizon-curves-note");
+    const hscMeta = document.getElementById("horizon-curves-meta");
+    const hscChart = document.getElementById("horizon-curves-chart");
+    const hscLegend = document.getElementById("horizon-curves-legend");
+    const hscMetricNote = document.getElementById("horizon-curves-metric-note");
+    const hscCropSelect = document.getElementById("horizon-curves-crop");
+    const hscMetricSelect = document.getElementById("horizon-curves-metric");
+    let hscCrop = "all";
+    let hscMetric = "nrmse";
+
+    hscNote.textContent = HSC.note || "Horizon skill curves require at least two collected horizons.";
+
+    const hscCropKeys = Object.keys(HSC.by_crop || {});
+    if (hscCropKeys.length) {
+      hscCropSelect.innerHTML = hscCropKeys.map(c => {
+        const label = c === "all" ? "All crops" : c.charAt(0).toUpperCase() + c.slice(1);
+        return `<option value="${c}">${label}</option>`;
+      }).join("");
+      hscCrop = hscCropKeys.includes("all") ? "all" : hscCropKeys[0];
+      hscCropSelect.value = hscCrop;
+    } else {
+      hscCropSelect.innerHTML = `<option value="all">All crops</option>`;
+    }
+
+    function hscMetricValue(point, metric) {
+      if (metric === "skill_vs_trend") return point.median_skill_vs_trend;
+      return point.median_nrmse;
+    }
+
+    function hscMetricIqr(point, metric) {
+      if (metric === "skill_vs_trend") return { low: null, high: null };
+      return { low: point.q25_nrmse, high: point.q75_nrmse };
+    }
+
+    function renderHorizonSkillCurves() {
+      const slice = (HSC.by_crop || {})[hscCrop] || { families: [], n_countries: 0, countries: [] };
+      const horizons = HSC.horizons || [];
+      const metricNotes = HSC.metric_notes || {};
+      hscMetricNote.textContent = metricNotes[hscMetric] || "";
+
+      const reps = HSC.representatives_summary || "";
+      const excluded = slice.excluded_countries || [];
+      let meta = `${slice.n_countries || 0} countries with all ${horizons.length} horizons`;
+      if (reps) meta += ` · Representatives: ${reps}`;
+      if (excluded.length) {
+        meta += ` · Excluded (incomplete horizons): ${excluded.slice(0, 8).join(", ")}`;
+        if (excluded.length > 8) meta += ` +${excluded.length - 8} more`;
+      }
+      hscMeta.textContent = meta;
+
+      if (!slice.families || !slice.families.length || horizons.length < 2) {
+        hscChart.innerHTML = `<p class="muted">Not enough paired horizon data for this crop.</p>`;
+        hscLegend.innerHTML = "";
+        return;
+      }
+
+      const width = 720;
+      const height = 360;
+      const pad = { l: 56, r: 24, t: 20, b: 56 };
+      const innerW = width - pad.l - pad.r;
+      const innerH = height - pad.t - pad.b;
+      const nX = horizons.length;
+      const xAt = (i) => pad.l + (nX <= 1 ? innerW / 2 : (i / (nX - 1)) * innerW);
+
+      const allVals = [];
+      for (const fam of slice.families) {
+        for (const pt of fam.points || []) {
+          const v = hscMetricValue(pt, hscMetric);
+          if (v !== null && v !== undefined && !Number.isNaN(v)) allVals.push(v);
+          const iqr = hscMetricIqr(pt, hscMetric);
+          if (iqr.low !== null) allVals.push(iqr.low);
+          if (iqr.high !== null) allVals.push(iqr.high);
+        }
+      }
+      if (!allVals.length) {
+        hscChart.innerHTML = `<p class="muted">No metric values for this selection.</p>`;
+        hscLegend.innerHTML = "";
+        return;
+      }
+
+      const yMinRaw = Math.min(...allVals);
+      const yMaxRaw = Math.max(...allVals);
+      const yPad = Math.max(0.02, (yMaxRaw - yMinRaw) * 0.12);
+      const yMin = hscMetric === "nrmse" ? Math.max(0, yMinRaw - yPad) : yMinRaw - yPad;
+      const yMax = yMaxRaw + yPad;
+      const yAt = (v) => pad.t + innerH - ((v - yMin) / (yMax - yMin || 1)) * innerH;
+
+      const yLabel = hscMetric === "skill_vs_trend" ? "Skill vs trend (median)" : "Median NRMSE";
+      let svg = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Horizon skill curves">`;
+      svg += `<rect x="0" y="0" width="${width}" height="${height}" fill="#fff"/>`;
+      for (let t = 0; t <= 4; t++) {
+        const frac = t / 4;
+        const yv = yMin + frac * (yMax - yMin);
+        const y = yAt(yv);
+        svg += `<line x1="${pad.l}" y1="${y}" x2="${width - pad.r}" y2="${y}" stroke="#e8eaed"/>`;
+        svg += `<text x="${pad.l - 8}" y="${y + 4}" text-anchor="end" font-size="10" fill="#656d76">${yv.toFixed(2)}</text>`;
+      }
+      horizons.forEach((hz, i) => {
+        const x = xAt(i);
+        svg += `<line x1="${x}" y1="${pad.t}" x2="${x}" y2="${height - pad.b}" stroke="#f0f1f3"/>`;
+        svg += `<text x="${x}" y="${height - 28}" text-anchor="middle" font-size="11" fill="#1f2328">${hz.label || hz.id}</text>`;
+      });
+      svg += `<text x="${pad.l + innerW / 2}" y="${height - 6}" text-anchor="middle" font-size="11" fill="#1f2328">Forecast horizon (more season observed →)</text>`;
+      svg += `<text x="14" y="${pad.t + innerH / 2}" text-anchor="middle" font-size="11" fill="#1f2328" transform="rotate(-90 14 ${pad.t + innerH / 2})">${yLabel}</text>`;
+
+      for (const fam of slice.families) {
+        const color = fam.color || "#457b9d";
+        const pts = (fam.points || []).map((pt, i) => {
+          const hzIdx = horizons.findIndex(h => h.id === pt.horizon);
+          const idx = hzIdx >= 0 ? hzIdx : i;
+          const val = hscMetricValue(pt, hscMetric);
+          return { x: xAt(idx), y: val === null ? null : yAt(val), raw: pt, idx };
+        }).filter(p => p.y !== null);
+
+        for (const p of pts) {
+          const iqr = hscMetricIqr(p.raw, hscMetric);
+          if (iqr.low !== null && iqr.high !== null) {
+            const y1 = yAt(iqr.high);
+            const y2 = yAt(iqr.low);
+            svg += `<line x1="${p.x}" y1="${y1}" x2="${p.x}" y2="${y2}" stroke="${color}" stroke-width="2" opacity="0.35"/>`;
+            svg += `<line x1="${p.x - 5}" y1="${y1}" x2="${p.x + 5}" y2="${y1}" stroke="${color}" stroke-width="2" opacity="0.35"/>`;
+            svg += `<line x1="${p.x - 5}" y1="${y2}" x2="${p.x + 5}" y2="${y2}" stroke="${color}" stroke-width="2" opacity="0.35"/>`;
+          }
+        }
+        if (pts.length >= 2) {
+          const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+          svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2.5"/>`;
+        }
+        for (const p of pts) {
+          svg += `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="${color}" stroke="#fff" stroke-width="1.5"/>`;
+        }
+      }
+      svg += "</svg>";
+      hscChart.innerHTML = svg;
+
+      hscLegend.innerHTML = slice.families.map(fam =>
+        `<span><span class="swatch" style="background:${fam.color}"></span>${fam.family} (${fam.display})</span>`
+      ).join("");
+    }
+
+    hscCropSelect.addEventListener("change", () => {
+      hscCrop = hscCropSelect.value || "all";
+      renderHorizonSkillCurves();
+    });
+    hscMetricSelect.addEventListener("change", () => {
+      hscMetric = hscMetricSelect.value || "nrmse";
+      renderHorizonSkillCurves();
+    });
+    renderHorizonSkillCurves();
 
     // Horizon overall (RQ2)
     const oh = DATA.overall_horizon || {};
@@ -808,7 +1026,7 @@
     renderHorizonDetail();
 
     // Crop pair comparison (RQ3)
-    let rq3Horizon = "eos";
+    let rq3Horizon = AVAILABLE_HORIZONS.includes("eos") ? "eos" : (AVAILABLE_HORIZONS[0] || "eos");
     let rq3PairKey = "";
     const rq3HorizonToolbar = document.getElementById("rq3-horizon-toolbar");
     const rq3PairFilter = document.getElementById("rq3-pair-filter");
@@ -933,14 +1151,10 @@
       });
     }
 
-    rq3HorizonToolbar.querySelectorAll("button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        rq3HorizonToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        rq3Horizon = btn.dataset.horizon;
-        populateCropPairOptions();
-        renderCropPairComparison();
-      });
+    initHorizonToolbar(rq3HorizonToolbar, rq3Horizon, (hz) => {
+      rq3Horizon = hz;
+      populateCropPairOptions();
+      renderCropPairComparison();
     });
     rq3PairFilter.addEventListener("change", () => {
       rq3PairKey = rq3PairFilter.value;

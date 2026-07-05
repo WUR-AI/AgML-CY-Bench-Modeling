@@ -40,7 +40,7 @@ def write_model_family_radar_dashboard(
     if payload["n_rows"] == 0:
         raise RuntimeError(f"No walk_forward_summary.csv files found under {output_root}")
     if not payload["by_horizon"]:
-        raise RuntimeError("No eos/mid horizon slices in collected summaries")
+        raise RuntimeError("No horizon slices in collected summaries")
     payload["geojson_href"] = ensure_world_geojson(dest.parent)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(build_radar_html(payload), encoding="utf-8")
