@@ -257,9 +257,17 @@
         <label>Crop
           <select id="horizon-curves-crop"></select>
         </label>
-        <label>Metric
+        <span class="muted">Axis</span>
+        <div class="toolbar" id="horizon-curves-axis-toolbar">
+          <button type="button" data-axis="overall" class="active">Overall</button>
+          <button type="button" data-axis="spatial">Spatial</button>
+          <button type="button" data-axis="temporal">Temporal</button>
+          <button type="button" data-axis="anomaly">Anomaly</button>
+        </div>
+        <label id="horizon-curves-metric-wrap">Metric
           <select id="horizon-curves-metric">
-            <option value="nrmse" selected>Median NRMSE</option>
+            <option value="nrmse" selected>NRMSE (median)</option>
+            <option value="r2">R² (median)</option>
             <option value="skill_vs_trend">Skill vs trend</option>
           </select>
         </label>
@@ -796,11 +804,84 @@
     const hscTableWrap = document.getElementById("horizon-curves-table-wrap");
     const hscMetricNote = document.getElementById("horizon-curves-metric-note");
     const hscCropSelect = document.getElementById("horizon-curves-crop");
+    const hscAxisToolbar = document.getElementById("horizon-curves-axis-toolbar");
+    const hscMetricWrap = document.getElementById("horizon-curves-metric-wrap");
     const hscMetricSelect = document.getElementById("horizon-curves-metric");
     let hscCrop = "all";
+    let hscAxis = "overall";
     let hscMetric = "nrmse";
     let hscTableSort = "family";
     let hscTableDir = "asc";
+
+    const HSC_AXES = HSC.axes || MATRIX_AXES.map(axis => ({
+      ...axis,
+      metrics: axis.id === "overall"
+        ? [
+            { id: "nrmse", column: "nrmse", label: "NRMSE", higher_better: false, has_iqr: true },
+            { id: "r2", column: "r2", label: "R²", higher_better: true, has_iqr: true },
+            { id: "skill_vs_trend", column: "skill_vs_trend", label: "Skill vs trend", higher_better: true, has_iqr: false },
+          ]
+        : (axis.metrics || []).map(m => ({
+            ...m,
+            column: m.column || (axis.id === "spatial" ? "r_spatial" : axis.id === "temporal" ? "r_temporal" : "r_res"),
+            has_iqr: true,
+          })),
+    }));
+
+    function hscAxisDef(axisId) {
+      return HSC_AXES.find(a => a.id === axisId) || HSC_AXES[0] || { id: "overall", metrics: [] };
+    }
+
+    function hscMetricSpec() {
+      const axis = hscAxisDef(hscAxis);
+      const metrics = axis.metrics || [];
+      return metrics.find(m => m.id === hscMetric) || metrics[0] || { id: "nrmse", column: "nrmse", higher_better: false, has_iqr: true };
+    }
+
+    function hscMetricColumn(metricId) {
+      const axis = hscAxisDef(hscAxis);
+      const spec = (axis.metrics || []).find(m => m.id === metricId);
+      return spec?.column || metricId;
+    }
+
+    function syncHscMetricControl() {
+      const axis = hscAxisDef(hscAxis);
+      const metrics = axis.metrics || [];
+      const showPicker = metrics.length > 1;
+      hscMetricWrap.style.display = showPicker ? "" : "none";
+      if (!showPicker) {
+        hscMetric = metrics[0]?.id || "nrmse";
+        return;
+      }
+      const options = metrics.map(m => `<option value="${m.id}">${m.label} (median)</option>`).join("");
+      const prev = hscMetric;
+      hscMetricSelect.innerHTML = options;
+      hscMetric = metrics.some(m => m.id === prev) ? prev : metrics[0].id;
+      hscMetricSelect.value = hscMetric;
+    }
+
+    function hscMetricValue(point, metricId) {
+      const col = hscMetricColumn(metricId);
+      const stats = (point.metrics || {})[col];
+      return stats?.median ?? null;
+    }
+
+    function hscMetricIqr(point, metricId) {
+      const spec = hscMetricSpec();
+      if (spec.has_iqr === false) return { low: null, high: null };
+      const col = hscMetricColumn(metricId);
+      const stats = (point.metrics || {})[col];
+      if (!stats) return { low: null, high: null };
+      return { low: stats.q25 ?? null, high: stats.q75 ?? null };
+    }
+
+    function hscCellBg(v, metricId) {
+      if (v === null || v === undefined || Number.isNaN(v)) return null;
+      if (metricId === "nrmse") return fixedNrmseBg(v);
+      if (metricId === "r2" || metricId === "skill_vs_trend") return fixedR2Bg(v);
+      if (metricId === "r" || String(metricId).startsWith("r_")) return fixedRBg(v);
+      return null;
+    }
 
     hscNote.textContent = HSC.note || "Horizon skill curves require at least two collected horizons.";
 
@@ -816,23 +897,16 @@
       hscCropSelect.innerHTML = `<option value="all">All crops</option>`;
     }
 
-    function hscMetricValue(point, metric) {
-      if (metric === "skill_vs_trend") return point.median_skill_vs_trend;
-      return point.median_nrmse;
-    }
-
-    function hscMetricIqr(point, metric) {
-      if (metric === "skill_vs_trend") return { low: null, high: null };
-      return { low: point.q25_nrmse, high: point.q75_nrmse };
-    }
-
     function renderHorizonSkillCurves() {
       const slice = (HSC.by_crop || {})[hscCrop] || { families: [], n_countries: 0, countries: [] };
       const horizons = HSC.horizons || [];
       const metricNotes = HSC.metric_notes || {};
+      const metricCol = hscMetricColumn(hscMetric);
+      const axisDef = hscAxisDef(hscAxis);
+      const metricDef = hscMetricSpec();
       const plotFamilies = (slice.families || []).filter(fam => fam.plot !== false);
       const tableFamilies = slice.families || [];
-      let metricNote = metricNotes[hscMetric] || "";
+      let metricNote = metricNotes[metricCol] || metricNotes[hscMetric] || axisDef.note || "";
       if (HSC.plot_excluded_note && (slice.families || []).some(fam => fam.eos_only)) {
         metricNote = metricNote ? `${metricNote} ${HSC.plot_excluded_note}` : HSC.plot_excluded_note;
       }
@@ -889,7 +963,7 @@
       const yMax = yMaxRaw + yPad;
       const yAt = (v) => pad.t + innerH - ((v - yMin) / (yMax - yMin || 1)) * innerH;
 
-      const yLabel = hscMetric === "skill_vs_trend" ? "Skill vs trend (median)" : "Median NRMSE";
+      const yLabel = `${metricDef.label || hscMetric} (median)`;
       let svg = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Horizon skill curves">`;
       svg += `<rect x="0" y="0" width="${width}" height="${height}" fill="#fff"/>`;
       for (let t = 0; t <= 4; t++) {
@@ -973,7 +1047,7 @@
             }
             return fmt(v);
           },
-          bg: (v) => (hscMetric === "nrmse" ? fixedNrmseBg(v) : null),
+          bg: (v) => hscCellBg(v, metricCol),
         })),
       ];
       renderSortableTable(
@@ -998,10 +1072,20 @@
       hscCrop = hscCropSelect.value || "all";
       renderHorizonSkillCurves();
     });
+    hscAxisToolbar.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        hscAxisToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        hscAxis = btn.dataset.axis || "overall";
+        syncHscMetricControl();
+        renderHorizonSkillCurves();
+      });
+    });
     hscMetricSelect.addEventListener("change", () => {
       hscMetric = hscMetricSelect.value || "nrmse";
       renderHorizonSkillCurves();
     });
+    syncHscMetricControl();
     renderHorizonSkillCurves();
 
     // Horizon overall (RQ2)

@@ -451,52 +451,37 @@ def _three_horizon_fixture(tmp_path: Path) -> pd.DataFrame:
         "qtr": {"ridge": 0.22, "trend": 0.30, "xgboost": 0.20},
         "eos": {"ridge": 0.15, "trend": 0.28, "xgboost": 0.14},
     }
+    pattern_by_hz = {
+        "mid": {"r_spatial": 0.55, "r_temporal": 0.35, "r_res": 0.25},
+        "qtr": {"r_spatial": 0.60, "r_temporal": 0.50, "r_res": 0.30},
+        "eos": {"r_spatial": 0.65, "r_temporal": 0.70, "r_res": 0.35},
+    }
+
+    def _row(model: str, cc: str, hz: str, nrmse: float, r2: float) -> dict:
+        pat = pattern_by_hz[hz]
+        return {
+            "crop": "maize",
+            "country": cc.upper(),
+            "model": model,
+            "nrmse": nrmse,
+            "r2": r2,
+            "r_spatial": pat["r_spatial"],
+            "r_temporal": pat["r_temporal"],
+            "r_res": pat["r_res"],
+            "n_samples": 40,
+        }
+
     for cc, hz in [("de", "eos"), ("de", "mid"), ("de", "qtr"), ("fr", "eos"), ("fr", "mid"), ("fr", "qtr")]:
         d = tmp_path / f"paper_walk_forward_{cc}_{hz}_v1"
         d.mkdir(parents=True, exist_ok=True)
         metrics = rows_by_hz[hz]
         pd.DataFrame(
             [
-                {
-                    "crop": "maize",
-                    "country": cc.upper(),
-                    "model": "ridge",
-                    "nrmse": metrics["ridge"],
-                    "r2": 0.7,
-                    "n_samples": 40,
-                },
-                {
-                    "crop": "maize",
-                    "country": cc.upper(),
-                    "model": "trend",
-                    "nrmse": metrics["trend"],
-                    "r2": 0.3,
-                    "n_samples": 40,
-                },
-                {
-                    "crop": "maize",
-                    "country": cc.upper(),
-                    "model": "xgboost",
-                    "nrmse": metrics["xgboost"],
-                    "r2": 0.75,
-                    "n_samples": 40,
-                },
-                {
-                    "crop": "maize",
-                    "country": cc.upper(),
-                    "model": "average",
-                    "nrmse": metrics["trend"] + 0.02,
-                    "r2": 0.2,
-                    "n_samples": 40,
-                },
-                {
-                    "crop": "maize",
-                    "country": cc.upper(),
-                    "model": "lstm_lf",
-                    "nrmse": metrics["ridge"] + 0.05,
-                    "r2": 0.6,
-                    "n_samples": 40,
-                },
+                _row("ridge", cc, hz, metrics["ridge"], 0.7),
+                _row("trend", cc, hz, metrics["trend"], 0.3),
+                _row("xgboost", cc, hz, metrics["xgboost"], 0.75),
+                _row("average", cc, hz, metrics["trend"] + 0.02, 0.2),
+                _row("lstm_lf", cc, hz, metrics["ridge"] + 0.05, 0.6),
             ]
         ).to_csv(d / "walk_forward_summary.csv", index=False)
     # US: eos only
@@ -536,8 +521,16 @@ def test_horizon_skill_curves_inner_join_countries():
         xgb = next(f for f in maize["families"] if f["model"] == "xgboost")
         assert xgb["plot"] is True
         assert xgb.get("eos_only") is not True
-        nrmse_by_hz = {p["horizon"]: p["median_nrmse"] for p in xgb["points"]}
+        nrmse_by_hz = {
+            p["horizon"]: p["metrics"]["nrmse"]["median"] for p in xgb["points"]
+        }
         assert nrmse_by_hz["mid"] > nrmse_by_hz["qtr"] > nrmse_by_hz["eos"]
+        temporal_by_hz = {
+            p["horizon"]: p["metrics"]["r_temporal"]["median"] for p in xgb["points"]
+        }
+        assert temporal_by_hz["mid"] < temporal_by_hz["qtr"] < temporal_by_hz["eos"]
+        assert len(payload["axes"]) == 4
+        assert payload["axes"][2]["id"] == "temporal"
 
 
 def test_horizon_skill_curves_eos_only_lpjml_in_table_not_plot(tmp_path: Path):
@@ -563,7 +556,7 @@ def test_horizon_skill_curves_eos_only_lpjml_in_table_not_plot(tmp_path: Path):
     assert lpj["plot"] is False
     assert len(lpj["points"]) == 1
     assert lpj["points"][0]["horizon"] == "eos"
-    assert lpj["points"][0]["median_nrmse"] == 0.19
+    assert lpj["points"][0]["metrics"]["nrmse"]["median"] == 0.19
     plot_models = {f["model"] for f in maize["families"] if f["plot"]}
     assert "lpjml_bc" not in plot_models
     assert "plot_excluded_note" in payload
