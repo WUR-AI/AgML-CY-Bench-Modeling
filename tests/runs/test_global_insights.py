@@ -447,8 +447,8 @@ def test_build_insights_payload_structure(tmp_path: Path):
 def _three_horizon_fixture(tmp_path: Path) -> pd.DataFrame:
     """DE+FR with eos/mid/qtr; US only eos (excluded from curves)."""
     rows_by_hz = {
-        "qtr": {"ridge": 0.28, "trend": 0.32, "xgboost": 0.26},
-        "mid": {"ridge": 0.22, "trend": 0.30, "xgboost": 0.20},
+        "mid": {"ridge": 0.30, "trend": 0.34, "xgboost": 0.28},
+        "qtr": {"ridge": 0.22, "trend": 0.30, "xgboost": 0.20},
         "eos": {"ridge": 0.15, "trend": 0.28, "xgboost": 0.14},
     }
     for cc, hz in [("de", "eos"), ("de", "mid"), ("de", "qtr"), ("fr", "eos"), ("fr", "mid"), ("fr", "qtr")]:
@@ -527,7 +527,7 @@ def test_horizon_skill_curves_inner_join_countries():
         df = _three_horizon_fixture(Path(tmp))
         payload = build_horizon_skill_curves_payload(df)
         assert len(payload["horizons"]) == 3
-        assert [h["id"] for h in payload["horizons"]] == ["qtr", "mid", "eos"]
+        assert [h["id"] for h in payload["horizons"]] == ["mid", "qtr", "eos"]
         maize = payload["by_crop"]["maize"]
         assert maize["n_countries"] == 2
         assert set(maize["countries"]) == {"DE", "FR"}
@@ -535,7 +535,7 @@ def test_horizon_skill_curves_inner_join_countries():
 
         xgb = next(f for f in maize["families"] if f["model"] == "xgboost")
         nrmse_by_hz = {p["horizon"]: p["median_nrmse"] for p in xgb["points"]}
-        assert nrmse_by_hz["qtr"] > nrmse_by_hz["mid"] > nrmse_by_hz["eos"]
+        assert nrmse_by_hz["mid"] > nrmse_by_hz["qtr"] > nrmse_by_hz["eos"]
 
 
 def test_build_insights_payload_includes_qtr_and_curves(tmp_path: Path):

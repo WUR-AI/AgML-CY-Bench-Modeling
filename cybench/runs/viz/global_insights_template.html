@@ -412,9 +412,9 @@
     }
 
     const HORIZON_LABELS = DATA.horizon_labels || {
-      qtr: "Quarter-season (~75%)",
-      mid: "Mid-season (~50%)",
-      eos: "End of season",
+      mid: "Mid-season (~50% observed)",
+      qtr: "Late season (~75% observed, 25% left)",
+      eos: "End of season (~100% observed)",
     };
     const AVAILABLE_HORIZONS = (DATA.available_horizons && DATA.available_horizons.length)
       ? DATA.available_horizons
@@ -889,7 +889,7 @@
         svg += `<line x1="${x}" y1="${pad.t}" x2="${x}" y2="${height - pad.b}" stroke="#f0f1f3"/>`;
         svg += `<text x="${x}" y="${height - 28}" text-anchor="middle" font-size="11" fill="#1f2328">${hz.label || hz.id}</text>`;
       });
-      svg += `<text x="${pad.l + innerW / 2}" y="${height - 6}" text-anchor="middle" font-size="11" fill="#1f2328">Forecast horizon (more season observed →)</text>`;
+      svg += `<text x="${pad.l + innerW / 2}" y="${height - 6}" text-anchor="middle" font-size="11" fill="#1f2328">Season progress (more of season observed →)</text>`;
       svg += `<text x="14" y="${pad.t + innerH / 2}" text-anchor="middle" font-size="11" fill="#1f2328" transform="rotate(-90 14 ${pad.t + innerH / 2})">${yLabel}</text>`;
 
       for (const fam of slice.families) {

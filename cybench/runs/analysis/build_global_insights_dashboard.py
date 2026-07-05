@@ -33,7 +33,7 @@ def write_insights_dashboard(
     *,
     output_root: Path,
     dest: Path,
-    version: int = 1,
+    version: int = 2,
 ) -> Path:
     payload = build_insights_payload(output_root, version=version)
     if payload["n_rows"] == 0:
@@ -62,7 +62,7 @@ def main() -> int:
         default=Path("/lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard"),
         help="GitHub Pages clone root (used when --dest is omitted)",
     )
-    parser.add_argument("--version", type=int, default=1, help="Batch version tag (default: 1)")
+    parser.add_argument("--version", type=int, default=2, help="Batch version tag (default: 2)")
     args = parser.parse_args()
 
     dest = args.dest or (args.publish_root / "insights.html")

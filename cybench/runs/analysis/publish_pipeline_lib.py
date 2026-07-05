@@ -46,7 +46,7 @@ HORIZON_TAGS_BY_BATCH_SUFFIX: dict[str, tuple[str, ...]] = {
 _BATCH_HORIZON_LABELS: dict[str, str] = {
     "eos": "end-of-season",
     "mid": "mid-season",
-    "qtr": "quarter-season (75%)",
+    "qtr": "late season (75% observed, 25% left)",
 }
 
 
@@ -479,13 +479,12 @@ def filter_publish_targets(
     countries: list[str] | None = None,
     horizons: list[str] | None = None,
     version: int | None = None,
-    keep_latest_version: bool = True,
+    keep_latest_version: bool = False,
 ) -> list[PublishTarget]:
     """Narrow targets by country, horizon (eos|mid|qtr), and optional batch version.
 
-    When ``version`` is omitted and ``keep_latest_version`` is true (default), only the
-    highest ``vN`` per (country, horizon) is kept — avoids publishing duplicate v1+v2
-    bundles that blow the GitHub Pages 1 GB artifact limit.
+    When ``keep_latest_version`` is true, only the highest ``vN`` per (country, horizon)
+    is kept — use for GitHub Pages publish to avoid duplicate v1+v2 bundles.
     """
     if countries:
         wanted = {c.upper() for c in countries}
@@ -949,7 +948,11 @@ def resolve_targets(
         targets = discover_baselines_batches(defaults.output_root, defaults=defaults)
 
     targets = filter_publish_targets(
-        targets, countries=countries, horizons=horizons, version=version
+        targets,
+        countries=countries,
+        horizons=horizons,
+        version=version,
+        keep_latest_version=version is None,
     )
 
     if mode == "all-available":

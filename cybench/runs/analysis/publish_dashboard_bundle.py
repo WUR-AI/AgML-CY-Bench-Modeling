@@ -73,8 +73,8 @@ _HORIZON_LABELS: dict[str, str] = {
     "eos": "End of season",
     "mid": "Mid-season",
     "mid_season": "Mid-season",
-    "qtr": "Quarter-season (75%)",
-    "quarter_season": "Quarter-season (75%)",
+    "qtr": "Late season (75% observed)",
+    "quarter_season": "Late season (75% observed)",
 }
 
 
@@ -123,13 +123,18 @@ def prune_obsolete_dashboard_dirs(
     GitHub Pages artifacts are limited to 1 GB; keeping only the latest version per
     country×horizon avoids duplicate v1+v2 asset trees (~30% of the bundle).
     """
+    publish_root = publish_root.resolve()
     by_key: dict[tuple[str, str], list[tuple[int, Path]]] = {}
+    n_dirs = 0
+    n_matched = 0
     for child in publish_root.iterdir():
         if not child.is_dir() or child.name == "assets":
             continue
+        n_dirs += 1
         parsed = parse_publish_slug(child.name)
         if parsed is None:
             continue
+        n_matched += 1
         cc, hz, ver = parsed
         by_key.setdefault((cc, hz), []).append((ver, child))
 
@@ -146,6 +151,23 @@ def prune_obsolete_dashboard_dirs(
                 else:
                     shutil.rmtree(path)
                     print(f"[OK] pruned {path.name}")
+
+    if not removed:
+        print(
+            f"[INFO] publish-root={publish_root} · "
+            f"{n_dirs} subdirs scanned · {n_matched} walk-forward slug(s) · "
+            f"{len(by_key)} country×horizon keys"
+        )
+        if n_matched == 0:
+            print(
+                "[WARN] No folders matching "
+                "'{cc}_walk_forward_{eos|mid|qtr}_vN'. "
+                "Use the CY-Bench-dashboard git clone as --publish-root "
+                "(e.g. /lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard), "
+                "not the AgML-CY-Bench-AAAI source tree."
+            )
+        elif all(len(e) == 1 for e in by_key.values()):
+            print("[INFO] No obsolete versions: at most one vN per country×horizon.")
     return sorted(removed, key=lambda p: p.name)
 
 

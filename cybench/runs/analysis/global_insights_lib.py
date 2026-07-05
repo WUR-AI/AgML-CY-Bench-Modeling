@@ -14,13 +14,14 @@ _PAPER_DIR_RE = re.compile(
 
 _BASELINE_MODELS = frozenset({"average", "averageyieldmodel", "average_yield"})
 
-# Lead time increases left → right (less season observed → more observed).
-BATCH_HORIZON_ORDER: tuple[str, ...] = ("qtr", "mid", "eos")
+# Lead time decreases left → right (less season observed → more observed).
+# Code: mid = 50% observed; qtr = cutoff at season_length/4 before EOS (~75% observed, 25% left); eos = ~100%.
+BATCH_HORIZON_ORDER: tuple[str, ...] = ("mid", "qtr", "eos")
 
 HORIZON_DISPLAY_LABELS: dict[str, str] = {
-    "qtr": "Quarter-season (~75%)",
-    "mid": "Mid-season (~50%)",
-    "eos": "End of season",
+    "mid": "Mid-season (~50% observed)",
+    "qtr": "Late season (~75% observed, 25% left)",
+    "eos": "End of season (~100% observed)",
 }
 
 
