@@ -70,6 +70,11 @@ def country_display_name(cc: str) -> str:
     return _COUNTRY_NAMES.get(cc.lower(), cc.upper())
 
 
+def _version_from_slug(slug: str) -> int:
+    match = re.search(r"_v(\d+)$", slug, re.IGNORECASE)
+    return int(match.group(1)) if match else 0
+
+
 def _horizon_key_from_slug(slug: str) -> str | None:
     match = _SLUG_RE.match(slug)
     if not match:
@@ -77,15 +82,23 @@ def _horizon_key_from_slug(slug: str) -> str | None:
     hz = match.group(2).lower()
     if hz in {"mid", "mid_season"}:
         return "mid"
+    if hz in {"qtr", "quarter_season"}:
+        return "qtr"
     return hz
 
 
 def group_walk_forward_entries(entries: list[IndexEntry]) -> list[dict[str, Any]]:
     """Group walk-forward index entries by ISO2 country code."""
+    walk_forward = [
+        e
+        for e in entries
+        if e.kind == "walk_forward" and e.country_code
+    ]
+    # Higher vN last so it wins when the same country×horizon appears twice.
+    walk_forward.sort(key=lambda e: _version_from_slug(e.slug))
+
     by_cc: dict[str, dict[str, Any]] = {}
-    for entry in entries:
-        if entry.kind != "walk_forward" or not entry.country_code:
-            continue
+    for entry in walk_forward:
         cc = entry.country_code.upper()
         hz = _horizon_key_from_slug(entry.slug)
         if hz is None:
@@ -98,6 +111,7 @@ def group_walk_forward_entries(entries: list[IndexEntry]) -> list[dict[str, Any]
                 "name": country_display_name(cc),
                 "eos": None,
                 "mid": None,
+                "qtr": None,
             },
         )
         row[hz] = entry.href

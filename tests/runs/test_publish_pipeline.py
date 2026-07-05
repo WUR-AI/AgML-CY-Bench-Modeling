@@ -55,7 +55,8 @@ def test_publish_target_names():
     )
     assert qtr.batch_name == "baselines_DE_qtr_v2"
     assert qtr.collect_dir == Path("/tmp/output/paper_walk_forward_de_qtr_v2")
-    assert "quarter-season" in qtr.default_title().lower()
+    assert "late season" in qtr.default_title().lower()
+    assert "75%" in qtr.default_title()
 
 
 def test_needs_collect_skips_when_state_matches(tmp_path: Path):

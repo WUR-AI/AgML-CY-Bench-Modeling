@@ -54,6 +54,30 @@ def test_group_walk_forward_entries():
     assert el["eos"]
 
 
+def test_group_walk_forward_entries_qtr_and_latest_version():
+    entries = [
+        IndexEntry(
+            href="de_walk_forward_qtr_v1/dashboard.html",
+            slug="de_walk_forward_qtr_v1",
+            title="Germany",
+            subtitle="qtr",
+            country_code="DE",
+            kind="walk_forward",
+        ),
+        IndexEntry(
+            href="de_walk_forward_qtr_v2/dashboard.html",
+            slug="de_walk_forward_qtr_v2",
+            title="Germany",
+            subtitle="qtr",
+            country_code="DE",
+            kind="walk_forward",
+        ),
+    ]
+    grouped = group_walk_forward_entries(entries)
+    de = next(r for r in grouped if r["cc"] == "DE")
+    assert de["qtr"] == "de_walk_forward_qtr_v2/dashboard.html"
+
+
 def test_export_world_geojson_includes_france(tmp_path: Path):
     try:
         world_shape_path("110")

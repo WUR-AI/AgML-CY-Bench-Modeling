@@ -133,9 +133,10 @@
       <div class="card">
         <div class="toolbar">
           <span class="muted">Horizon</span>
-          <button type="button" data-horizon="both" class="active">Both</button>
+          <button type="button" data-horizon="all" class="active">All</button>
+          <button type="button" data-horizon="mid">Mid-season (~50%)</button>
+          <button type="button" data-horizon="qtr">Late season (~75%)</button>
           <button type="button" data-horizon="eos">End of season</button>
-          <button type="button" data-horizon="mid">Mid-season</button>
         </div>
         <div id="map-wrap"><p class="muted">Loading map…</p></div>
         <div class="legend muted">
@@ -154,7 +155,7 @@
     const DATA = __MAP_DATA_JSON__;
     const byCc = new Map(DATA.countries.map(c => [c.cc, c]));
     const byMapIso = new Map(DATA.countries.map(c => [c.map_cc || c.cc, c]));
-    let horizon = "both";
+    let horizon = "all";
     let selectedCc = null;
 
     const topLinks = document.getElementById("top-links");
@@ -170,7 +171,7 @@
     topLinks.innerHTML += `<span class="pill muted">${DATA.n_countries} countries published</span>`;
 
     function hasHorizon(c, hz) {
-      if (hz === "both") return Boolean(c.eos || c.mid);
+      if (hz === "all" || hz === "both") return Boolean(c.eos || c.mid || c.qtr);
       return Boolean(c[hz]);
     }
 
@@ -190,11 +191,13 @@
       const c = byCc.get(cc);
       const eosCls = c.eos ? "" : " disabled";
       const midCls = c.mid ? "" : " disabled";
+      const qtrCls = c.qtr ? "" : " disabled";
       el.innerHTML = `
         <h3>${c.name}</h3>
         <div class="cc">${c.cc}</div>
-        <a class="dash-link${eosCls}" href="${c.eos || "#"}">End-of-season walk-forward</a>
-        <a class="dash-link${midCls}" href="${c.mid || "#"}">Mid-season walk-forward</a>`;
+        <a class="dash-link${midCls}" href="${c.mid || "#"}">Mid-season walk-forward</a>
+        <a class="dash-link${qtrCls}" href="${c.qtr || "#"}">Late-season walk-forward (~75% observed)</a>
+        <a class="dash-link${eosCls}" href="${c.eos || "#"}">End-of-season walk-forward</a>`;
     }
 
     function selectCountry(cc) {
