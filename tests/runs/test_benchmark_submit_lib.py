@@ -23,6 +23,8 @@ def test_batch_name():
     assert batch_name("de", "eos") == "baselines_DE_eos_v1"
     assert batch_name("pl", "mid") == "baselines_PL_mid_v1"
     assert horizon_batch_suffix("middle-of-season") == "mid"
+    assert horizon_batch_suffix("quarter-of-season") == "qtr"
+    assert horizon_batch_suffix("qtr") == "qtr"
 
 
 def test_filed_batches(tmp_path: Path):
@@ -69,6 +71,8 @@ def test_resolve_batch_dir_and_parse_batch_name(tmp_path: Path):
     from cybench.runs.slurm.benchmark_submit_lib import parse_batch_name, resolve_batch_dir
 
     assert parse_batch_name("baselines_de_eos_v1") == ("DE", "eos", 1)
+    assert parse_batch_name("baselines_SK_qtr_v2") == ("SK", "qtr", 2)
+    assert parse_batch_name("baselines_SK_qtr_v2") == ("SK", "qtr", 2)
     output = tmp_path / "out"
     (output / "baselines_fr_mid_v1").mkdir(parents=True)
     path, note = resolve_batch_dir(output, "baselines_FR_mid_v1")

@@ -1,7 +1,7 @@
 # Dashboard publish pipeline — paths only (anunna / lustre).
 #
 # Targets are discovered from:
-#   {output_root}/baselines_{CC}_{eos|mid}_v{N}/   (per-country SLURM batches)
+#   {output_root}/baselines_{CC}_{eos|mid|qtr}_v{N}/   (per-country SLURM batches)
 # and, when present, walk-forward runs under:
 #   {output_root}/baselines/   (legacy/default Hydra experiment.name)
 #

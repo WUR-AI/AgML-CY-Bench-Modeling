@@ -612,7 +612,7 @@ def discover_batches_on_disk(
             continue
         if wanted_hz is not None and batch_hz not in wanted_hz:
             continue
-        slurm_hz = "eos" if batch_hz == "eos" else "middle-of-season"
+        slurm_hz = batch_suffix_to_horizon(batch_hz)
         found.append((entry.name, slurm_hz))
     return found
 
@@ -732,7 +732,8 @@ def ensure_manifest(
 
     raise FileNotFoundError(
         f"No manifest for batch {batch!r}. Tried {default}, shared {shared}, "
-        f"and generate_job_manifest.py (need batch name baselines_CC_eos_v1 or --manifest)."
+        f"and generate_job_manifest.py (need batch name baselines_CC_eos_v1, "
+        f"baselines_CC_qtr_v1, or --manifest)."
     )
 
 

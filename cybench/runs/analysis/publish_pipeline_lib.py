@@ -18,7 +18,11 @@ from cybench.runs.analysis.publish_dashboard_bundle import (
     publish_bundle,
     update_index,
 )
-from cybench.runs.slurm.benchmark_submit_lib import resolve_batch_dir, resolve_case_insensitive_child
+from cybench.runs.slurm.benchmark_submit_lib import (
+    horizon_batch_suffix,
+    resolve_batch_dir,
+    resolve_case_insensitive_child,
+)
 
 Mode = Literal["planned", "ready", "all-available"]
 StageName = Literal["collect", "publish", "index", "commit"]
@@ -26,16 +30,23 @@ StageName = Literal["collect", "publish", "index", "commit"]
 MONOLITHIC_BASELINES_DIR = "baselines"
 
 _BATCH_RE = re.compile(
-    r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid)_v(?P<version>\d+)$"
+    r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid|qtr)_v(?P<version>\d+)$"
 )
 _PAPER_COLLECT_RE = re.compile(
-    r"^paper_walk_forward_(?P<country>[a-z]{2})_(?P<batch_hz>eos|mid)_v(?P<version>\d+)$"
+    r"^paper_walk_forward_(?P<country>[a-z]{2})_(?P<batch_hz>eos|mid|qtr)_v(?P<version>\d+)$"
 )
 
 # Batch folder suffix → horizon tags accepted under ../output/<batch>/.
 HORIZON_TAGS_BY_BATCH_SUFFIX: dict[str, tuple[str, ...]] = {
     "eos": ("eos",),
     "mid": ("mid_season", "mid"),
+    "qtr": ("quarter_season", "qtr"),
+}
+
+_BATCH_HORIZON_LABELS: dict[str, str] = {
+    "eos": "end-of-season",
+    "mid": "mid-season",
+    "qtr": "quarter-season (75%)",
 }
 
 
@@ -51,7 +62,7 @@ class PipelineDefaults:
 @dataclass
 class PublishTarget:
     country: str
-    batch_horizon: str  # eos | mid (batch folder suffix)
+    batch_horizon: str  # eos | mid | qtr (batch folder suffix)
     version: int = 1
     output_root: Path = field(default_factory=lambda: PipelineDefaults().output_root)
     repo_root: Path = field(default_factory=lambda: PipelineDefaults().repo_root)
@@ -96,7 +107,7 @@ class PublishTarget:
         if self.title:
             return self.title
         country = _COUNTRY_NAMES.get(self.country_lower, self.country_upper)
-        hz_label = "end-of-season" if self.batch_horizon == "eos" else "mid-season"
+        hz_label = _BATCH_HORIZON_LABELS.get(self.batch_horizon, self.batch_horizon)
         return f"{country} walk-forward, {hz_label} ({self.country_upper} maize/wheat)"
 
 
@@ -260,7 +271,7 @@ def discover_baselines_batches_fast(
     *,
     defaults: PipelineDefaults | None = None,
 ) -> list[PublishTarget]:
-    """List ``baselines_{CC}_{eos|mid}_vN`` folders only (no monolithic scan)."""
+    """List ``baselines_{CC}_{eos|mid|qtr}_vN`` folders only (no monolithic scan)."""
     defaults = defaults or PipelineDefaults()
     targets: list[PublishTarget] = []
     seen: set[tuple[str, str, int]] = set()
@@ -458,12 +469,8 @@ def load_targets_from_config(
 
 
 def horizon_to_batch_suffix(horizon: str) -> str:
-    key = horizon.strip().lower().replace("-", "_")
-    if key in {"eos"}:
-        return "eos"
-    if key in {"mid", "mid_season", "middle_of_season", "middle-of-season", "mid-season"}:
-        return "mid"
-    raise ValueError(f"Unsupported horizon for batch naming: {horizon!r}")
+    """Map SLURM / CLI horizon to batch folder suffix (``eos`` / ``mid`` / ``qtr``)."""
+    return horizon_batch_suffix(horizon)
 
 
 def filter_publish_targets(
@@ -473,7 +480,7 @@ def filter_publish_targets(
     horizons: list[str] | None = None,
     version: int | None = None,
 ) -> list[PublishTarget]:
-    """Narrow targets by country, horizon (eos|mid), and optional batch version."""
+    """Narrow targets by country, horizon (eos|mid|qtr), and optional batch version."""
     if countries:
         wanted = {c.upper() for c in countries}
         targets = [t for t in targets if t.country_upper in wanted]

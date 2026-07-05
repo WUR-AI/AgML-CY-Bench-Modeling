@@ -33,3 +33,19 @@ def test_resolve_targets_fast_filters_version(tmp_path: Path):
     )
     assert len(v2_only) == 1
     assert v2_only[0].batch_name == "baselines_DE_eos_v2"
+
+
+def test_resolve_targets_fast_includes_qtr(tmp_path: Path):
+    (tmp_path / "baselines_DE_qtr_v2").mkdir()
+    defaults = PipelineDefaults(output_root=tmp_path)
+
+    targets = _resolve_targets_fast(
+        mode="all-available",
+        config_path=None,
+        defaults=defaults,
+        countries=None,
+        horizons=None,
+        version=2,
+    )
+    assert len(targets) == 1
+    assert targets[0].batch_name == "baselines_DE_qtr_v2"

@@ -506,6 +506,8 @@ def _run_matches_horizon(run: BenchmarkRun, horizon: str | None) -> bool:
         return run.horizon == "eos"
     if key in {"mid", "mid_season", "middle_of_season"}:
         return run.horizon in {"mid_season", "mid"}
+    if key in {"qtr", "quarter", "quarter_season", "quarter_of_season"}:
+        return run.horizon in {"quarter_season", "qtr"}
     return run.horizon == horizon
 
 
@@ -603,8 +605,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--horizon",
-        choices=["eos", "mid"],
-        help="Optional horizon filter (eos or mid / mid_season runs)",
+        choices=["eos", "mid", "qtr"],
+        help="Optional horizon filter (eos, mid / mid_season, or qtr / quarter_season runs)",
     )
     parser.add_argument(
         "--data-dir",

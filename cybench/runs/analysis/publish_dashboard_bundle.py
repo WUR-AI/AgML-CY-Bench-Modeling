@@ -73,7 +73,8 @@ _HORIZON_LABELS: dict[str, str] = {
     "eos": "End of season",
     "mid": "Mid-season",
     "mid_season": "Mid-season",
-    "quarter_season": "Quarter-season",
+    "qtr": "Quarter-season (75%)",
+    "quarter_season": "Quarter-season (75%)",
 }
 
 

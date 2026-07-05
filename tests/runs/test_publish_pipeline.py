@@ -22,11 +22,14 @@ def test_horizon_to_batch_suffix():
     assert horizon_to_batch_suffix("eos") == "eos"
     assert horizon_to_batch_suffix("middle-of-season") == "mid"
     assert horizon_to_batch_suffix("mid_season") == "mid"
+    assert horizon_to_batch_suffix("quarter-of-season") == "qtr"
+    assert horizon_to_batch_suffix("qtr") == "qtr"
 
 
 def test_parse_batch_dir_name():
     assert parse_batch_dir_name("baselines_de_mid_v1") == ("de", "mid", 1)
     assert parse_batch_dir_name("baselines_FR_eos_v1") == ("FR", "eos", 1)
+    assert parse_batch_dir_name("baselines_SK_qtr_v2") == ("SK", "qtr", 2)
     assert parse_batch_dir_name("baselines") is None
 
 
@@ -42,6 +45,17 @@ def test_publish_target_names():
     assert target.collect_dir == Path("/tmp/output/paper_walk_forward_de_mid_v1")
     assert target.publish_slug == "de_walk_forward_mid_v1"
     assert "Germany" in target.default_title()
+
+    qtr = PublishTarget(
+        country="DE",
+        batch_horizon="qtr",
+        version=2,
+        output_root=Path("/tmp/output"),
+        publish_root=Path("/tmp/publish"),
+    )
+    assert qtr.batch_name == "baselines_DE_qtr_v2"
+    assert qtr.collect_dir == Path("/tmp/output/paper_walk_forward_de_qtr_v2")
+    assert "quarter-season" in qtr.default_title().lower()
 
 
 def test_needs_collect_skips_when_state_matches(tmp_path: Path):
@@ -103,9 +117,11 @@ def test_load_targets_discovers_batches_when_no_include(tmp_path: Path):
 
 def test_discover_baselines_batches(tmp_path: Path):
     (tmp_path / "baselines_AR_eos_v1").mkdir()
+    (tmp_path / "baselines_DE_qtr_v2").mkdir()
     targets = discover_baselines_batches(tmp_path)
-    assert len(targets) == 1
-    assert targets[0].country_upper == "AR"
+    assert len(targets) == 2
+    assert {t.country_upper for t in targets} == {"AR", "DE"}
+    assert {t.batch_horizon for t in targets} == {"eos", "qtr"}
 
 
 def test_filter_publish_targets_by_version(tmp_path: Path):

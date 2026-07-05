@@ -86,7 +86,7 @@ def main() -> int:
         "--horizon",
         action="append",
         dest="horizons",
-        help="Limit to horizon(s): eos, mid",
+        help="Limit to horizon(s): eos, mid, qtr, quarter-of-season",
     )
     parser.add_argument(
         "--version",

@@ -9,7 +9,7 @@ from typing import Any
 import pandas as pd
 
 _PAPER_DIR_RE = re.compile(
-    r"^paper_walk_forward_(?P<country>[a-z]{2})_(?P<horizon>eos|mid)_v(?P<version>\d+)$"
+    r"^paper_walk_forward_(?P<country>[a-z]{2})_(?P<horizon>eos|mid|qtr)_v(?P<version>\d+)$"
 )
 
 _BASELINE_MODELS = frozenset({"average", "averageyieldmodel", "average_yield"})

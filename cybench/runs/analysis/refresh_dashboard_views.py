@@ -23,7 +23,7 @@ from cybench.runs.analysis.global_insights_lib import parse_paper_dir_name
 from cybench.runs.analysis.publish_dashboard_bundle import publish_bundle
 
 _PAPER_RE = re.compile(
-    r"^paper_walk_forward_(?P<country>[a-z]{2})_(?P<horizon>eos|mid)_v(?P<version>\d+)$"
+    r"^paper_walk_forward_(?P<country>[a-z]{2})_(?P<horizon>eos|mid|qtr)_v(?P<version>\d+)$"
 )
 
 

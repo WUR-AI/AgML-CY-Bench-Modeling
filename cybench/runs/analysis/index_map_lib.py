@@ -17,7 +17,7 @@ _BUNDLED_GEOJSON = (
     Path(__file__).resolve().parent.parent / "viz" / "data" / "world_countries_110m.geojson"
 )
 _SLUG_RE = re.compile(
-    r"^([a-z]{2})_walk_forward_(eos|mid|mid_season)(?:_v\d+)?$", re.IGNORECASE
+    r"^([a-z]{2})_walk_forward_(eos|mid|mid_season|qtr|quarter_season)(?:_v\d+)?$", re.IGNORECASE
 )
 
 # CY-Bench country codes that differ from Natural Earth ISO_A2 (e.g. EL = Greece).
