@@ -386,6 +386,8 @@ th.left, td.left { text-align: left; }
 
 ALL_PANELS = ("map_actual", "map_pred", "scatter", "temporal")
 DASHBOARD_PANELS = ("map_actual", "map_pred", "scatter", "temporal")
+MAP_PANEL_DPI = 100
+DEFAULT_PANEL_DPI = 160
 
 # Switch to hexbin when overplotting would obscure structure.
 SCATTER_HEX_THRESHOLD = 500
@@ -422,7 +424,8 @@ def save_panel_images(
         bbox = tight_bbox.transformed(fig.dpi_scale_trans.inverted())
         fn = f"{dataset_key}_{panel_name}.png"
         fp = os.path.join(output_dir, fn)
-        fig.savefig(fp, dpi=160, bbox_inches=bbox)
+        dpi = MAP_PANEL_DPI if panel_name in ("map_actual", "map_pred") else DEFAULT_PANEL_DPI
+        fig.savefig(fp, dpi=dpi, bbox_inches=bbox)
         out_paths[panel_name] = fp
 
     return out_paths

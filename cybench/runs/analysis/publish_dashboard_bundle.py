@@ -22,6 +22,7 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 _COUNTRY_NAMES: dict[str, str] = {
     "ao": "Angola",
@@ -171,11 +172,171 @@ def prune_obsolete_dashboard_dirs(
     return sorted(removed, key=lambda p: p.name)
 
 
+# GitHub Pages artifact limit (deploy fails above this).
+GITHUB_PAGES_MAX_BYTES = 1_073_741_824
+
+# Map PNGs are ~45% of each dashboard; downscale for Pages to stay under 1 GB.
+PAGES_MAP_MARKERS = ("map_actual", "map_pred")
+# Linear scale (0.70 → ~49% pixels / ~half the map bytes; keeps maps readable).
+PAGES_MAP_SCALE = 0.70
+PAGES_MAP_PNG_OPTIMIZE = True
+# Source collect: lower DPI for map panels only (scatter/temporal stay sharp).
+MAP_PANEL_DPI = 100
+DEFAULT_PANEL_DPI = 160
+
+
+def _is_map_asset(filename: str) -> bool:
+    return any(marker in filename for marker in PAGES_MAP_MARKERS)
+
+
+def downgrade_map_png(
+    src: Path,
+    dest: Path,
+    *,
+    scale: float = PAGES_MAP_SCALE,
+) -> int:
+    """Resize a map PNG for GitHub Pages; return output size in bytes."""
+    from PIL import Image
+
+    with Image.open(src) as img:
+        width, height = img.size
+        new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
+        if new_size != (width, height):
+            img = img.resize(new_size, Image.Resampling.LANCZOS)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        img.save(dest, format="PNG", optimize=PAGES_MAP_PNG_OPTIMIZE)
+    return dest.stat().st_size
+
+
+def estimate_publish_bundle_size(publish_root: Path) -> dict[str, Any]:
+    """Total bytes under publish_root (excluding .git)."""
+    publish_root = publish_root.resolve()
+    total = 0
+    n_files = 0
+    n_dashboard_dirs = 0
+    by_horizon: dict[str, int] = {}
+    for path in publish_root.rglob("*"):
+        if not path.is_file():
+            continue
+        if ".git" in path.parts:
+            continue
+        size = path.stat().st_size
+        total += size
+        n_files += 1
+    for child in publish_root.iterdir():
+        if not child.is_dir() or child.name in {"assets", ".git"}:
+            continue
+        if not (child / "dashboard.html").is_file():
+            continue
+        n_dashboard_dirs += 1
+        hz = "other"
+        for token in ("_eos_", "_mid_", "_qtr_"):
+            if token in child.name:
+                hz = token.strip("_")
+                break
+        dir_bytes = sum(f.stat().st_size for f in child.rglob("*") if f.is_file())
+        by_horizon[hz] = by_horizon.get(hz, 0) + dir_bytes
+    return {
+        "total_bytes": total,
+        "total_mb": round(total / (1024 * 1024), 1),
+        "n_files": n_files,
+        "n_dashboard_dirs": n_dashboard_dirs,
+        "by_horizon_bytes": by_horizon,
+        "over_pages_limit": total > GITHUB_PAGES_MAX_BYTES,
+        "pages_limit_mb": round(GITHUB_PAGES_MAX_BYTES / (1024 * 1024), 1),
+    }
+
+
+def apply_pages_lite_to_publish_root(
+    publish_root: Path,
+    *,
+    dry_run: bool = False,
+    scale: float = PAGES_MAP_SCALE,
+) -> tuple[int, int]:
+    """Downscale map PNGs in every published dashboard (scatter/temporal unchanged).
+
+    Returns (maps_processed, bytes_saved).
+    """
+    publish_root = publish_root.resolve()
+    processed = 0
+    saved = 0
+    for child in publish_root.iterdir():
+        if not child.is_dir() or child.name in {"assets", ".git"}:
+            continue
+        assets = child / "assets"
+        if not assets.is_dir():
+            continue
+        for asset in assets.glob("*.png"):
+            if not _is_map_asset(asset.name):
+                continue
+            before = asset.stat().st_size
+            if dry_run:
+                print(f"[DRY-RUN] downgrade {child.name}/assets/{asset.name}")
+                processed += 1
+                continue
+            tmp = asset.with_name(asset.name + ".tmp")
+            after = downgrade_map_png(asset, tmp, scale=scale)
+            tmp.replace(asset)
+            processed += 1
+            saved += max(0, before - after)
+    if processed:
+        action = "would downgrade" if dry_run else "downgraded"
+        print(
+            f"[OK] {action} {processed} map PNG(s)"
+            + (f", saved {saved / (1024 * 1024):.1f} MB" if saved else "")
+        )
+    return processed, saved
+
+
+def report_publish_bundle_size(publish_root: Path) -> None:
+    stats = estimate_publish_bundle_size(publish_root)
+    print(
+        f"[SIZE] publish-root={publish_root.resolve()} · "
+        f"{stats['total_mb']} MB · {stats['n_dashboard_dirs']} dashboards · "
+        f"{stats['n_files']} files"
+    )
+    for hz, nbytes in sorted(stats["by_horizon_bytes"].items()):
+        print(f"  {hz}: {nbytes / (1024 * 1024):.1f} MB")
+    if stats["over_pages_limit"]:
+        over_mb = stats["total_bytes"] / (1024 * 1024) - stats["pages_limit_mb"]
+        print(
+            f"[WARN] Over GitHub Pages artifact limit ({stats['pages_limit_mb']} MB) "
+            f"by ~{over_mb:.0f} MB. Run --downgrade-maps-only or republish with --pages-lite."
+        )
+    else:
+        headroom = stats["pages_limit_mb"] - stats["total_mb"]
+        print(f"[OK] Within GitHub Pages limit ({headroom:.0f} MB headroom)")
+
+
+def _copy_assets(
+    assets_src: Path,
+    dest_assets: Path,
+    *,
+    pages_lite: bool,
+) -> int:
+    """Copy assets/; return number of files copied."""
+    if dest_assets.exists():
+        shutil.rmtree(dest_assets)
+    dest_assets.mkdir(parents=True)
+    n_copied = 0
+    for src_file in sorted(assets_src.iterdir()):
+        if not src_file.is_file():
+            continue
+        dest_file = dest_assets / src_file.name
+        if pages_lite and _is_map_asset(src_file.name):
+            downgrade_map_png(src_file, dest_file)
+        else:
+            shutil.copy2(src_file, dest_file)
+        n_copied += 1
+    return n_copied
+
+
 def publish_bundle(
     *,
     source_dir: Path,
     dest_dir: Path,
     title: str | None = None,
+    pages_lite: bool = False,
 ) -> Path:
     """Copy HTML + assets into dest_dir/dashboard.html (+ assets/)."""
     html_src, assets_src = _resolve_html_and_assets(source_dir)
@@ -186,9 +347,9 @@ def publish_bundle(
 
     dest_assets = dest_dir / "assets"
     if assets_src and assets_src.is_dir():
-        if dest_assets.exists():
-            shutil.rmtree(dest_assets)
-        shutil.copytree(assets_src, dest_assets)
+        n_assets = _copy_assets(assets_src, dest_assets, pages_lite=pages_lite)
+        if pages_lite:
+            print(f"[INFO] pages-lite: copied {n_assets} asset(s) (maps downscaled to {PAGES_MAP_SCALE:.0%})")
     elif dest_assets.exists():
         shutil.rmtree(dest_assets)
 
@@ -505,10 +666,40 @@ def main() -> None:
         action="store_true",
         help="Print prune actions without deleting",
     )
+    parser.add_argument(
+        "--pages-lite",
+        action="store_true",
+        help="Downscale map PNGs when copying assets (keeps all panels; fits GitHub Pages 1 GB limit)",
+    )
+    parser.add_argument(
+        "--downgrade-maps-only",
+        action="store_true",
+        help="Downscale map PNGs in existing published dashboards, then report size",
+    )
+    parser.add_argument(
+        "--strip-maps-only",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--report-size",
+        action="store_true",
+        help="Print publish-root size breakdown and exit",
+    )
     args = parser.parse_args()
 
     publish_root = args.publish_root.resolve()
     publish_root.mkdir(parents=True, exist_ok=True)
+
+    if args.report_size:
+        report_publish_bundle_size(publish_root)
+        return
+
+    if args.downgrade_maps_only or args.strip_maps_only:
+        apply_pages_lite_to_publish_root(publish_root, dry_run=args.dry_run)
+        if not args.dry_run:
+            report_publish_bundle_size(publish_root)
+        return
 
     if args.prune_only:
         removed = prune_obsolete_dashboard_dirs(publish_root, dry_run=args.dry_run)
@@ -531,6 +722,7 @@ def main() -> None:
             source_dir=source_dir,
             dest_dir=dest_dir,
             title=args.title,
+            pages_lite=args.pages_lite,
         )
         print(f"[DONE] Bundle: {html_path}")
         if (dest_dir / "assets").is_dir():

@@ -687,16 +687,90 @@ def compare_crops_pairwise(
     return detail, summary
 
 
-def _wide_country_model_nrmse(
+HORIZON_SKILL_VALUE_COLUMNS: tuple[str, ...] = (
+    "nrmse",
+    "r2",
+    "r_spatial",
+    "r_temporal",
+    "r_res",
+)
+
+
+def _horizon_skill_axes() -> list[dict[str, Any]]:
+    """Four evaluation views for horizon curves (aligned with model×country heatmap)."""
+    axes: list[dict[str, Any]] = []
+    for axis in MODEL_COUNTRY_AXES:
+        if axis["id"] == "overall":
+            metrics = [
+                {
+                    "id": "nrmse",
+                    "column": "nrmse",
+                    "label": "NRMSE",
+                    "higher_better": False,
+                    "has_iqr": True,
+                },
+                {
+                    "id": "r2",
+                    "column": "r2",
+                    "label": "R²",
+                    "higher_better": True,
+                    "has_iqr": True,
+                },
+                {
+                    "id": "skill_vs_trend",
+                    "column": "skill_vs_trend",
+                    "label": "Skill vs trend",
+                    "higher_better": True,
+                    "has_iqr": False,
+                },
+            ]
+        else:
+            metrics = [
+                {
+                    "id": m["id"],
+                    "column": m["column"],
+                    "label": m["label"],
+                    "higher_better": m["higher_better"],
+                    "has_iqr": True,
+                }
+                for m in axis["metrics"]
+            ]
+        axes.append(
+            {
+                "id": axis["id"],
+                "label": axis["label"],
+                "note": axis["note"],
+                "metrics": metrics,
+            }
+        )
+    return axes
+
+
+def _median_iqr_stats(values: list[float]) -> dict[str, float | None]:
+    series = pd.Series(values, dtype=float)
+    if series.empty:
+        return {"median": None, "q25": None, "q75": None}
+    return {
+        "median": round(float(series.median()), 4),
+        "q25": round(float(series.quantile(0.25)), 4),
+        "q75": round(float(series.quantile(0.75)), 4),
+    }
+
+
+def _wide_country_model_horizon_metrics(
     work: pd.DataFrame,
     horizons: tuple[str, ...],
     *,
     crop: str | None,
+    value_columns: tuple[str, ...],
 ) -> pd.DataFrame:
-    """Inner-join median NRMSE across horizons on country×model (and crop when set)."""
+    """Inner-join median metrics across horizons on country×model (fair country set)."""
     frame = work[work["nrmse"].notna()].copy()
     if crop:
         frame = frame[frame["crop"] == crop]
+    cols = [c for c in value_columns if c in frame.columns]
+    if not cols:
+        return pd.DataFrame()
     group_keys = ["country", "model"]
 
     wide: pd.DataFrame | None = None
@@ -704,8 +778,9 @@ def _wide_country_model_nrmse(
         hz_df = frame[frame["batch_horizon"] == hz]
         if hz_df.empty:
             return pd.DataFrame()
-        agg = hz_df.groupby(group_keys, as_index=False)["nrmse"].median()
-        part = agg.rename(columns={"nrmse": f"nrmse_{hz}"})
+        agg = hz_df.groupby(group_keys, as_index=False)[cols].median()
+        rename = {c: f"{c}_{hz}" for c in cols}
+        part = agg.rename(columns=rename)
         wide = part if wide is None else wide.merge(part, on=group_keys, how="inner")
     if wide is None:
         return pd.DataFrame()
@@ -714,67 +789,74 @@ def _wide_country_model_nrmse(
     return wide
 
 
+def _point_metrics_from_wide_rows(
+    model_rows: pd.DataFrame,
+    *,
+    trend_nrmse_by_country: dict[tuple[str, str], float],
+    horizons: tuple[str, ...],
+    value_columns: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    points: list[dict[str, Any]] = []
+    for hz in horizons:
+        metrics: dict[str, Any] = {}
+        n_countries = 0
+        for col_base in value_columns:
+            col = f"{col_base}_{hz}"
+            vals: list[float] = []
+            for _, row in model_rows.iterrows():
+                val = row.get(col)
+                if pd.notna(val):
+                    vals.append(float(val))
+            if col_base == "nrmse":
+                n_countries = len(vals)
+            metrics[col_base] = _median_iqr_stats(vals)
+
+        skill_vals: list[float] = []
+        nrmse_col = f"nrmse_{hz}"
+        for _, row in model_rows.iterrows():
+            country = str(row["country"])
+            val = row.get(nrmse_col)
+            if pd.isna(val):
+                continue
+            nrmse = float(val)
+            trend_val = trend_nrmse_by_country.get((country, hz))
+            if trend_val and trend_val > 0:
+                skill_vals.append(1.0 - nrmse / trend_val)
+        skill_stats = _median_iqr_stats(skill_vals)
+        metrics["skill_vs_trend"] = {"median": skill_stats["median"]}
+
+        points.append({"horizon": hz, "metrics": metrics, "n_countries": n_countries})
+    return points
+
+
 def _family_curve_points(
     wide: pd.DataFrame,
     *,
     model: str,
     trend_model: str,
     horizons: tuple[str, ...],
+    value_columns: tuple[str, ...],
 ) -> list[dict[str, Any]]:
     model_rows = wide[wide["model"] == model]
     trend_rows = wide[wide["model"] == trend_model]
     if model_rows.empty:
         return []
 
-    trend_by_country: dict[tuple[str, str], float] = {}
+    trend_nrmse_by_country: dict[tuple[str, str], float] = {}
     for _, row in trend_rows.iterrows():
         country = str(row["country"])
         for hz in horizons:
             col = f"nrmse_{hz}"
             val = row.get(col)
             if pd.notna(val):
-                trend_by_country[(country, hz)] = float(val)
+                trend_nrmse_by_country[(country, hz)] = float(val)
 
-    points: list[dict[str, Any]] = []
-    for hz in horizons:
-        col = f"nrmse_{hz}"
-        country_nrmse: list[float] = []
-        country_skill: list[float] = []
-        for _, row in model_rows.iterrows():
-            country = str(row["country"])
-            val = row.get(col)
-            if pd.isna(val):
-                continue
-            nrmse = float(val)
-            country_nrmse.append(nrmse)
-            trend_val = trend_by_country.get((country, hz))
-            if trend_val and trend_val > 0:
-                country_skill.append(1.0 - nrmse / trend_val)
-        nrmse_series = pd.Series(country_nrmse, dtype=float)
-        skill_series = pd.Series(country_skill, dtype=float)
-        points.append(
-            {
-                "horizon": hz,
-                "median_nrmse": (
-                    round(float(nrmse_series.median()), 4) if not nrmse_series.empty else None
-                ),
-                "q25_nrmse": (
-                    round(float(nrmse_series.quantile(0.25)), 4)
-                    if not nrmse_series.empty
-                    else None
-                ),
-                "q75_nrmse": (
-                    round(float(nrmse_series.quantile(0.75)), 4)
-                    if not nrmse_series.empty
-                    else None
-                ),
-                "median_skill_vs_trend": (
-                    round(float(skill_series.median()), 4) if not skill_series.empty else None
-                ),
-                "n_countries": int(len(country_nrmse)),
-            }
-        )
-    return points
+    return _point_metrics_from_wide_rows(
+        model_rows,
+        trend_nrmse_by_country=trend_nrmse_by_country,
+        horizons=horizons,
+        value_columns=value_columns,
+    )
 
 
 def _eos_only_family_points(
@@ -782,6 +864,7 @@ def _eos_only_family_points(
     *,
     model: str,
     trend_model: str,
+    value_columns: tuple[str, ...],
 ) -> list[dict[str, Any]]:
     """Median EOS metrics for models not run at earlier forecast horizons."""
     eos = work[
@@ -800,43 +883,41 @@ def _eos_only_family_points(
             if pd.notna(med) and float(med) > 0:
                 trend_by_country[str(country)] = float(med)
 
-    country_nrmse: list[float] = []
-    country_skill: list[float] = []
+    metrics: dict[str, Any] = {}
+    n_countries = 0
+    cols = [c for c in value_columns if c in eos.columns]
     if "country" in eos.columns:
+        for col_base in cols:
+            vals: list[float] = []
+            for country, grp in eos.groupby("country"):
+                med = grp[col_base].median()
+                if pd.notna(med):
+                    vals.append(float(med))
+            if col_base == "nrmse":
+                n_countries = len(vals)
+            metrics[col_base] = _median_iqr_stats(vals)
+    else:
+        for col_base in cols:
+            med = eos[col_base].median()
+            if pd.notna(med):
+                metrics[col_base] = _median_iqr_stats([float(med)])
+                if col_base == "nrmse":
+                    n_countries = 1
+
+    skill_vals: list[float] = []
+    if "country" in eos.columns and "nrmse" in eos.columns:
         for country, grp in eos.groupby("country"):
             med = grp["nrmse"].median()
             if pd.isna(med):
                 continue
             nrmse = float(med)
-            country_nrmse.append(nrmse)
             trend_val = trend_by_country.get(str(country))
             if trend_val and trend_val > 0:
-                country_skill.append(1.0 - nrmse / trend_val)
-    else:
-        med = eos["nrmse"].median()
-        if pd.notna(med):
-            country_nrmse.append(float(med))
+                skill_vals.append(1.0 - nrmse / trend_val)
+    skill_stats = _median_iqr_stats(skill_vals)
+    metrics["skill_vs_trend"] = {"median": skill_stats["median"]}
 
-    nrmse_series = pd.Series(country_nrmse, dtype=float)
-    skill_series = pd.Series(country_skill, dtype=float)
-    return [
-        {
-            "horizon": "eos",
-            "median_nrmse": (
-                round(float(nrmse_series.median()), 4) if not nrmse_series.empty else None
-            ),
-            "q25_nrmse": (
-                round(float(nrmse_series.quantile(0.25)), 4) if not nrmse_series.empty else None
-            ),
-            "q75_nrmse": (
-                round(float(nrmse_series.quantile(0.75)), 4) if not nrmse_series.empty else None
-            ),
-            "median_skill_vs_trend": (
-                round(float(skill_series.median()), 4) if not skill_series.empty else None
-            ),
-            "n_countries": int(len(country_nrmse)),
-        }
-    ]
+    return [{"horizon": "eos", "metrics": metrics, "n_countries": n_countries}]
 
 
 def build_horizon_skill_curves_payload(
@@ -868,12 +949,15 @@ def build_horizon_skill_curves_payload(
     rep_models = set(reps.values()) | {trend_model}
 
     crop_keys = ["all", *_crop_keys(df)]
+    value_columns = tuple(c for c in HORIZON_SKILL_VALUE_COLUMNS if c in df.columns)
     by_crop: dict[str, Any] = {}
     for crop_key in crop_keys:
         crop_filter = None if crop_key == "all" else crop_key
         work = _filter_summary_work(df, crop=crop_filter)
         work = work[work["model"].isin(rep_models)]
-        wide = _wide_country_model_nrmse(work, horizons, crop=crop_filter)
+        wide = _wide_country_model_horizon_metrics(
+            work, horizons, crop=crop_filter, value_columns=value_columns
+        )
         if wide.empty:
             by_crop[crop_key] = {
                 "n_countries": 0,
@@ -897,15 +981,26 @@ def build_horizon_skill_curves_payload(
                 continue
             eos_only = model in EOS_ONLY_HORIZON_CURVE_MODELS
             if eos_only:
-                points = _eos_only_family_points(work, model=model, trend_model=trend_model)
+                points = _eos_only_family_points(
+                    work,
+                    model=model,
+                    trend_model=trend_model,
+                    value_columns=value_columns,
+                )
             else:
                 points = _family_curve_points(
-                    wide, model=model, trend_model=trend_model, horizons=horizons
+                    wide,
+                    model=model,
+                    trend_model=trend_model,
+                    horizons=horizons,
+                    value_columns=value_columns,
                 )
             if not points:
                 continue
             n_horizons_with_data = sum(
-                1 for p in points if p.get("median_nrmse") is not None or p.get("median_skill_vs_trend") is not None
+                1
+                for p in points
+                if (p.get("metrics") or {}).get("nrmse", {}).get("median") is not None
             )
             families.append(
                 {
@@ -940,8 +1035,10 @@ def build_horizon_skill_curves_payload(
             "Fixed model per family (representatives chosen at "
             f"{HORIZON_DISPLAY_LABELS.get(rep_source_hz, rep_source_hz)}). "
             "Curves use only countries with data at every plotted horizon "
-            "(inner join on country×model). Each country contributes one median NRMSE "
+            "(inner join on country×model). Each country contributes one median per metric "
             "(median across crops when crop=all). IQR band = spread across countries. "
+            "Switch axis to compare overall (NRMSE/R²), spatial, temporal, or anomaly views; "
+            "temporal r often shifts most with forecast lead time. "
             "LPJmL is end-of-season only and appears in the table but not on the curve plot. "
             "Hyperparameters are tuned per horizon (screening at each lead time)."
         ),
@@ -949,11 +1046,18 @@ def build_horizon_skill_curves_payload(
             "EOS-only baselines (LPJmL) are omitted from the curve plot; see the table for "
             "their end-of-season median."
         ),
+        "axes": _horizon_skill_axes(),
         "metric_notes": {
             "nrmse": "Median pooled NRMSE across countries (lower is better).",
+            "r2": "Median pooled R² across countries (higher is better).",
             "skill_vs_trend": (
                 "Median skill = 1 − NRMSE_model / NRMSE_trend per country (higher is better)."
             ),
+            "r_spatial": "Median spatial r across countries (typical-year slice; higher is better).",
+            "r_temporal": (
+                "Median temporal r across countries (typical-region slice; often horizon-sensitive)."
+            ),
+            "r_res": "Median anomaly r (pooled demeaned residuals; higher is better).",
         },
     }
 
