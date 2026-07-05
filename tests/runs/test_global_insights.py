@@ -534,8 +534,39 @@ def test_horizon_skill_curves_inner_join_countries():
         assert "US" in maize["excluded_countries"]
 
         xgb = next(f for f in maize["families"] if f["model"] == "xgboost")
+        assert xgb["plot"] is True
+        assert xgb.get("eos_only") is not True
         nrmse_by_hz = {p["horizon"]: p["median_nrmse"] for p in xgb["points"]}
         assert nrmse_by_hz["mid"] > nrmse_by_hz["qtr"] > nrmse_by_hz["eos"]
+
+
+def test_horizon_skill_curves_eos_only_lpjml_in_table_not_plot(tmp_path: Path):
+    df = _three_horizon_fixture(tmp_path)
+    lpj_rows = [
+        {
+            "crop": "maize",
+            "country": cc,
+            "model": "lpjml_bc",
+            "batch_horizon": "eos",
+            "nrmse": 0.19,
+            "r2": 0.5,
+            "n_samples": 40,
+        }
+        for cc in ("DE", "FR")
+    ]
+    df = pd.concat([df, pd.DataFrame(lpj_rows)], ignore_index=True)
+
+    payload = build_horizon_skill_curves_payload(df)
+    maize = payload["by_crop"]["maize"]
+    lpj = next(f for f in maize["families"] if f["model"] == "lpjml_bc")
+    assert lpj["eos_only"] is True
+    assert lpj["plot"] is False
+    assert len(lpj["points"]) == 1
+    assert lpj["points"][0]["horizon"] == "eos"
+    assert lpj["points"][0]["median_nrmse"] == 0.19
+    plot_models = {f["model"] for f in maize["families"] if f["plot"]}
+    assert "lpjml_bc" not in plot_models
+    assert "plot_excluded_note" in payload
 
 
 def test_build_insights_payload_includes_qtr_and_curves(tmp_path: Path):

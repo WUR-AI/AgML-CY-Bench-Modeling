@@ -267,6 +267,8 @@
       <p class="muted" id="horizon-curves-meta"></p>
       <div class="curve-chart-wrap" id="horizon-curves-chart"></div>
       <div class="curve-legend" id="horizon-curves-legend"></div>
+      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">By family (median across countries)</h3>
+      <div class="table-scroll" id="horizon-curves-table-wrap"></div>
       <p class="muted note" id="horizon-curves-metric-note"></p>
     </div>
 
@@ -791,11 +793,14 @@
     const hscMeta = document.getElementById("horizon-curves-meta");
     const hscChart = document.getElementById("horizon-curves-chart");
     const hscLegend = document.getElementById("horizon-curves-legend");
+    const hscTableWrap = document.getElementById("horizon-curves-table-wrap");
     const hscMetricNote = document.getElementById("horizon-curves-metric-note");
     const hscCropSelect = document.getElementById("horizon-curves-crop");
     const hscMetricSelect = document.getElementById("horizon-curves-metric");
     let hscCrop = "all";
     let hscMetric = "nrmse";
+    let hscTableSort = "family";
+    let hscTableDir = "asc";
 
     hscNote.textContent = HSC.note || "Horizon skill curves require at least two collected horizons.";
 
@@ -825,7 +830,13 @@
       const slice = (HSC.by_crop || {})[hscCrop] || { families: [], n_countries: 0, countries: [] };
       const horizons = HSC.horizons || [];
       const metricNotes = HSC.metric_notes || {};
-      hscMetricNote.textContent = metricNotes[hscMetric] || "";
+      const plotFamilies = (slice.families || []).filter(fam => fam.plot !== false);
+      const tableFamilies = slice.families || [];
+      let metricNote = metricNotes[hscMetric] || "";
+      if (HSC.plot_excluded_note && (slice.families || []).some(fam => fam.eos_only)) {
+        metricNote = metricNote ? `${metricNote} ${HSC.plot_excluded_note}` : HSC.plot_excluded_note;
+      }
+      hscMetricNote.textContent = metricNote;
 
       const reps = HSC.representatives_summary || "";
       const excluded = slice.excluded_countries || [];
@@ -837,9 +848,10 @@
       }
       hscMeta.textContent = meta;
 
-      if (!slice.families || !slice.families.length || horizons.length < 2) {
+      if (!tableFamilies.length || horizons.length < 2) {
         hscChart.innerHTML = `<p class="muted">Not enough paired horizon data for this crop.</p>`;
         hscLegend.innerHTML = "";
+        hscTableWrap.innerHTML = `<p class="muted">No horizon table for this crop.</p>`;
         return;
       }
 
@@ -851,8 +863,12 @@
       const nX = horizons.length;
       const xAt = (i) => pad.l + (nX <= 1 ? innerW / 2 : (i / (nX - 1)) * innerW);
 
+      if (!plotFamilies.length) {
+        hscChart.innerHTML = `<p class="muted">No multi-horizon families to plot for this crop.</p>`;
+        hscLegend.innerHTML = "";
+      } else {
       const allVals = [];
-      for (const fam of slice.families) {
+      for (const fam of plotFamilies) {
         for (const pt of fam.points || []) {
           const v = hscMetricValue(pt, hscMetric);
           if (v !== null && v !== undefined && !Number.isNaN(v)) allVals.push(v);
@@ -864,8 +880,7 @@
       if (!allVals.length) {
         hscChart.innerHTML = `<p class="muted">No metric values for this selection.</p>`;
         hscLegend.innerHTML = "";
-        return;
-      }
+      } else {
 
       const yMinRaw = Math.min(...allVals);
       const yMaxRaw = Math.max(...allVals);
@@ -892,7 +907,7 @@
       svg += `<text x="${pad.l + innerW / 2}" y="${height - 6}" text-anchor="middle" font-size="11" fill="#1f2328">Season progress (more of season observed →)</text>`;
       svg += `<text x="14" y="${pad.t + innerH / 2}" text-anchor="middle" font-size="11" fill="#1f2328" transform="rotate(-90 14 ${pad.t + innerH / 2})">${yLabel}</text>`;
 
-      for (const fam of slice.families) {
+      for (const fam of plotFamilies) {
         const color = fam.color || "#457b9d";
         const pts = (fam.points || []).map((pt, i) => {
           const hzIdx = horizons.findIndex(h => h.id === pt.horizon);
@@ -922,9 +937,61 @@
       svg += "</svg>";
       hscChart.innerHTML = svg;
 
-      hscLegend.innerHTML = slice.families.map(fam =>
+      hscLegend.innerHTML = plotFamilies.map(fam =>
         `<span><span class="swatch" style="background:${fam.color}"></span>${fam.family} (${fam.display})</span>`
       ).join("");
+      }
+      }
+
+      const tableRows = tableFamilies.map(fam => {
+        const byHz = Object.fromEntries((fam.points || []).map(pt => [pt.horizon, pt]));
+        const row = {
+          family: fam.family,
+          model: fam.display || fam.model,
+          eos_only: !!fam.eos_only,
+        };
+        for (const hz of horizons) {
+          const pt = byHz[hz.id];
+          row[`hz_${hz.id}`] = pt ? hscMetricValue(pt, hscMetric) : null;
+        }
+        return row;
+      });
+      const sortedRows = [...tableRows].sort((a, b) => {
+        const cmp = compareSortValues(a, b, hscTableSort);
+        return hscTableDir === "asc" ? cmp : -cmp;
+      });
+      const tableCols = [
+        { key: "family", label: "Family", sortable: true },
+        { key: "model", label: "Model", sortable: true },
+        ...horizons.map(hz => ({
+          key: `hz_${hz.id}`,
+          label: hz.label || hz.id,
+          sortable: true,
+          format: (v, row) => {
+            if (v === null || v === undefined) {
+              return row.eos_only ? '<span class="muted">EOS only</span>' : "—";
+            }
+            return fmt(v);
+          },
+          bg: (v) => (hscMetric === "nrmse" ? fixedNrmseBg(v) : null),
+        })),
+      ];
+      renderSortableTable(
+        hscTableWrap,
+        tableCols,
+        sortedRows,
+        hscTableSort,
+        hscTableDir,
+        (key) => {
+          if (hscTableSort === key) {
+            hscTableDir = hscTableDir === "asc" ? "desc" : "asc";
+          } else {
+            hscTableSort = key;
+            hscTableDir = key === "family" || key === "model" ? "asc" : "desc";
+          }
+          renderHorizonSkillCurves();
+        },
+      );
     }
 
     hscCropSelect.addEventListener("change", () => {

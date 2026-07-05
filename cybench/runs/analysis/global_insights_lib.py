@@ -24,6 +24,9 @@ HORIZON_DISPLAY_LABELS: dict[str, str] = {
     "eos": "End of season (~100% observed)",
 }
 
+# Process baselines evaluated only at end-of-season (no mid/qtr walk-forward runs).
+EOS_ONLY_HORIZON_CURVE_MODELS: frozenset[str] = frozenset({"lpjml_bc"})
+
 
 def horizons_in_data(df: pd.DataFrame) -> tuple[str, ...]:
     """Horizons present in a summary frame, ordered by increasing season progress."""
@@ -774,6 +777,68 @@ def _family_curve_points(
     return points
 
 
+def _eos_only_family_points(
+    work: pd.DataFrame,
+    *,
+    model: str,
+    trend_model: str,
+) -> list[dict[str, Any]]:
+    """Median EOS metrics for models not run at earlier forecast horizons."""
+    eos = work[
+        (work["model"] == model) & (work["batch_horizon"] == "eos") & work["nrmse"].notna()
+    ]
+    if eos.empty:
+        return []
+
+    trend_eos = work[
+        (work["model"] == trend_model) & (work["batch_horizon"] == "eos") & work["nrmse"].notna()
+    ]
+    trend_by_country: dict[str, float] = {}
+    if not trend_eos.empty and "country" in trend_eos.columns:
+        for country, grp in trend_eos.groupby("country"):
+            med = grp["nrmse"].median()
+            if pd.notna(med) and float(med) > 0:
+                trend_by_country[str(country)] = float(med)
+
+    country_nrmse: list[float] = []
+    country_skill: list[float] = []
+    if "country" in eos.columns:
+        for country, grp in eos.groupby("country"):
+            med = grp["nrmse"].median()
+            if pd.isna(med):
+                continue
+            nrmse = float(med)
+            country_nrmse.append(nrmse)
+            trend_val = trend_by_country.get(str(country))
+            if trend_val and trend_val > 0:
+                country_skill.append(1.0 - nrmse / trend_val)
+    else:
+        med = eos["nrmse"].median()
+        if pd.notna(med):
+            country_nrmse.append(float(med))
+
+    nrmse_series = pd.Series(country_nrmse, dtype=float)
+    skill_series = pd.Series(country_skill, dtype=float)
+    return [
+        {
+            "horizon": "eos",
+            "median_nrmse": (
+                round(float(nrmse_series.median()), 4) if not nrmse_series.empty else None
+            ),
+            "q25_nrmse": (
+                round(float(nrmse_series.quantile(0.25)), 4) if not nrmse_series.empty else None
+            ),
+            "q75_nrmse": (
+                round(float(nrmse_series.quantile(0.75)), 4) if not nrmse_series.empty else None
+            ),
+            "median_skill_vs_trend": (
+                round(float(skill_series.median()), 4) if not skill_series.empty else None
+            ),
+            "n_countries": int(len(country_nrmse)),
+        }
+    ]
+
+
 def build_horizon_skill_curves_payload(
     df: pd.DataFrame,
     *,
@@ -830,11 +895,18 @@ def build_horizon_skill_curves_payload(
             model = reps.get(family)
             if not model or model == trend_model:
                 continue
-            points = _family_curve_points(
-                wide, model=model, trend_model=trend_model, horizons=horizons
-            )
+            eos_only = model in EOS_ONLY_HORIZON_CURVE_MODELS
+            if eos_only:
+                points = _eos_only_family_points(work, model=model, trend_model=trend_model)
+            else:
+                points = _family_curve_points(
+                    wide, model=model, trend_model=trend_model, horizons=horizons
+                )
             if not points:
                 continue
+            n_horizons_with_data = sum(
+                1 for p in points if p.get("median_nrmse") is not None or p.get("median_skill_vs_trend") is not None
+            )
             families.append(
                 {
                     "family": family,
@@ -842,6 +914,8 @@ def build_horizon_skill_curves_payload(
                     "display": MODEL_DISPLAY_NAMES.get(model, model),
                     "color": FAMILY_COLORS.get(family, "#666"),
                     "points": points,
+                    "eos_only": eos_only,
+                    "plot": (not eos_only) and n_horizons_with_data >= 2,
                 }
             )
 
@@ -865,10 +939,15 @@ def build_horizon_skill_curves_payload(
         "note": (
             "Fixed model per family (representatives chosen at "
             f"{HORIZON_DISPLAY_LABELS.get(rep_source_hz, rep_source_hz)}). "
-            "Only countries with data at every plotted horizon are included "
+            "Curves use only countries with data at every plotted horizon "
             "(inner join on country×model). Each country contributes one median NRMSE "
             "(median across crops when crop=all). IQR band = spread across countries. "
+            "LPJmL is end-of-season only and appears in the table but not on the curve plot. "
             "Hyperparameters are tuned per horizon (screening at each lead time)."
+        ),
+        "plot_excluded_note": (
+            "EOS-only baselines (LPJmL) are omitted from the curve plot; see the table for "
+            "their end-of-season median."
         ),
         "metric_notes": {
             "nrmse": "Median pooled NRMSE across countries (lower is better).",
