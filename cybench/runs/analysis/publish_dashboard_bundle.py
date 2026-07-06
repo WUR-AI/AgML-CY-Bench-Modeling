@@ -104,7 +104,7 @@ def _resolve_html_and_assets(source_dir: Path) -> tuple[Path, Path | None]:
 
 
 _SLUG_RE = re.compile(
-    r"^(?P<country>[a-z]{2})_walk_forward_(?P<horizon>eos|mid|qtr)_v(?P<version>\d+)$"
+    r"^(?P<country>[a-z]{2})_walk_forward_(?P<horizon>eos|mid|qtr|early)_v(?P<version>\d+)$"
 )
 
 
@@ -164,7 +164,7 @@ def prune_obsolete_dashboard_dirs(
         if n_matched == 0:
             print(
                 "[WARN] No folders matching "
-                "'{cc}_walk_forward_{eos|mid|qtr}_vN'. "
+                "'{cc}_walk_forward_{eos|mid|qtr|early}_vN'. "
                 "Use the CY-Bench-dashboard git clone as --publish-root "
                 "(e.g. /lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard), "
                 "not the AgML-CY-Bench-AAAI source tree."
@@ -242,7 +242,7 @@ def estimate_publish_bundle_size(publish_root: Path) -> dict[str, Any]:
             continue
         n_dashboard_dirs += 1
         hz = "other"
-        for token in ("_eos_", "_mid_", "_qtr_"):
+        for token in ("_early_", "_eos_", "_mid_", "_qtr_"):
             if token in child.name:
                 hz = token.strip("_")
                 break

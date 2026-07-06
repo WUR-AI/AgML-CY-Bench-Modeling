@@ -23,7 +23,7 @@ def test_horizon_to_batch_suffix():
     assert horizon_to_batch_suffix("middle-of-season") == "mid"
     assert horizon_to_batch_suffix("mid_season") == "mid"
     assert horizon_to_batch_suffix("quarter-of-season") == "qtr"
-    assert horizon_to_batch_suffix("qtr") == "qtr"
+    assert horizon_to_batch_suffix("early-season") == "early"
 
 
 def test_parse_batch_dir_name():

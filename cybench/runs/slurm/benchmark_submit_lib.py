@@ -15,7 +15,7 @@ from cybench.config import DATASETS, PATH_DATA_DIR
 DEFAULT_GPU_REGION_THRESHOLD = 50
 
 _BATCH_RE = re.compile(
-    r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid|qtr)_v(?P<version>\d+)$"
+    r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid|qtr|early)_v(?P<version>\d+)$"
 )
 
 
@@ -28,6 +28,8 @@ def normalize_horizon(horizon: str) -> str:
         return "middle-of-season"
     if key in {"quarter", "quarter_season", "quarter_of_season", "qtr"}:
         return "quarter-of-season"
+    if key in {"early", "early_season", "early_season"}:
+        return "early-season"
     return horizon.strip()
 
 
@@ -40,6 +42,8 @@ def horizon_batch_suffix(horizon: str) -> str:
         return "mid"
     if norm.startswith("quarter") or norm == "qtr":
         return "qtr"
+    if norm == "early-season" or norm.startswith("early"):
+        return "early"
     return re.sub(r"[^a-z0-9]+", "_", norm.lower()).strip("_")[:8] or "custom"
 
 
@@ -52,6 +56,8 @@ def batch_suffix_to_horizon(batch_hz: str) -> str:
         return "middle-of-season"
     if key == "qtr":
         return "quarter-of-season"
+    if key == "early":
+        return "early-season"
     return batch_hz
 
 

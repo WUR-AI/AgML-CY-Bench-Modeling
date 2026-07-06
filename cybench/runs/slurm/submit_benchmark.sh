@@ -28,6 +28,7 @@ Options:
   --batch NAME      Hydra experiment.name / output dir under ../output/NAME (default: baselines)
   --regenerate      Run generate_job_manifest.py, then split manifests
   --countries C...  Passed to generate_job_manifest.py (with --regenerate)
+  --models FILE     Model catalogue for --regenerate (default: models.txt)
   --array RANGE     SLURM array range for every submit (default: full manifest)
   --only GROUP      One group only: cpu | naive | gpu
   --cpu             GPU group on main partition (torch/TabPFN on CPU; slow)
@@ -93,6 +94,7 @@ USE_DEPENDENCY=true
 SKIP_NAIVE=false
 DRY_RUN=false
 COUNTRIES=()
+MODELS_FILE="${SLURM_DIR}/models.txt"
 WF_REPETITIONS="${WF_REPETITIONS:-1}"
 WF_RESUME="${WF_RESUME:-no}"
 
@@ -116,6 +118,10 @@ while [[ $# -gt 0 ]]; do
         COUNTRIES+=("$1")
         shift
       done
+      ;;
+    --models)
+      MODELS_FILE=$2
+      shift 2
       ;;
     --array)
       ARRAY_ARG=(--array "$2")
@@ -193,7 +199,7 @@ split_manifests() {
 regenerate_manifest() {
   mkdir -p "${MANIFEST_ROOT}"
   local cmd=(poetry run python "${SLURM_DIR}/generate_job_manifest.py" -o "${BASE_MANIFEST}")
-  cmd+=(--horizon "${PREDICTION_HORIZON}")
+  cmd+=(--horizon "${PREDICTION_HORIZON}" --models "${MODELS_FILE}")
   if [[ ${#COUNTRIES[@]} -gt 0 ]]; then
     cmd+=(--countries "${COUNTRIES[@]}")
   fi

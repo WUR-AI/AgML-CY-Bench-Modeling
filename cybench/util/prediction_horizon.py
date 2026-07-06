@@ -7,6 +7,8 @@ import re
 # Values accepted by dataset.temporal.season.end_of_sequence (see alignment.py).
 _HORIZON_ALIASES: dict[str, str] = {
     "eos": "eos",
+    "early-season": "early_season",
+    "early_season": "early_season",
     "middle-of-season": "mid_season",
     "mid-season": "mid_season",
     "quarter-of-season": "quarter_season",

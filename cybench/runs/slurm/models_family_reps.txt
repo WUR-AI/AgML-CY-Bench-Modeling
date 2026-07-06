@@ -1,0 +1,7 @@
+# Family representatives for horizon evaluations (subset of models.txt).
+# Use with refresh_batch_manifests.sh / submit_benchmark.sh --models.
+# Columns: model  framework  hp_search  feature_design  needs_gpu
+xgboost          pandas  yes  yes  no
+lpjml_bc         pandas  no   no   no
+tst_lf           torch   yes  no   yes
+tabdpt           pandas  yes  yes  yes

@@ -19,7 +19,7 @@ Usage: submit_collect.sh [generate_collect_manifest.py options] [--submit] [--ar
 Manifest and collect job options (forwarded to generate_collect_manifest.py):
   --mode ready|all-available|planned
   --country CC      Repeatable
-  --horizon eos|mid|qtr Repeatable
+  --horizon eos|mid|qtr|early Repeatable
   --version N       Batch version suffix (e.g. 3 for baselines_DE_eos_v3)
   --plot            Dashboard drill-down PNGs (maps, scatter, temporal; no PDF)
   --no-plot         Metrics + preds + compare_models.html only (default)

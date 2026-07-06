@@ -33,20 +33,22 @@ StageName = Literal["collect", "publish", "index", "commit"]
 MONOLITHIC_BASELINES_DIR = "baselines"
 
 _BATCH_RE = re.compile(
-    r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid|qtr)_v(?P<version>\d+)$"
+    r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid|qtr|early)_v(?P<version>\d+)$"
 )
 _PAPER_COLLECT_RE = re.compile(
-    r"^paper_walk_forward_(?P<country>[a-z]{2})_(?P<batch_hz>eos|mid|qtr)_v(?P<version>\d+)$"
+    r"^paper_walk_forward_(?P<country>[a-z]{2})_(?P<batch_hz>eos|mid|qtr|early)_v(?P<version>\d+)$"
 )
 
 # Batch folder suffix → horizon tags accepted under ../output/<batch>/.
 HORIZON_TAGS_BY_BATCH_SUFFIX: dict[str, tuple[str, ...]] = {
+    "early": ("early_season", "early"),
     "eos": ("eos",),
     "mid": ("mid_season", "mid"),
     "qtr": ("quarter_season", "qtr"),
 }
 
 _BATCH_HORIZON_LABELS: dict[str, str] = {
+    "early": "early season (25% observed)",
     "eos": "end-of-season",
     "mid": "mid-season",
     "qtr": "late season (75% observed, 25% left)",

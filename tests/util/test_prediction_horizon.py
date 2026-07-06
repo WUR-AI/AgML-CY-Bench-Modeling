@@ -4,6 +4,7 @@ import pytest
 
 def test_prediction_horizon_tag_known_values():
     assert prediction_horizon_tag("eos") == "eos"
+    assert prediction_horizon_tag("early-season") == "early_season"
     assert prediction_horizon_tag("middle-of-season") == "mid_season"
     assert prediction_horizon_tag("mid-season") == "mid_season"
     assert prediction_horizon_tag("eos-60") == "eos_60"

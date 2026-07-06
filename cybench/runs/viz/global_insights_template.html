@@ -189,7 +189,7 @@
 <body>
   <div class="page">
     <h1>CY-Bench global insights</h1>
-    <p class="lead">Cross-country model comparison and walk-forward results across forecast horizons (quarter-, mid-, and end-of-season).</p>
+    <p class="lead">Cross-country model comparison and walk-forward results across forecast horizons (early-, quarter-, mid-, and end-of-season).</p>
     <p class="muted">Every model in the benchmark. For a five-paradigm summary (radar chart), see <a href="model_families.html">Model families (paper summary)</a>.</p>
     <p class="muted" id="meta"></p>
 
@@ -431,6 +431,7 @@
     }
 
     const HORIZON_LABELS = DATA.horizon_labels || {
+      early: "Early season (~25% observed)",
       mid: "Mid-season (~50% observed)",
       qtr: "Late season (~75% observed, 25% left)",
       eos: "End of season (~100% observed)",

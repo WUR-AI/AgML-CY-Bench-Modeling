@@ -21,9 +21,10 @@ Regenerate manifests/baselines_<CC>_<hz>_vN/benchmark_jobs.txt for batches that
 exist under the output root (or for explicit --countries).
 
 Options:
-  --horizon H       eos | mid | qtr (default: qtr)
+  --horizon H       eos | mid | qtr | early-season (default: qtr)
   --version N       Batch version suffix (default: 3)
   --countries CC..  Only these countries (default: all matching batch dirs)
+  --models FILE     Model catalogue (default: models.txt)
   --output-root DIR Parent of baselines_* (default: $CYBENCH_OUTPUT_ROOT or lustre)
   --data-dir DIR    Passed to generate_job_manifest.py
   --backup          Keep timestamped copy of existing benchmark_jobs.txt
@@ -48,6 +49,7 @@ source "${SLURM_DIR}/slurm_common.sh"
 
 REPO_ROOT="${REPO_ROOT:-$(cd "${SLURM_DIR}/../../.." && pwd)}"
 GENERATE_PY="${SLURM_DIR}/generate_job_manifest.py"
+MODELS_FILE="${SLURM_DIR}/models.txt"
 
 HORIZON_KEY="qtr"
 VERSION="3"
@@ -82,6 +84,10 @@ while [[ $# -gt 0 ]]; do
       DATA_DIR=$2
       shift 2
       ;;
+    --models)
+      MODELS_FILE=$2
+      shift 2
+      ;;
     --backup)
       BACKUP=true
       shift
@@ -111,6 +117,10 @@ case "${HORIZON_KEY}" in
   qtr | quarter-of-season | quarter_of_season | quarter-season | quarter_season)
     BATCH_HZ="qtr"
     SLURM_HORIZON="quarter-of-season"
+    ;;
+  early | early-season | early_season)
+    BATCH_HZ="early"
+    SLURM_HORIZON="early-season"
     ;;
   *)
     echo "Unknown horizon: ${HORIZON_KEY}" >&2
@@ -187,6 +197,7 @@ run_generate() {
     poetry run python "${GENERATE_PY}"
     --countries "${cc}"
     --horizon "${SLURM_HORIZON}"
+    --models "${MODELS_FILE}"
     -o "${out}"
   )
   if [[ -n "${DATA_DIR}" ]]; then

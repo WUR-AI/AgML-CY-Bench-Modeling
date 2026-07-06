@@ -9,16 +9,17 @@ from typing import Any
 import pandas as pd
 
 _PAPER_DIR_RE = re.compile(
-    r"^paper_walk_forward_(?P<country>[a-z]{2})_(?P<horizon>eos|mid|qtr)_v(?P<version>\d+)$"
+    r"^paper_walk_forward_(?P<country>[a-z]{2})_(?P<horizon>eos|mid|qtr|early)_v(?P<version>\d+)$"
 )
 
 _BASELINE_MODELS = frozenset({"average", "averageyieldmodel", "average_yield"})
 
 # Lead time decreases left → right (less season observed → more observed).
-# Code: mid = 50% observed; qtr = cutoff at season_length/4 before EOS (~75% observed, 25% left); eos = ~100%.
-BATCH_HORIZON_ORDER: tuple[str, ...] = ("mid", "qtr", "eos")
+# Code: early = ~25% observed; mid = 50%; qtr = ~75% observed (25% left); eos = ~100%.
+BATCH_HORIZON_ORDER: tuple[str, ...] = ("early", "mid", "qtr", "eos")
 
 HORIZON_DISPLAY_LABELS: dict[str, str] = {
+    "early": "Early season (~25% observed)",
     "mid": "Mid-season (~50% observed)",
     "qtr": "Late season (~75% observed, 25% left)",
     "eos": "End of season (~100% observed)",

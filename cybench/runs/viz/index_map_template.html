@@ -134,6 +134,7 @@
         <div class="toolbar">
           <span class="muted">Horizon</span>
           <button type="button" data-horizon="all" class="active">All</button>
+          <button type="button" data-horizon="early">Early season (~25%)</button>
           <button type="button" data-horizon="mid">Mid-season (~50%)</button>
           <button type="button" data-horizon="qtr">Late season (~75%)</button>
           <button type="button" data-horizon="eos">End of season</button>
@@ -171,7 +172,7 @@
     topLinks.innerHTML += `<span class="pill muted">${DATA.n_countries} countries published</span>`;
 
     function hasHorizon(c, hz) {
-      if (hz === "all" || hz === "both") return Boolean(c.eos || c.mid || c.qtr);
+      if (hz === "all" || hz === "both") return Boolean(c.eos || c.mid || c.qtr || c.early);
       return Boolean(c[hz]);
     }
 
@@ -189,12 +190,14 @@
         return;
       }
       const c = byCc.get(cc);
+      const earlyCls = c.early ? "" : " disabled";
       const eosCls = c.eos ? "" : " disabled";
       const midCls = c.mid ? "" : " disabled";
       const qtrCls = c.qtr ? "" : " disabled";
       el.innerHTML = `
         <h3>${c.name}</h3>
         <div class="cc">${c.cc}</div>
+        <a class="dash-link${earlyCls}" href="${c.early || "#"}">Early-season walk-forward (~25% observed)</a>
         <a class="dash-link${midCls}" href="${c.mid || "#"}">Mid-season walk-forward</a>
         <a class="dash-link${qtrCls}" href="${c.qtr || "#"}">Late-season walk-forward (~75% observed)</a>
         <a class="dash-link${eosCls}" href="${c.eos || "#"}">End-of-season walk-forward</a>`;

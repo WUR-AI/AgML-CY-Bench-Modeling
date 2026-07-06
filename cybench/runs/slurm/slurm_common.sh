@@ -114,6 +114,7 @@ slurm_horizon_short() {
     eos) echo "eos" ;;
     middle-of-season | mid-season | mid_season) echo "mid" ;;
     quarter-of-season | quarter-season | quarter_season) echo "qtr" ;;
+    early-season | early_season) echo "early" ;;
     eos-*) echo "eos${PREDICTION_HORIZON#eos-}" ;;
     *)
       echo "${PREDICTION_HORIZON}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '_' | sed 's/^_*//;s/_*$//' | cut -c1-8

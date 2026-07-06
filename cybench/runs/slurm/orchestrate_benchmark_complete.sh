@@ -22,7 +22,7 @@ Options:
   --countries CC ...  Multiple countries (e.g. DE FR NL)
   --all-countries     All countries with output dirs, manifest rows, or yield data
   --horizon H         Single horizon (default: eos); repeat or use --horizons
-  --horizons H ...    eos, mid, middle-of-season (default: eos)
+  --horizons H ...    eos, mid, early-season, middle-of-season (default: eos)
   --version N         Batch version suffix (default: 3)
   --max N             Process at most N batch×horizon targets (0 = unlimited)
   --manifest PATH     Explicit job list
