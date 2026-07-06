@@ -20,8 +20,9 @@ def test_normalize_horizon():
 
 
 def test_batch_name():
-    assert batch_name("de", "eos") == "baselines_DE_eos_v1"
-    assert batch_name("pl", "mid") == "baselines_PL_mid_v1"
+    assert batch_name("de", "eos") == "baselines_DE_eos_v3"
+    assert batch_name("pl", "mid") == "baselines_PL_mid_v3"
+    assert batch_name("de", "eos", version=1) == "baselines_DE_eos_v1"
     assert horizon_batch_suffix("middle-of-season") == "mid"
     assert horizon_batch_suffix("quarter-of-season") == "qtr"
     assert horizon_batch_suffix("qtr") == "qtr"
