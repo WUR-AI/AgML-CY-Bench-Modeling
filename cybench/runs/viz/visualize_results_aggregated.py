@@ -386,7 +386,7 @@ th.left, td.left { text-align: left; }
 
 ALL_PANELS = ("map_actual", "map_pred", "scatter", "temporal")
 DASHBOARD_PANELS = ("map_actual", "map_pred", "scatter", "temporal")
-MAP_PANEL_DPI = 100
+MAP_PANEL_DPI = 90
 DEFAULT_PANEL_DPI = 160
 
 # Switch to hexbin when overplotting would obscure structure.

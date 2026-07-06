@@ -353,7 +353,7 @@ configure_parallelism() {
 configure_hpo_extras() {
   local -n _extra=$1
   if [[ "${HP_SEARCH}" == "yes" ]]; then
-    _extra+=(+hp_search=bayesian hp_search.n_trials="${HP_TRIALS:-20}")
+    _extra+=(+hp_search=bayesian hp_search.n_trials="${HP_TRIALS:-100}")
     _extra+=(
       "hp_search.storage.url=sqlite:///${TMPDIR:-/tmp}/optuna_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}.db"
     )

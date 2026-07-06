@@ -55,7 +55,7 @@ _BATCH_HORIZON_LABELS: dict[str, str] = {
 
 @dataclass(frozen=True)
 class PipelineDefaults:
-    version: int = 1
+    version: int = 3
     output_root: Path = Path("/lustre/backup/SHARED/AIN/agml/output")
     repo_root: Path = Path("/lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-AAAI")
     publish_root: Path = Path("/lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard")
@@ -67,7 +67,7 @@ class PipelineDefaults:
 class PublishTarget:
     country: str
     batch_horizon: str  # eos | mid | qtr (batch folder suffix)
-    version: int = 1
+    version: int = 3
     output_root: Path = field(default_factory=lambda: PipelineDefaults().output_root)
     repo_root: Path = field(default_factory=lambda: PipelineDefaults().repo_root)
     publish_root: Path = field(default_factory=lambda: PipelineDefaults().publish_root)

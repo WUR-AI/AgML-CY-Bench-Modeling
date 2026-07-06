@@ -24,6 +24,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from PIL import Image
+
 _COUNTRY_NAMES: dict[str, str] = {
     "ao": "Angola",
     "ar": "Argentina",
@@ -177,16 +179,25 @@ GITHUB_PAGES_MAX_BYTES = 1_073_741_824
 
 # Map PNGs are ~45% of each dashboard; downscale for Pages to stay under 1 GB.
 PAGES_MAP_MARKERS = ("map_actual", "map_pred")
-# Linear scale (0.70 → ~49% pixels / ~half the map bytes; keeps maps readable).
-PAGES_MAP_SCALE = 0.70
+# Linear scale before palette quantize (~65% side length, 128-color maps).
+PAGES_MAP_SCALE = 0.65
+PAGES_MAP_PALETTE_COLORS = 128
 PAGES_MAP_PNG_OPTIMIZE = True
-# Source collect: lower DPI for map panels only (scatter/temporal stay sharp).
-MAP_PANEL_DPI = 100
-DEFAULT_PANEL_DPI = 160
 
 
 def _is_map_asset(filename: str) -> bool:
     return any(marker in filename for marker in PAGES_MAP_MARKERS)
+
+
+def _flatten_for_map_export(img: Image.Image) -> Image.Image:
+    """RGBA/LA choropleth panels → RGB on white (better PNG palette compression)."""
+    if img.mode in ("RGBA", "LA"):
+        background = Image.new("RGB", img.size, (255, 255, 255))
+        background.paste(img, mask=img.split()[-1])
+        return background
+    if img.mode != "RGB":
+        return img.convert("RGB")
+    return img
 
 
 def downgrade_map_png(
@@ -194,15 +205,16 @@ def downgrade_map_png(
     dest: Path,
     *,
     scale: float = PAGES_MAP_SCALE,
+    palette_colors: int = PAGES_MAP_PALETTE_COLORS,
 ) -> int:
-    """Resize a map PNG for GitHub Pages; return output size in bytes."""
-    from PIL import Image
-
+    """Downscale + palette-compress a map PNG for GitHub Pages."""
     with Image.open(src) as img:
+        img = _flatten_for_map_export(img)
         width, height = img.size
         new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
         if new_size != (width, height):
             img = img.resize(new_size, Image.Resampling.LANCZOS)
+        img = img.convert("P", palette=Image.Palette.ADAPTIVE, colors=palette_colors)
         dest.parent.mkdir(parents=True, exist_ok=True)
         img.save(dest, format="PNG", optimize=PAGES_MAP_PNG_OPTIMIZE)
     return dest.stat().st_size
@@ -349,7 +361,10 @@ def publish_bundle(
     if assets_src and assets_src.is_dir():
         n_assets = _copy_assets(assets_src, dest_assets, pages_lite=pages_lite)
         if pages_lite:
-            print(f"[INFO] pages-lite: copied {n_assets} asset(s) (maps downscaled to {PAGES_MAP_SCALE:.0%})")
+            print(
+                f"[INFO] pages-lite: copied {n_assets} asset(s) "
+                f"(maps → {PAGES_MAP_SCALE:.0%} scale, {PAGES_MAP_PALETTE_COLORS}-color palette)"
+            )
     elif dest_assets.exists():
         shutil.rmtree(dest_assets)
 

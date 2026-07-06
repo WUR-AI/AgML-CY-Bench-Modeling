@@ -23,7 +23,7 @@ Options:
   --all-countries     All countries with output dirs, manifest rows, or yield data
   --horizon H         Single horizon (default: eos); repeat or use --horizons
   --horizons H ...    eos, mid, middle-of-season (default: eos)
-  --version N         Batch version suffix (default: 1)
+  --version N         Batch version suffix (default: 3)
   --max N             Process at most N batch×horizon targets (0 = unlimited)
   --manifest PATH     Explicit job list
   --model MODEL       Limit to model slug (repeatable, e.g. --model lpjml_bc or twso_bc)

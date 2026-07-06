@@ -1,7 +1,7 @@
 # Extensive Bayesian optimization with TPE
 
 n_trials: 100
-timeout: 14400  # 4 hours
+timeout: null  # no Optuna wall-clock cap (SLURM --time still applies)
 n_jobs: ${experiment.n_jobs}
 seed: ${experiment.seed}
 repetitions: 1

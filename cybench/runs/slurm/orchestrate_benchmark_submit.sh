@@ -25,7 +25,7 @@ Options:
   --countries CC ...  Limit to these countries (default: all with data on disk)
   --horizon H ...     Default: eos middle-of-season (alias mid → middle-of-season)
   --region-threshold N  gpu partition when country has >= N regions (default: 50)
-  --version N         Batch version suffix (default: 1)
+  --version N         Batch version suffix (default: 3)
   --phase MODE        screening | walk_forward | all (default: all)
   --force             Submit even if manifest batch dir already exists
   --all-countries     Include already-filed batches in --list
@@ -56,7 +56,7 @@ DRY_RUN=false
 FORCE=false
 ALL_COUNTRIES=false
 PHASE_MODE="all"
-VERSION=1
+VERSION=3
 REGION_THRESHOLD=50
 MAX_BATCHES=0
 MANIFEST_ROOT="${SLURM_DIR}/manifests"

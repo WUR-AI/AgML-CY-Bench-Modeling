@@ -55,7 +55,7 @@ def batch_suffix_to_horizon(batch_hz: str) -> str:
     return batch_hz
 
 
-def batch_name(country: str, horizon: str, version: int = 1) -> str:
+def batch_name(country: str, horizon: str, version: int = 3) -> str:
     cc = country.upper()
     hz = horizon_batch_suffix(horizon)
     return f"baselines_{cc}_{hz}_v{version}"
@@ -207,7 +207,7 @@ def build_submit_plans(
     *,
     countries: list[str] | None = None,
     horizons: list[str] | None = None,
-    version: int = 1,
+    version: int = 3,
     region_threshold: int = DEFAULT_GPU_REGION_THRESHOLD,
     manifest_root: Path,
     data_dir: Path | None = None,
@@ -318,7 +318,7 @@ def main() -> None:
         default=None,
         help="Default: eos middle-of-season",
     )
-    parser.add_argument("--version", type=int, default=1)
+    parser.add_argument("--version", type=int, default=3)
     parser.add_argument(
         "--region-threshold",
         type=int,

@@ -375,8 +375,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--version",
         type=int,
-        default=1,
-        help="Batch version when expanding from --country (default: 1)",
+        default=3,
+        help="Batch version when expanding from --country (default: 3)",
     )
     parser.add_argument(
         "--manifest",

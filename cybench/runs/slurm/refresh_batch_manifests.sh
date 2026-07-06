@@ -22,7 +22,7 @@ exist under the output root (or for explicit --countries).
 
 Options:
   --horizon H       eos | mid | qtr (default: qtr)
-  --version N       Batch version suffix (default: 2)
+  --version N       Batch version suffix (default: 3)
   --countries CC..  Only these countries (default: all matching batch dirs)
   --output-root DIR Parent of baselines_* (default: $CYBENCH_OUTPUT_ROOT or lustre)
   --data-dir DIR    Passed to generate_job_manifest.py
@@ -50,7 +50,7 @@ REPO_ROOT="${REPO_ROOT:-$(cd "${SLURM_DIR}/../../.." && pwd)}"
 GENERATE_PY="${SLURM_DIR}/generate_job_manifest.py"
 
 HORIZON_KEY="qtr"
-VERSION="2"
+VERSION="3"
 COUNTRIES=()
 OUTPUT_ROOT="${CYBENCH_OUTPUT_ROOT:-}"
 DATA_DIR=""
