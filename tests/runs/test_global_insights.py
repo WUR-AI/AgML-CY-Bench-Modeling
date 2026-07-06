@@ -442,6 +442,11 @@ def test_build_insights_payload_structure(tmp_path: Path):
     assert ridge_board["median_nrmse"] == ridge_matrix
     assert len(payload["matrix_axes"]) == 4
     assert payload["matrix_axes"][0]["id"] == "overall"
+    assert "country_map_cc" in payload
+    assert payload["country_map_cc"]["DE"] == "DE"
+    assert "benchmark_map_isos" in payload
+    assert "metric_map_scales" in payload
+    assert payload["metric_map_scales"]["nrmse"]["higher_better"] is False
 
 
 def _three_horizon_fixture(tmp_path: Path) -> pd.DataFrame:

@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>CY-Bench Global Insights</title>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <style>
     :root {
       --bg: #f6f8fa;
@@ -178,6 +179,49 @@
       align-items: center;
       gap: 0.35rem;
     }
+    .world-map-wrap { width: 100%; overflow: hidden; }
+    .world-map-wrap svg { display: block; width: 100%; height: auto; }
+    .world-map-wrap .country {
+      stroke: #fff;
+      stroke-width: 0.5px;
+      transition: fill 0.15s;
+    }
+    .metric-map-legend {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem 1rem;
+      margin-top: 0.65rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .metric-map-gradient {
+      display: inline-block;
+      width: 200px;
+      height: 14px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      background: linear-gradient(to right, #d73027, #fee08b, #1a9850);
+    }
+    .export-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.65rem;
+    }
+    .export-toolbar button {
+      padding: 0.35rem 0.7rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.86rem;
+    }
+    .export-toolbar button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
     .curve-legend .swatch {
       width: 0.85rem;
       height: 0.85rem;
@@ -248,6 +292,55 @@
         Country cells link to the matching country dashboard with that model pre-selected.
       </p>
       <div class="table-scroll" id="model-country-wrap"></div>
+    </div>
+
+    <div class="card">
+      <h2>World map — evaluation metrics</h2>
+      <p class="muted">
+        Choropleth of per-country metrics for the selected model (same values as the model×country heatmap above).
+        Green = better; red = worse. Hover for exact values.
+      </p>
+      <div class="controls">
+        <span class="muted">Horizon</span>
+        <div class="toolbar" id="metric-map-horizon-toolbar"></div>
+        <label>Crop
+          <select id="metric-map-crop-filter">
+            <option value="all">All crops</option>
+          </select>
+        </label>
+        <label>
+          <input type="checkbox" id="metric-map-skilled-only" />
+          Skilful datasets only
+        </label>
+        <label>Model
+          <select id="metric-map-model"></select>
+        </label>
+        <span class="muted">Axis</span>
+        <div class="toolbar" id="metric-map-axis-toolbar">
+          <button type="button" data-axis="overall" class="active">Overall</button>
+          <button type="button" data-axis="spatial">Spatial</button>
+          <button type="button" data-axis="temporal">Temporal</button>
+          <button type="button" data-axis="anomaly">Anomaly</button>
+        </div>
+        <label id="metric-map-metric-wrap">Metric
+          <select id="metric-map-metric">
+            <option value="nrmse" selected>NRMSE</option>
+            <option value="r2">R²</option>
+          </select>
+        </label>
+      </div>
+      <p class="muted" id="metric-map-note"></p>
+      <p class="muted" id="metric-map-coverage-note"></p>
+      <div class="world-map-wrap" id="metric-map-wrap"><p class="muted">Loading map…</p></div>
+      <div class="metric-map-legend" id="metric-map-legend">
+        <span class="metric-map-gradient" aria-hidden="true"></span>
+        <span id="metric-map-legend-label">—</span>
+      </div>
+      <div class="export-toolbar">
+        <button type="button" id="metric-map-export-svg" disabled>Download map (SVG)</button>
+        <button type="button" id="metric-map-export-png" disabled>Download map (PNG)</button>
+      </div>
+      <p class="muted" id="metric-map-summary"></p>
     </div>
 
     <div class="card">
@@ -804,6 +897,390 @@
     rq1ModelFilter.addEventListener("input", renderRq1);
     syncMatrixMetricControl();
     renderRq1();
+
+    // World map — per-country evaluation metrics
+    let mapHorizon = rq1Horizon;
+    let mapCrop = rq1Crop;
+    let mapSkilledOnly = false;
+    let mapAxis = "overall";
+    let mapMetric = "nrmse";
+    let mapModel = "";
+    const metricMapHorizonToolbar = document.getElementById("metric-map-horizon-toolbar");
+    const metricMapCropFilter = document.getElementById("metric-map-crop-filter");
+    const metricMapSkilledCheckbox = document.getElementById("metric-map-skilled-only");
+    const metricMapModelSelect = document.getElementById("metric-map-model");
+    const metricMapAxisToolbar = document.getElementById("metric-map-axis-toolbar");
+    const metricMapMetricWrap = document.getElementById("metric-map-metric-wrap");
+    const metricMapMetricSelect = document.getElementById("metric-map-metric");
+    const metricMapNote = document.getElementById("metric-map-note");
+    const metricMapCoverageNote = document.getElementById("metric-map-coverage-note");
+    const metricMapWrap = document.getElementById("metric-map-wrap");
+    const metricMapLegendLabel = document.getElementById("metric-map-legend-label");
+    const metricMapSummary = document.getElementById("metric-map-summary");
+    const metricMapExportSvgBtn = document.getElementById("metric-map-export-svg");
+    const metricMapExportPngBtn = document.getElementById("metric-map-export-png");
+    const COUNTRY_MAP_CC = DATA.country_map_cc || {};
+    const METRIC_MAP_SCALES = DATA.metric_map_scales || {
+      nrmse: { lo: 0, hi: 0.5, higher_better: false, label: "NRMSE" },
+      r2: { lo: 0, hi: 1, higher_better: true, label: "R²" },
+      r: { lo: -1, hi: 1, higher_better: true, label: "r" },
+    };
+    const MAP_FILL_OUTSIDE = "#e8eaed";
+    const MAP_FILL_NO_DATA = "#f5f5f5";
+    const benchmarkIsos = new Set(DATA.benchmark_map_isos || []);
+    const MAP_WIDTH = 960;
+    const MAP_HEIGHT = 520;
+    const MAP_MARGIN = 8;
+    let worldFeatures = null;
+    let mapProjection = d3.geoNaturalEarth1();
+    let mapPath = d3.geoPath(mapProjection);
+    const mapSvg = d3.select("#metric-map-wrap").html("").append("svg")
+      .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
+      .attr("role", "img")
+      .attr("aria-label", "World map of model evaluation metrics by country");
+
+    if (metricMapCoverageNote) {
+      metricMapCoverageNote.textContent = DATA.map_coverage_note || (
+        "Only CY-Bench countries are colored; other land is neutral gray."
+      );
+    }
+
+    for (const crop of DATA.crops || []) {
+      const opt = document.createElement("option");
+      opt.value = crop;
+      opt.textContent = crop.charAt(0).toUpperCase() + crop.slice(1);
+      metricMapCropFilter.appendChild(opt);
+    }
+
+    function isBenchmarkIso(iso) {
+      return benchmarkIsos.has(iso);
+    }
+
+    function mapCc(country) {
+      return COUNTRY_MAP_CC[country] || country;
+    }
+
+    function mapMatrixSource() {
+      const root = mapSkilledOnly ? DATA.model_country_skilled : DATA.model_country;
+      const byHorizon = root && root[mapHorizon];
+      if (!byHorizon) return { models: [], countries: [], cells: [], model_totals: {} };
+      return byHorizon[mapCrop] || byHorizon.all || { models: [], countries: [], cells: [], model_totals: {} };
+    }
+
+    function mapMetricSpec() {
+      const axis = matrixAxisDef(mapAxis);
+      const metrics = axis.metrics || [];
+      let metricId = mapMetric;
+      if (!metrics.some(m => m.id === metricId)) {
+        metricId = metrics[0]?.id || "r2";
+      }
+      const metric = metrics.find(m => m.id === metricId) || metrics[0];
+      const higherBetter = metric?.higher_better !== false;
+      const label = metric?.label || metricId.toUpperCase();
+      const scale = METRIC_MAP_SCALES[metricId] || { lo: 0, hi: 1, higher_better: higherBetter, label };
+      return {
+        axisId: axis.id,
+        axisLabel: axis.label,
+        metricId,
+        label,
+        higherBetter,
+        scale,
+        note: axis.note || axis.label,
+        cellValue(cell) {
+          if (!cell) return null;
+          const axes = cell.axes || {};
+          const bucket = axes[axis.id] || {};
+          if (bucket[metricId] !== undefined && bucket[metricId] !== null) {
+            return bucket[metricId];
+          }
+          if (axis.id === "overall" && metricId === "nrmse") return cell.median_nrmse ?? null;
+          if (axis.id === "overall" && metricId === "r2") return cell.median_r2 ?? null;
+          return null;
+        },
+      };
+    }
+
+    function syncMapMetricControl() {
+      const axis = matrixAxisDef(mapAxis);
+      const metrics = axis.metrics || [];
+      const showPicker = metrics.length > 1;
+      metricMapMetricWrap.style.display = showPicker ? "" : "none";
+      if (!showPicker && metrics.length === 1) {
+        mapMetric = metrics[0]?.id || "r2";
+        return;
+      }
+      const options = metrics.map(m => `<option value="${m.id}">${m.label}</option>`).join("");
+      const prev = mapMetric;
+      metricMapMetricSelect.innerHTML = options;
+      mapMetric = metrics.some(m => m.id === prev) ? prev : metrics[0].id;
+      metricMapMetricSelect.value = mapMetric;
+    }
+
+    function populateMapModelSelect() {
+      const matrix = mapMatrixSource();
+      const models = matrix.models || [];
+      const prev = mapModel;
+      if (!models.length) {
+        metricMapModelSelect.innerHTML = `<option value="">No models</option>`;
+        mapModel = "";
+        return;
+      }
+      const preferred = models.find(m => !["average", "average_yield", "averageyieldmodel"].includes(String(m).toLowerCase()));
+      metricMapModelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join("");
+      if (prev && models.includes(prev)) {
+        mapModel = prev;
+      } else if (preferred) {
+        mapModel = preferred;
+      } else {
+        mapModel = models[0];
+      }
+      metricMapModelSelect.value = mapModel;
+    }
+
+    function currentMapCountryRows() {
+      const spec = mapMetricSpec();
+      const matrix = mapMatrixSource();
+      const rows = [];
+      for (const cell of matrix.cells || []) {
+        if (cell.model !== mapModel) continue;
+        const value = spec.cellValue(cell);
+        if (value === null || value === undefined) continue;
+        rows.push({
+          country: cell.country,
+          map_cc: mapCc(cell.country),
+          value,
+          n_datasets: cell.n_datasets ?? null,
+        });
+      }
+      return { spec, rows };
+    }
+
+    function metricMapColor(value, spec) {
+      const scale = spec.scale || METRIC_MAP_SCALES[spec.metricId] || { lo: 0, hi: 1, higher_better: true };
+      const lo = scale.lo ?? 0;
+      const hi = scale.hi ?? 1;
+      const higherBetter = scale.higher_better !== false && spec.higherBetter !== false;
+      if (hi === lo) return d3.interpolateYlGn(0.5);
+      const t = higherBetter
+        ? (value - lo) / (hi - lo)
+        : (hi - value) / (hi - lo);
+      return d3.interpolateRdYlGn(Math.max(0, Math.min(1, t)));
+    }
+
+    function mapFeaturesWithoutAntarctica(features) {
+      return (features || []).filter(f => f.properties.ISO_A2 !== "AQ");
+    }
+
+    function fitMapProjection(features) {
+      mapProjection = d3.geoNaturalEarth1().fitExtent(
+        [[MAP_MARGIN, MAP_MARGIN], [MAP_WIDTH - MAP_MARGIN, MAP_HEIGHT - MAP_MARGIN]],
+        { type: "FeatureCollection", features },
+      );
+      mapPath = d3.geoPath(mapProjection);
+    }
+
+    function setMapExportEnabled(enabled) {
+      if (metricMapExportSvgBtn) metricMapExportSvgBtn.disabled = !enabled;
+      if (metricMapExportPngBtn) metricMapExportPngBtn.disabled = !enabled;
+    }
+
+    function renderMetricMap() {
+      if (!worldFeatures) return;
+      const { spec, rows } = currentMapCountryRows();
+      const byCountry = new Map(rows.map(r => [r.map_cc, r]));
+      const scale = spec.scale || METRIC_MAP_SCALES[spec.metricId] || {};
+      const lo = scale.lo ?? 0;
+      const hi = scale.hi ?? 1;
+      const scaleLabel = scale.label || spec.label;
+      const betterWord = spec.higherBetter ? "higher" : "lower";
+      metricMapLegendLabel.textContent = `${scaleLabel}: ${fmt(lo)} (worse) → ${fmt(hi)} (better); green = ${betterWord} is better`;
+
+      mapSvg.selectAll("path.country")
+        .data(worldFeatures)
+        .join("path")
+        .attr("class", "country")
+        .attr("d", mapPath)
+        .attr("fill", d => {
+          const iso = d.properties.ISO_A2;
+          if (!isBenchmarkIso(iso)) return MAP_FILL_OUTSIDE;
+          const rec = byCountry.get(iso);
+          if (!rec) return MAP_FILL_NO_DATA;
+          return metricMapColor(rec.value, spec);
+        })
+        .attr("stroke", d => isBenchmarkIso(d.properties.ISO_A2) ? "#fff" : "#d0d7de")
+        .attr("stroke-width", d => isBenchmarkIso(d.properties.ISO_A2) ? 0.5 : 0.25)
+        .selectAll("title")
+        .data(d => [d])
+        .join("title")
+        .text(d => {
+          const iso = d.properties.ISO_A2;
+          if (!isBenchmarkIso(iso)) {
+            return `${d.properties.NAME || iso}: not in CY-Bench`;
+          }
+          const rec = byCountry.get(iso);
+          if (!rec) {
+            return `${d.properties.NAME || iso}: no data for ${mapModel || "model"} / ${mapCrop} / ${mapHorizon}`;
+          }
+          const ds = rec.n_datasets != null ? ` · ${rec.n_datasets} dataset(s)` : "";
+          return `${rec.country}: ${spec.label}=${fmt(rec.value)}${ds}`;
+        });
+
+      const hzLabel = HORIZON_LABELS[mapHorizon] || mapHorizon;
+      const cropLabel = mapCrop === "all" ? "all crops" : mapCrop;
+      metricMapNote.textContent = `${spec.axisLabel} · ${spec.label} for ${mapModel || "—"} (${hzLabel}, ${cropLabel}${mapSkilledOnly ? ", skilful only" : ""}).`;
+      if (!mapModel) {
+        metricMapSummary.textContent = "Select a model to color countries.";
+        return;
+      }
+      if (!rows.length) {
+        metricMapSummary.textContent = "No country values for this selection.";
+        return;
+      }
+      const vals = rows.map(r => r.value);
+      const med = d3.median(vals);
+      metricMapSummary.textContent =
+        `${rows.length} countries with data · median ${spec.label}=${fmt(med)} across countries.`;
+    }
+
+    function escapeXml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function mapExportFilename(ext) {
+      const spec = mapMetricSpec();
+      const skilled = mapSkilledOnly ? "_skilled" : "";
+      return `cybench-metric-map_${mapHorizon}_${mapCrop}_${mapModel}_${mapAxis}_${spec.metricId}${skilled}.${ext}`;
+    }
+
+    function buildMapExportSvgString() {
+      const mapNode = metricMapWrap.querySelector("svg");
+      if (!mapNode || !worldFeatures) return null;
+      const padT = 12;
+      const padB = 48;
+      const totalH = MAP_HEIGHT + padT + padB;
+      const legendY = padT + MAP_HEIGHT + 16;
+      const legendText = metricMapLegendLabel ? metricMapLegendLabel.textContent : "";
+      const legendSvg = `
+        <defs>
+          <linearGradient id="export-metric-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#d73027"/>
+            <stop offset="50%" stop-color="#fee08b"/>
+            <stop offset="100%" stop-color="#1a9850"/>
+          </linearGradient>
+        </defs>
+        <rect x="24" y="${legendY}" width="200" height="14" fill="url(#export-metric-grad)" stroke="#d8dee4"/>
+        <text x="232" y="${legendY + 11}" font-size="12" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(legendText)}</text>`;
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${totalH}" width="${MAP_WIDTH}" height="${totalH}">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <svg x="0" y="${padT}" width="${MAP_WIDTH}" height="${MAP_HEIGHT}" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}">
+    ${mapNode.innerHTML}
+  </svg>
+  ${legendSvg}
+</svg>`;
+    }
+
+    function triggerBlobDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    function downloadMetricMapSvg() {
+      const svg = buildMapExportSvgString();
+      if (!svg) return;
+      triggerBlobDownload(
+        new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
+        mapExportFilename("svg"),
+      );
+    }
+
+    function downloadMetricMapPng() {
+      const svg = buildMapExportSvgString();
+      if (!svg) return;
+      const img = new Image();
+      const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = MAP_WIDTH;
+        canvas.height = MAP_HEIGHT + 60;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(blob => {
+          if (blob) triggerBlobDownload(blob, mapExportFilename("png"));
+        }, "image/png");
+      };
+      img.onerror = () => URL.revokeObjectURL(url);
+      img.src = url;
+    }
+
+    function renderMetricMapPanel() {
+      populateMapModelSelect();
+      syncMapMetricControl();
+      renderMetricMap();
+    }
+
+    function loadMetricMapGeometry() {
+      if (!DATA.geojson_href) {
+        setMapExportEnabled(false);
+        metricMapWrap.innerHTML = '<p class="muted">Map geometry not available (rebuild insights with geopandas).</p>';
+        return;
+      }
+      d3.json(DATA.geojson_href).then(geo => {
+        worldFeatures = mapFeaturesWithoutAntarctica(geo.features);
+        fitMapProjection(worldFeatures);
+        setMapExportEnabled(true);
+        renderMetricMapPanel();
+      }).catch(err => {
+        setMapExportEnabled(false);
+        metricMapWrap.innerHTML = `<p class="muted">Could not load map (${err}).</p>`;
+      });
+    }
+
+    initHorizonToolbar(metricMapHorizonToolbar, mapHorizon, (hz) => {
+      mapHorizon = hz;
+      renderMetricMapPanel();
+    });
+    metricMapCropFilter.addEventListener("change", () => {
+      mapCrop = metricMapCropFilter.value || "all";
+      renderMetricMapPanel();
+    });
+    metricMapSkilledCheckbox.addEventListener("change", () => {
+      mapSkilledOnly = metricMapSkilledCheckbox.checked;
+      renderMetricMapPanel();
+    });
+    metricMapModelSelect.addEventListener("change", () => {
+      mapModel = metricMapModelSelect.value || "";
+      renderMetricMap();
+    });
+    metricMapAxisToolbar.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        metricMapAxisToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        mapAxis = btn.dataset.axis || "overall";
+        syncMapMetricControl();
+        renderMetricMap();
+      });
+    });
+    metricMapMetricSelect.addEventListener("change", () => {
+      mapMetric = metricMapMetricSelect.value || "nrmse";
+      renderMetricMap();
+    });
+    if (metricMapExportSvgBtn) metricMapExportSvgBtn.addEventListener("click", downloadMetricMapSvg);
+    if (metricMapExportPngBtn) metricMapExportPngBtn.addEventListener("click", downloadMetricMapPng);
+    loadMetricMapGeometry();
 
     // Horizon skill curves
     const HSC = DATA.horizon_skill_curves || {};

@@ -8,6 +8,8 @@ from typing import Any
 
 import pandas as pd
 
+from cybench.runs.analysis.index_map_lib import map_iso_for_cybencH
+
 _PAPER_DIR_RE = re.compile(
     r"^paper_walk_forward_(?P<country>[a-z]{2})_(?P<horizon>eos|mid|qtr|early)_v(?P<version>\d+)$"
 )
@@ -27,6 +29,19 @@ HORIZON_DISPLAY_LABELS: dict[str, str] = {
 
 # Process baselines evaluated only at end-of-season (no mid/qtr walk-forward runs).
 EOS_ONLY_HORIZON_CURVE_MODELS: frozenset[str] = frozenset({"lpjml_bc"})
+
+# Fixed choropleth scales (aligned with insights heatmap cell coloring).
+METRIC_MAP_SCALES: dict[str, dict[str, Any]] = {
+    "nrmse": {"lo": 0.0, "hi": 0.5, "higher_better": False, "label": "NRMSE"},
+    "r2": {"lo": 0.0, "hi": 1.0, "higher_better": True, "label": "R²"},
+    "r": {"lo": -1.0, "hi": 1.0, "higher_better": True, "label": "r"},
+}
+
+MAP_COVERAGE_NOTE = (
+    "Only CY-Bench countries are colored; all other land is neutral gray. "
+    "ISO country polygons are used as-is (e.g. the United States outline includes Alaska). "
+    "France is metropolitan only (French Guiana is not colored)."
+)
 
 
 def horizons_in_data(df: pd.DataFrame) -> tuple[str, ...]:
@@ -1298,6 +1313,9 @@ def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, 
     crops = _crop_keys(df)
     baseline_models = sorted({str(m) for m in df["model"].unique() if is_baseline_model(m)})
     horizon_labels = {hz: HORIZON_DISPLAY_LABELS.get(hz, hz) for hz in available_horizons}
+
+    country_map_cc = {str(cc): map_iso_for_cybencH(str(cc)) for cc in countries}
+    benchmark_map_isos = sorted(set(country_map_cc.values()))
     return {
         "output_root": str(output_root.resolve()),
         "dashboard_hrefs": build_dashboard_hrefs(output_root, version=version),
@@ -1316,6 +1334,10 @@ def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, 
         "model_country_skilled": model_country_skilled,
         "horizon_skill_curves": build_horizon_skill_curves_payload(df),
         "crop_comparison": build_crop_comparison_payload(df),
+        "country_map_cc": country_map_cc,
+        "benchmark_map_isos": benchmark_map_isos,
+        "map_coverage_note": MAP_COVERAGE_NOTE,
+        "metric_map_scales": METRIC_MAP_SCALES,
     }
 
 

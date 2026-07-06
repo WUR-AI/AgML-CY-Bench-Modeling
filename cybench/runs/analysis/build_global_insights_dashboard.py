@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 
 from cybench.runs.analysis.global_insights_lib import build_insights_payload
+from cybench.runs.analysis.index_map_lib import ensure_world_geojson
 
 
 def build_insights_html(payload: dict) -> str:
@@ -39,6 +40,7 @@ def write_insights_dashboard(
     if payload["n_rows"] == 0:
         raise RuntimeError(f"No walk_forward_summary.csv files found under {output_root}")
     dest.parent.mkdir(parents=True, exist_ok=True)
+    payload["geojson_href"] = ensure_world_geojson(dest.parent)
     dest.write_text(build_insights_html(payload), encoding="utf-8")
     return dest
 
