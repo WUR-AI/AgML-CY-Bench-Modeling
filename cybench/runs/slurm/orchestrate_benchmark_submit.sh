@@ -6,6 +6,7 @@
 # Usage (from repo root on anunna):
 #   cybench/runs/slurm/orchestrate_benchmark_submit.sh --list
 #   cybench/runs/slurm/orchestrate_benchmark_submit.sh --dry-run
+#   cybench/runs/slurm/orchestrate_benchmark_submit.sh --horizon early --version 2 --dry-run
 #   cybench/runs/slurm/orchestrate_benchmark_submit.sh --countries PL IT --horizon eos
 #   cybench/runs/slurm/orchestrate_benchmark_submit.sh --region-threshold 50 --max 3
 #
@@ -15,26 +16,39 @@ usage() {
   cat <<'EOF'
 Usage: orchestrate_benchmark_submit.sh [options]
 
-Discover countries / horizons without manifests yet, then call submit_benchmark.sh
-per batch. Tabular (cpu) and naive jobs always use the cpu/main arrays; only the
-gpu manifest group is routed to the gpu partition or --cpu based on region count.
+Discover countries with yield data and horizons without manifests yet, then call
+submit_benchmark.sh per batch. Tabular (cpu) and naive jobs always use the cpu/main
+arrays; only the gpu manifest group is routed to the gpu partition or --cpu based
+on region count.
+
+By default every country with data on disk is included (no --countries needed).
 
 Options:
   --list              Show plan (country, regions, gpu vs cpu) and exit
   --dry-run           Print submit_benchmark.sh commands without sbatch
   --countries CC ...  Limit to these countries (default: all with data on disk)
-  --horizon H ...     Default: eos middle-of-season (alias mid → middle-of-season)
+  --horizon H ...     eos | mid | qtr | early (alias early-season; repeatable)
   --region-threshold N  gpu partition when country has >= N regions (default: 50)
   --version N         Batch version suffix (default: 3)
   --phase MODE        screening | walk_forward | all (default: all)
+  --repetitions N     Walk-forward seeds 42..42+N-1 (passed to submit_benchmark.sh)
+  --skip-naive        Omit average/trend jobs
+  --models FILE       Model catalogue for manifest regeneration (default: models.txt)
   --force             Submit even if manifest batch dir already exists
-  --all-countries     Include already-filed batches in --list
+  --all-countries     With --list: include batches that already have manifests
   --max N             Submit at most N batches this run
   --manifest-root DIR Override slurm/manifests parent
   --data-dir DIR      Override cybench/data
 
+Environment:
+  HP_TRIALS           Optuna trials in screening (default: 100)
+  WF_REPETITIONS      Default for --repetitions when omitted (default: 1)
+
 Examples:
-  orchestrate_benchmark_submit.sh --list
+  orchestrate_benchmark_submit.sh --list --horizon early --version 2
+  orchestrate_benchmark_submit.sh --horizon early --version 2 --dry-run
+  export HP_TRIALS=20 WF_REPETITIONS=5
+  orchestrate_benchmark_submit.sh --horizon early --version 2 --skip-naive --repetitions 5
   orchestrate_benchmark_submit.sh --countries IN --horizon eos
   orchestrate_benchmark_submit.sh --region-threshold 50 --max 3
 EOF
@@ -63,6 +77,9 @@ MANIFEST_ROOT="${SLURM_DIR}/manifests"
 DATA_DIR=""
 COUNTRIES=()
 HORIZONS=()
+WF_REPETITIONS="${WF_REPETITIONS:-}"
+SKIP_NAIVE=false
+MODELS_FILE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -118,6 +135,18 @@ while [[ $# -gt 0 ]]; do
       ;;
     --data-dir)
       DATA_DIR=$2
+      shift 2
+      ;;
+    --repetitions)
+      WF_REPETITIONS=$2
+      shift 2
+      ;;
+    --skip-naive)
+      SKIP_NAIVE=true
+      shift
+      ;;
+    --models)
+      MODELS_FILE=$2
       shift 2
       ;;
     -h|--help)
@@ -183,6 +212,15 @@ for line in "${PLAN_LINES[@]}"; do
   )
   if [[ "${GPU_MODE}" == "cpu" ]]; then
     cmd+=(--cpu)
+  fi
+  if [[ -n "${WF_REPETITIONS}" ]]; then
+    cmd+=(--repetitions "${WF_REPETITIONS}")
+  fi
+  if [[ "${SKIP_NAIVE}" == true ]]; then
+    cmd+=(--skip-naive)
+  fi
+  if [[ -n "${MODELS_FILE}" ]]; then
+    cmd+=(--models "${MODELS_FILE}")
   fi
   if [[ "${DRY_RUN}" == true ]]; then
     cmd+=(--dry-run)

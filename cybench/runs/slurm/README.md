@@ -178,26 +178,26 @@ cybench/runs/slurm/orchestrate_benchmark_complete.sh \
   --all-countries --horizons qtr --version 2 --list
 ```
 
-**Early season (~25% observed), family representatives only** (xgboost, lpjml_bc, tst_lf, tabdpt; 20 HPO trials, 5 WF seeds — same as v2 benchmark):
+**Early season (~25% observed)** — same orchestration as eos/mid/qtr:
 
 ```bash
 export HP_TRIALS=20 WF_REPETITIONS=5
-export CYBENCH_OUTPUT_ROOT=/lustre/backup/SHARED/AIN/agml/output
 
-# Manifests (pass countries explicitly if baselines_*_early_v2 dirs do not exist yet)
-cybench/runs/slurm/refresh_batch_manifests.sh \
-  --horizon early-season --version 2 \
-  --models cybench/runs/slurm/models_family_reps.txt \
-  --countries DE FR NL   # or omit once early batch dirs exist on lustre
+# Preview plan (all countries with yield data)
+cybench/runs/slurm/orchestrate_benchmark_submit.sh --list --horizon early --version 2
 
-# Submit per country (or loop over the same country list)
-cybench/runs/slurm/submit_benchmark.sh all \
-  --horizon early-season --batch baselines_DE_early_v2 \
-  --skip-naive --repetitions 5
+# Submit all countries
+cybench/runs/slurm/orchestrate_benchmark_submit.sh \
+  --horizon early --version 2 --skip-naive --repetitions 5
+
+# Family representatives only (xgboost, lpjml_bc, tst_lf, tabdpt)
+cybench/runs/slurm/orchestrate_benchmark_submit.sh \
+  --horizon early --version 2 --skip-naive --repetitions 5 \
+  --models cybench/runs/slurm/models_family_reps.txt
 
 # Audit / partial reruns
 cybench/runs/slurm/orchestrate_benchmark_complete.sh \
-  --country DE --horizons early-season --version 2 --list
+  --all-countries --horizons early --version 2 --list
 ```
 
 Manual per-manifest submits (fine-grained control) are below.

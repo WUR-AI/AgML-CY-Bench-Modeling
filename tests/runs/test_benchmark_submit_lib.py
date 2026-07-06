@@ -16,8 +16,8 @@ from cybench.runs.slurm.benchmark_submit_lib import (
 def test_normalize_horizon():
     assert normalize_horizon("eos") == "eos"
     assert normalize_horizon("mid") == "middle-of-season"
-    assert normalize_horizon("early-season") == "early-season"
-    assert horizon_batch_suffix("early-season") == "early"
+    assert normalize_horizon("early") == "early-season"
+    assert horizon_batch_suffix("early") == "early"
 
 
 def test_batch_name():
