@@ -531,6 +531,11 @@ def test_horizon_skill_curves_inner_join_countries():
         assert temporal_by_hz["mid"] < temporal_by_hz["qtr"] < temporal_by_hz["eos"]
         assert len(payload["axes"]) == 4
         assert payload["axes"][2]["id"] == "temporal"
+        model_slugs = {m["model"] for m in maize["models"]}
+        assert "ridge" in model_slugs
+        assert "xgboost" in model_slugs
+        assert "trend" in model_slugs
+        assert "models_table_note" in payload
 
 
 def test_horizon_skill_curves_eos_only_lpjml_in_table_not_plot(tmp_path: Path):
@@ -559,6 +564,8 @@ def test_horizon_skill_curves_eos_only_lpjml_in_table_not_plot(tmp_path: Path):
     assert lpj["points"][0]["metrics"]["nrmse"]["median"] == 0.19
     plot_models = {f["model"] for f in maize["families"] if f["plot"]}
     assert "lpjml_bc" not in plot_models
+    lpj_all = next(m for m in maize["models"] if m["model"] == "lpjml_bc")
+    assert lpj_all["eos_only"] is True
     assert "plot_excluded_note" in payload
 
 
@@ -569,6 +576,9 @@ def test_build_insights_payload_includes_qtr_and_curves(tmp_path: Path):
     assert "qtr" in payload["leaderboards"]
     assert payload["horizon_skill_curves"]["horizons"]
     assert payload["horizon_skill_curves"]["by_crop"]["maize"]["n_countries"] == 2
+    assert payload["horizon_skill_curves"]["by_crop"]["maize"]["models"]
+    assert "horizon_summary" not in payload
+    assert "overall_horizon" not in payload
 
 
 def test_median_model_metrics_matches_insights_matrix():

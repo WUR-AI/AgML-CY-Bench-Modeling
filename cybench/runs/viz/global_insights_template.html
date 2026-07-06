@@ -281,22 +281,31 @@
     </div>
 
     <div class="card">
-      <p class="muted" id="horizon-note"></p>
-      <div class="stat-grid" id="horizon-stats"></div>
-      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">By model (paired eos vs mid)</h3>
-      <div class="table-scroll" id="horizon-summary-wrap"></div>
-      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">Detail per crop × country × model</h3>
+      <h2>By model (median across countries)</h2>
+      <p class="muted" id="horizon-models-note"></p>
       <div class="controls">
-        <label>Model <input type="search" id="detail-model-filter" placeholder="Filter…" /></label>
-        <label>Country
-          <select id="detail-country-filter"><option value="">All</option></select>
+        <label>Crop
+          <select id="horizon-models-crop"></select>
         </label>
+        <span class="muted">Axis</span>
+        <div class="toolbar" id="horizon-models-axis-toolbar">
+          <button type="button" data-axis="overall" class="active">Overall</button>
+          <button type="button" data-axis="spatial">Spatial</button>
+          <button type="button" data-axis="temporal">Temporal</button>
+          <button type="button" data-axis="anomaly">Anomaly</button>
+        </div>
+        <label id="horizon-models-metric-wrap">Metric
+          <select id="horizon-models-metric">
+            <option value="nrmse" selected>NRMSE (median)</option>
+            <option value="r2">R² (median)</option>
+            <option value="skill_vs_trend">Skill vs trend</option>
+          </select>
+        </label>
+        <label>Model <input type="search" id="horizon-models-filter" placeholder="Filter…" /></label>
       </div>
-      <div class="table-scroll" id="horizon-detail-wrap"></div>
-      <p class="muted note">
-        Δ NRMSE = mid-season − end-of-season. <strong>Positive</strong> ⇒ end-of-season is better (lower error).
-        EOS win % = share of pairs where eos NRMSE &lt; mid NRMSE.
-      </p>
+      <p class="muted" id="horizon-models-meta"></p>
+      <div class="table-scroll" id="horizon-models-table-wrap"></div>
+      <p class="muted note" id="horizon-models-metric-note"></p>
     </div>
 
     <div class="card">
@@ -883,6 +892,57 @@
       return null;
     }
 
+    function renderHorizonPointsTable({
+      container,
+      horizons,
+      entries,
+      leadingCols,
+      sortKey,
+      sortDir,
+      onSort,
+      metricId,
+      metricCol,
+      metricValueFn,
+      cellBgFn,
+    }) {
+      const tableRows = entries.map(entry => {
+        const byHz = Object.fromEntries((entry.points || []).map(pt => [pt.horizon, pt]));
+        const row = { eos_only: !!entry.eos_only };
+        for (const col of leadingCols) {
+          row[col.key] = typeof col.value === "function" ? col.value(entry) : entry[col.value];
+        }
+        for (const hz of horizons) {
+          const pt = byHz[hz.id];
+          row[`hz_${hz.id}`] = pt ? metricValueFn(pt, metricId) : null;
+        }
+        return row;
+      });
+      const sortedRows = [...tableRows].sort((a, b) => {
+        const cmp = compareSortValues(a, b, sortKey);
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+      const tableCols = [
+        ...leadingCols.map(col => ({
+          key: col.key,
+          label: col.label,
+          sortable: col.sortable !== false,
+        })),
+        ...horizons.map(hz => ({
+          key: `hz_${hz.id}`,
+          label: hz.label || hz.id,
+          sortable: true,
+          format: (v, row) => {
+            if (v === null || v === undefined) {
+              return row.eos_only ? '<span class="muted">EOS only</span>' : "—";
+            }
+            return fmt(v);
+          },
+          bg: (v) => cellBgFn(v, metricCol),
+        })),
+      ];
+      renderSortableTable(container, tableCols, sortedRows, sortKey, sortDir, onSort);
+    }
+
     hscNote.textContent = HSC.note || "Horizon skill curves require at least two collected horizons.";
 
     const hscCropKeys = Object.keys(HSC.by_crop || {});
@@ -1017,46 +1077,17 @@
       }
       }
 
-      const tableRows = tableFamilies.map(fam => {
-        const byHz = Object.fromEntries((fam.points || []).map(pt => [pt.horizon, pt]));
-        const row = {
-          family: fam.family,
-          model: fam.display || fam.model,
-          eos_only: !!fam.eos_only,
-        };
-        for (const hz of horizons) {
-          const pt = byHz[hz.id];
-          row[`hz_${hz.id}`] = pt ? hscMetricValue(pt, hscMetric) : null;
-        }
-        return row;
-      });
-      const sortedRows = [...tableRows].sort((a, b) => {
-        const cmp = compareSortValues(a, b, hscTableSort);
-        return hscTableDir === "asc" ? cmp : -cmp;
-      });
-      const tableCols = [
-        { key: "family", label: "Family", sortable: true },
-        { key: "model", label: "Model", sortable: true },
-        ...horizons.map(hz => ({
-          key: `hz_${hz.id}`,
-          label: hz.label || hz.id,
-          sortable: true,
-          format: (v, row) => {
-            if (v === null || v === undefined) {
-              return row.eos_only ? '<span class="muted">EOS only</span>' : "—";
-            }
-            return fmt(v);
-          },
-          bg: (v) => hscCellBg(v, metricCol),
-        })),
-      ];
-      renderSortableTable(
-        hscTableWrap,
-        tableCols,
-        sortedRows,
-        hscTableSort,
-        hscTableDir,
-        (key) => {
+      renderHorizonPointsTable({
+        container: hscTableWrap,
+        horizons,
+        entries: tableFamilies,
+        leadingCols: [
+          { key: "family", label: "Family", value: entry => entry.family },
+          { key: "model", label: "Model", value: entry => entry.display || entry.model },
+        ],
+        sortKey: hscTableSort,
+        sortDir: hscTableDir,
+        onSort: (key) => {
           if (hscTableSort === key) {
             hscTableDir = hscTableDir === "asc" ? "desc" : "asc";
           } else {
@@ -1065,7 +1096,11 @@
           }
           renderHorizonSkillCurves();
         },
-      );
+        metricId: hscMetric,
+        metricCol,
+        metricValueFn: hscMetricValue,
+        cellBgFn: hscCellBg,
+      });
     }
 
     hscCropSelect.addEventListener("change", () => {
@@ -1088,93 +1123,144 @@
     syncHscMetricControl();
     renderHorizonSkillCurves();
 
-    // Horizon overall (RQ2)
-    const oh = DATA.overall_horizon || {};
-    document.getElementById("horizon-note").textContent = oh.interpretation || "";
-    const statsEl = document.getElementById("horizon-stats");
-    if (oh.n_pairs) {
-      statsEl.innerHTML = `
-        <div class="stat"><div class="label">Paired comparisons</div><div class="value">${oh.n_pairs}</div></div>
-        <div class="stat"><div class="label">EOS wins</div><div class="value good">${pct(oh.eos_win_rate)}</div></div>
-        <div class="stat"><div class="label">Mean Δ NRMSE</div><div class="value">${fmt(oh.mean_delta_nrmse)}</div></div>
-        <div class="stat"><div class="label">Weighted Δ NRMSE</div><div class="value">${fmt(oh.weighted_delta_nrmse)}</div></div>`;
+    // All models horizon table
+    const hmNote = document.getElementById("horizon-models-note");
+    const hmMeta = document.getElementById("horizon-models-meta");
+    const hmTableWrap = document.getElementById("horizon-models-table-wrap");
+    const hmMetricNote = document.getElementById("horizon-models-metric-note");
+    const hmCropSelect = document.getElementById("horizon-models-crop");
+    const hmAxisToolbar = document.getElementById("horizon-models-axis-toolbar");
+    const hmMetricWrap = document.getElementById("horizon-models-metric-wrap");
+    const hmMetricSelect = document.getElementById("horizon-models-metric");
+    const hmModelFilter = document.getElementById("horizon-models-filter");
+    let hmCrop = "all";
+    let hmAxis = "overall";
+    let hmMetric = "nrmse";
+    let hmTableSort = "model";
+    let hmTableDir = "asc";
+
+    hmNote.textContent = HSC.models_table_note || (
+      "Median per metric across countries at each forecast horizon."
+    );
+
+    if (hscCropKeys.length) {
+      hmCropSelect.innerHTML = hscCropKeys.map(c => {
+        const label = c === "all" ? "All crops" : c.charAt(0).toUpperCase() + c.slice(1);
+        return `<option value="${c}">${label}</option>`;
+      }).join("");
+      hmCrop = hscCropKeys.includes("all") ? "all" : hscCropKeys[0];
+      hmCropSelect.value = hmCrop;
     } else {
-      statsEl.innerHTML = `<p class="muted">No paired eos/mid summaries available yet.</p>`;
+      hmCropSelect.innerHTML = `<option value="all">All crops</option>`;
     }
 
-    // Horizon summary by model
-    let hsSort = "weighted_delta_nrmse";
-    let hsDir = "desc";
-    const hsWrap = document.getElementById("horizon-summary-wrap");
-    const hsCols = [
-      { key: "model", label: "Model" },
-      { key: "n_pairs", label: "Pairs" },
-      { key: "eos_win_rate", label: "EOS win %", format: pct },
-      { key: "weighted_delta_nrmse", label: "Weighted Δ NRMSE", bg: fixedDeltaBg },
-      { key: "mean_delta_nrmse", label: "Mean Δ NRMSE", bg: fixedDeltaBg },
-      { key: "mean_eos_nrmse", label: "Mean EOS NRMSE", bg: fixedNrmseBg },
-      { key: "mean_mid_nrmse", label: "Mean mid NRMSE", bg: fixedNrmseBg },
-    ];
+    function hmMetricColumn(metricId) {
+      const axis = hscAxisDef(hmAxis);
+      const spec = (axis.metrics || []).find(m => m.id === metricId);
+      return spec?.column || metricId;
+    }
 
-    function renderHorizonSummary() {
-      const rows = [...(DATA.horizon_summary || [])].sort((a, b) => {
-        const dir = hsDir === "asc" ? 1 : -1;
-        const cmp = compareSortValues(a, b, hsSort);
-        if (cmp !== 0) return dir * cmp;
-        return a.model.localeCompare(b.model);
-      });
-      renderSortableTable(hsWrap, hsCols, rows, hsSort, hsDir, (key) => {
-        if (hsSort === key) hsDir = hsDir === "asc" ? "desc" : "asc";
-        else { hsSort = key; hsDir = key === "eos_win_rate" || key.includes("delta") ? "desc" : "asc"; }
-        renderHorizonSummary();
+    function hmMetricValue(point, metricId) {
+      const col = hmMetricColumn(metricId);
+      const stats = (point.metrics || {})[col];
+      return stats?.median ?? null;
+    }
+
+    function syncHmMetricControl() {
+      const axis = hscAxisDef(hmAxis);
+      const metrics = axis.metrics || [];
+      const showPicker = metrics.length > 1;
+      hmMetricWrap.style.display = showPicker ? "" : "none";
+      if (!showPicker) {
+        hmMetric = metrics[0]?.id || "nrmse";
+        return;
+      }
+      const options = metrics.map(m => `<option value="${m.id}">${m.label} (median)</option>`).join("");
+      const prev = hmMetric;
+      hmMetricSelect.innerHTML = options;
+      hmMetric = metrics.some(m => m.id === prev) ? prev : metrics[0].id;
+      hmMetricSelect.value = hmMetric;
+    }
+
+    function renderHorizonModelsTable() {
+      const slice = (HSC.by_crop || {})[hmCrop] || { models: [], n_countries: 0, countries: [] };
+      const horizons = HSC.horizons || [];
+      const metricCol = hmMetricColumn(hmMetric);
+      const metricNotes = HSC.metric_notes || {};
+      const axisDef = hscAxisDef(hmAxis);
+      let models = slice.models || [];
+      const mq = hmModelFilter.value.trim().toLowerCase();
+      if (mq) {
+        models = models.filter(m =>
+          m.model.toLowerCase().includes(mq) || String(m.display || "").toLowerCase().includes(mq)
+        );
+      }
+
+      let metricNote = metricNotes[metricCol] || metricNotes[hmMetric] || axisDef.note || "";
+      if (HSC.plot_excluded_note && (slice.models || []).some(m => m.eos_only)) {
+        metricNote = metricNote ? `${metricNote} ${HSC.plot_excluded_note}` : HSC.plot_excluded_note;
+      }
+      hmMetricNote.textContent = metricNote;
+
+      const excluded = slice.excluded_countries || [];
+      let meta = `${slice.n_countries || 0} countries with all ${horizons.length} horizons`;
+      if (models.length) meta += ` · ${models.length} model${models.length === 1 ? "" : "s"} shown`;
+      if (excluded.length) {
+        meta += ` · Excluded (incomplete horizons): ${excluded.slice(0, 8).join(", ")}`;
+        if (excluded.length > 8) meta += ` +${excluded.length - 8} more`;
+      }
+      hmMeta.textContent = meta;
+
+      if (!models.length || horizons.length < 2) {
+        hmTableWrap.innerHTML = `<p class="muted">No horizon model table for this crop.</p>`;
+        return;
+      }
+
+      renderHorizonPointsTable({
+        container: hmTableWrap,
+        horizons,
+        entries: models,
+        leadingCols: [
+          { key: "model", label: "Model", value: entry => entry.display || entry.model },
+        ],
+        sortKey: hmTableSort,
+        sortDir: hmTableDir,
+        onSort: (key) => {
+          if (hmTableSort === key) {
+            hmTableDir = hmTableDir === "asc" ? "desc" : "asc";
+          } else {
+            hmTableSort = key;
+            hmTableDir = key === "model" ? "asc" : "desc";
+          }
+          renderHorizonModelsTable();
+        },
+        metricId: hmMetric,
+        metricCol,
+        metricValueFn: hmMetricValue,
+        cellBgFn: hscCellBg,
       });
     }
-    renderHorizonSummary();
 
-    // Horizon detail
-    const countryFilter = document.getElementById("detail-country-filter");
-    const modelFilter = document.getElementById("detail-model-filter");
-    const countries = [...new Set((DATA.horizon_detail || []).map(r => r.country))].sort();
-    countryFilter.innerHTML = `<option value="">All</option>` +
-      countries.map(c => `<option value="${c}">${c}</option>`).join("");
-
-    let hdSort = "delta_nrmse";
-    let hdDir = "desc";
-    const hdWrap = document.getElementById("horizon-detail-wrap");
-    const hdCols = [
-      { key: "dataset", label: "Dataset" },
-      { key: "model", label: "Model" },
-      { key: "eos_nrmse", label: "EOS NRMSE", bg: fixedNrmseBg },
-      { key: "mid_nrmse", label: "Mid NRMSE", bg: fixedNrmseBg },
-      { key: "delta_nrmse", label: "Δ NRMSE", bg: fixedDeltaBg },
-      { key: "eos_r2", label: "EOS R²" },
-      { key: "mid_r2", label: "Mid R²" },
-      { key: "eos_samples", label: "EOS samples", format: (v) => v == null ? "—" : String(v) },
-      { key: "mid_samples", label: "Mid samples", format: (v) => v == null ? "—" : String(v) },
-    ];
-
-    function renderHorizonDetail() {
-      const cq = countryFilter.value;
-      const mq = modelFilter.value.trim().toLowerCase();
-      const rows = (DATA.horizon_detail || []).filter(r => {
-        if (cq && r.country !== cq) return false;
-        if (mq && !r.model.toLowerCase().includes(mq)) return false;
-        return true;
-      }).sort((a, b) => {
-        const dir = hdDir === "asc" ? 1 : -1;
-        const cmp = compareSortValues(a, b, hdSort);
-        if (cmp !== 0) return dir * cmp;
-        return a.model.localeCompare(b.model);
+    hmAxisToolbar.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        hmAxisToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        hmAxis = btn.dataset.axis || "overall";
+        syncHmMetricControl();
+        renderHorizonModelsTable();
       });
-      renderSortableTable(hdWrap, hdCols, rows, hdSort, hdDir, (key) => {
-        if (hdSort === key) hdDir = hdDir === "asc" ? "desc" : "asc";
-        else { hdSort = key; hdDir = key === "dataset" || key === "model" ? "asc" : "desc"; }
-        renderHorizonDetail();
-      });
-    }
-    countryFilter.addEventListener("change", renderHorizonDetail);
-    modelFilter.addEventListener("input", renderHorizonDetail);
-    renderHorizonDetail();
+    });
+    hmCropSelect.addEventListener("change", () => {
+      hmCrop = hmCropSelect.value || "all";
+      renderHorizonModelsTable();
+    });
+    hmMetricSelect.addEventListener("change", () => {
+      hmMetric = hmMetricSelect.value || "nrmse";
+      renderHorizonModelsTable();
+    });
+    hmModelFilter.addEventListener("input", renderHorizonModelsTable);
+    syncHmMetricControl();
+    renderHorizonModelsTable();
 
     // Crop pair comparison (RQ3)
     let rq3Horizon = AVAILABLE_HORIZONS.includes("eos") ? "eos" : (AVAILABLE_HORIZONS[0] || "eos");

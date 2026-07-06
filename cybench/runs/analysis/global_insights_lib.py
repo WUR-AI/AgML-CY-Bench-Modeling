@@ -920,6 +920,72 @@ def _eos_only_family_points(
     return [{"horizon": "eos", "metrics": metrics, "n_countries": n_countries}]
 
 
+def _build_model_horizon_entry(
+    *,
+    model: str,
+    wide: pd.DataFrame,
+    work: pd.DataFrame,
+    trend_model: str,
+    horizons: tuple[str, ...],
+    value_columns: tuple[str, ...],
+) -> dict[str, Any] | None:
+    eos_only = model in EOS_ONLY_HORIZON_CURVE_MODELS
+    if eos_only:
+        points = _eos_only_family_points(
+            work,
+            model=model,
+            trend_model=trend_model,
+            value_columns=value_columns,
+        )
+    else:
+        points = _family_curve_points(
+            wide,
+            model=model,
+            trend_model=trend_model,
+            horizons=horizons,
+            value_columns=value_columns,
+        )
+    if not points:
+        return None
+    n_horizons_with_data = sum(
+        1 for p in points if (p.get("metrics") or {}).get("nrmse", {}).get("median") is not None
+    )
+    return {
+        "model": model,
+        "points": points,
+        "eos_only": eos_only,
+        "plot": (not eos_only) and n_horizons_with_data >= 2,
+    }
+
+
+def _build_all_model_horizon_entries(
+    work: pd.DataFrame,
+    wide: pd.DataFrame,
+    *,
+    trend_model: str,
+    horizons: tuple[str, ...],
+    value_columns: tuple[str, ...],
+    model_display_names: dict[str, str],
+) -> list[dict[str, Any]]:
+    if work.empty or "model" not in work.columns:
+        return []
+    entries: list[dict[str, Any]] = []
+    for model in sorted(work["model"].astype(str).unique()):
+        entry = _build_model_horizon_entry(
+            model=model,
+            wide=wide,
+            work=work,
+            trend_model=trend_model,
+            horizons=horizons,
+            value_columns=value_columns,
+        )
+        if entry is None:
+            continue
+        entry["display"] = model_display_names.get(model, model)
+        entries.append(entry)
+    return entries
+
+
 def build_horizon_skill_curves_payload(
     df: pd.DataFrame,
     *,
@@ -953,64 +1019,56 @@ def build_horizon_skill_curves_payload(
     by_crop: dict[str, Any] = {}
     for crop_key in crop_keys:
         crop_filter = None if crop_key == "all" else crop_key
-        work = _filter_summary_work(df, crop=crop_filter)
-        work = work[work["model"].isin(rep_models)]
-        wide = _wide_country_model_horizon_metrics(
-            work, horizons, crop=crop_filter, value_columns=value_columns
-        )
-        if wide.empty:
-            by_crop[crop_key] = {
-                "n_countries": 0,
-                "countries": [],
-                "excluded_countries": [],
-                "families": [],
-            }
-            continue
-
-        countries = sorted(wide["country"].astype(str).unique())
         crop_work = _filter_summary_work(df, crop=crop_filter)
+        wide_all = _wide_country_model_horizon_metrics(
+            crop_work, horizons, crop=crop_filter, value_columns=value_columns
+        )
+        countries = (
+            sorted(wide_all["country"].astype(str).unique()) if not wide_all.empty else []
+        )
         any_countries = (
             set(crop_work["country"].astype(str).unique()) if "country" in crop_work.columns else set()
         )
         excluded = sorted(any_countries - set(countries))
+
+        models = _build_all_model_horizon_entries(
+            crop_work,
+            wide_all,
+            trend_model=trend_model,
+            horizons=horizons,
+            value_columns=value_columns,
+            model_display_names=MODEL_DISPLAY_NAMES,
+        )
+
+        work = crop_work[crop_work["model"].isin(rep_models)]
+        wide = (
+            wide_all[wide_all["model"].isin(rep_models)].copy()
+            if not wide_all.empty
+            else wide_all
+        )
 
         families: list[dict[str, Any]] = []
         for family in FAMILY_ORDER:
             model = reps.get(family)
             if not model or model == trend_model:
                 continue
-            eos_only = model in EOS_ONLY_HORIZON_CURVE_MODELS
-            if eos_only:
-                points = _eos_only_family_points(
-                    work,
-                    model=model,
-                    trend_model=trend_model,
-                    value_columns=value_columns,
-                )
-            else:
-                points = _family_curve_points(
-                    wide,
-                    model=model,
-                    trend_model=trend_model,
-                    horizons=horizons,
-                    value_columns=value_columns,
-                )
-            if not points:
-                continue
-            n_horizons_with_data = sum(
-                1
-                for p in points
-                if (p.get("metrics") or {}).get("nrmse", {}).get("median") is not None
+            entry = _build_model_horizon_entry(
+                model=model,
+                wide=wide,
+                work=work,
+                trend_model=trend_model,
+                horizons=horizons,
+                value_columns=value_columns,
             )
+            if entry is None:
+                continue
             families.append(
                 {
                     "family": family,
                     "model": model,
                     "display": MODEL_DISPLAY_NAMES.get(model, model),
                     "color": FAMILY_COLORS.get(family, "#666"),
-                    "points": points,
-                    "eos_only": eos_only,
-                    "plot": (not eos_only) and n_horizons_with_data >= 2,
+                    **entry,
                 }
             )
 
@@ -1019,6 +1077,7 @@ def build_horizon_skill_curves_payload(
             "countries": countries,
             "excluded_countries": excluded,
             "families": families,
+            "models": models,
         }
 
     rep_labels = ", ".join(f"{f}: {m}" for f, m in reps.items())
@@ -1043,8 +1102,13 @@ def build_horizon_skill_curves_payload(
             "Hyperparameters are tuned per horizon (screening at each lead time)."
         ),
         "plot_excluded_note": (
-            "EOS-only baselines (LPJmL) are omitted from the curve plot; see the table for "
+            "EOS-only baselines (LPJmL) are omitted from the curve plot; see the tables for "
             "their end-of-season median."
+        ),
+        "models_table_note": (
+            "Median per metric across countries. Multi-horizon models use only countries with "
+            "data at every collected horizon (inner join). EOS-only baselines show end-of-season "
+            "values only."
         ),
         "axes": _horizon_skill_axes(),
         "metric_notes": {
@@ -1213,7 +1277,6 @@ def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, 
     """Build JSON-serializable payload for the global insights dashboard."""
     paths = discover_summary_tables(output_root, version=version)
     df = load_summary_frame(paths)
-    horizon_detail, horizon_summary = compare_horizons(df)
 
     available_horizons = horizons_in_data(df)
     leaderboards: dict[str, dict[str, list[dict[str, Any]]]] = {}
@@ -1250,27 +1313,8 @@ def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, 
         "leaderboards_skilled": leaderboards_skilled,
         "model_country": model_country,
         "model_country_skilled": model_country_skilled,
-        "horizon_summary": _df_records(horizon_summary),
-        "horizon_detail": _df_records(horizon_detail),
-        "overall_horizon": _overall_horizon_stats(horizon_detail),
         "horizon_skill_curves": build_horizon_skill_curves_payload(df),
         "crop_comparison": build_crop_comparison_payload(df),
-    }
-
-
-def _overall_horizon_stats(detail: pd.DataFrame) -> dict[str, Any]:
-    if detail.empty:
-        return {}
-    weights = detail["pair_weight"]
-    return {
-        "n_pairs": int(len(detail)),
-        "eos_win_rate": float(detail["eos_better"].mean()),
-        "mean_delta_nrmse": float(detail["delta_nrmse"].mean()),
-        "weighted_delta_nrmse": float(_weighted_mean(detail["delta_nrmse"], weights)),
-        "interpretation": (
-            "delta_nrmse = mid − eos; positive values mean end-of-season (nowcast) "
-            "has lower NRMSE than mid-season."
-        ),
     }
 
 
