@@ -46,62 +46,6 @@ def prepare_geometry_for_geojson(geometry: BaseGeometry | None) -> BaseGeometry 
     return geometry
 
 
-def export_country_border_geojson(
-    country_code: str,
-    dest: Path,
-    *,
-    scale: str = "50",
-    simplify: float = 0.02,
-) -> Path | None:
-    """Write simplified admin-0 country outline (Natural Earth, default 50m like map PNGs)."""
-    try:
-        from cybench.util.geo import get_country_border_gdf
-    except ImportError:
-        return None
-
-    country = country_code.upper()
-    try:
-        gdf = get_country_border_gdf(country, scale=scale)
-    except (FileNotFoundError, OSError, ValueError):
-        return None
-
-    slim = gdf[["geometry"]].copy()
-    slim["geometry"] = slim.geometry.simplify(simplify, preserve_topology=True)
-    if slim.empty:
-        return None
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    slim.to_file(dest, driver="GeoJSON")
-    return dest
-
-
-def export_world_context_geojson(
-    dest: Path,
-    *,
-    simplify: float = 0.04,
-) -> Path | None:
-    """Simplified global admin-0 backdrop (50m Natural Earth, same source as map PNGs)."""
-    try:
-        import geopandas as gpd
-
-        from cybench.util.geo import world_shape_path, _explode_metropolitan_map_units, _normalize_world_iso
-    except ImportError:
-        return None
-
-    try:
-        world = gpd.read_file(world_shape_path("50")).to_crs(4326)
-    except (FileNotFoundError, OSError, ValueError):
-        return None
-
-    keep = _explode_metropolitan_map_units(_normalize_world_iso(world))
-    keep = keep[["ISO_A2", "geometry"]].copy()
-    keep["geometry"] = keep.geometry.simplify(simplify, preserve_topology=True)
-    if keep.empty:
-        return None
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    keep.to_file(dest, driver="GeoJSON")
-    return dest
-
-
 def export_region_geojson(
     country_code: str,
     dest: Path,
@@ -111,13 +55,13 @@ def export_region_geojson(
 ) -> Path | None:
     """Write simplified admin-region GeoJSON (all units unless ``locations`` is set)."""
     try:
-        from cybench.util.geo import get_shapes_from_polygons
+        from cybench.util.geo import filter_gdf_to_mainland, get_shapes_from_polygons
     except ImportError:
         return None
 
     country = country_code.upper()
     try:
-        gdf = get_shapes_from_polygons(country)
+        gdf = filter_gdf_to_mainland(get_shapes_from_polygons(country), country)
     except (FileNotFoundError, OSError, ValueError):
         return None
 
@@ -299,13 +243,12 @@ def build_region_map_payload(
 
     return {
         "geojson_by_country": {cc: "" for cc in sorted(countries_needed)},
-        "world_geojson_href": "",
         "yield_ranges": CROP_YIELD_RANGES,
         "datasets": datasets,
         "note": (
-            "Maps mimic matplotlib PNGs: 50m Natural Earth backdrop, all admin units, "
-            "Blues choropleth on benchmark regions. Use the year slider for single years. "
-            "Colors autoscale to pooled actual+pred across all years."
+            "Grey fill and black borders come from the same admin polygons as the "
+            "choropleth (metropolitan extent for US/FR). Viridis on benchmark regions; "
+            "year slider for single years. Colors autoscale to pooled actual+pred."
         ),
     }
 
@@ -324,10 +267,6 @@ def bundle_region_map_assets(
     assets_dir.mkdir(parents=True, exist_ok=True)
     geojson_by_country: dict[str, str] = {}
 
-    world_dest = assets_dir / "world_countries.geojson"
-    world_exported = export_world_context_geojson(world_dest)
-    world_href = f"{assets_dirname}/{world_dest.name}" if world_exported else ""
-
     for country in map_payload.get("geojson_by_country", {}):
         dest = assets_dir / f"regions_{country}.geojson"
         exported = export_region_geojson(country, dest)
@@ -337,7 +276,6 @@ def bundle_region_map_assets(
     return {
         **map_payload,
         "geojson_by_country": geojson_by_country,
-        "world_geojson_href": world_href,
     }
 
 def write_region_map_sidecar(

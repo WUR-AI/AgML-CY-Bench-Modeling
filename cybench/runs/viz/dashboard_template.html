@@ -194,11 +194,6 @@
       stroke-width: 0.2px;
       transition: fill 0.12s;
     }
-    .region-map-wrap .world-country {
-      fill: #d3d3d3;
-      stroke: #000;
-      stroke-width: 0.15px;
-    }
     .region-map-legend {
       display: flex;
       flex-wrap: wrap;
@@ -215,7 +210,7 @@
       height: 10px;
       border-radius: 3px;
       border: 1px solid var(--border);
-      background: linear-gradient(to right, #f7fbff, #c6dbef, #6baed6, #2171b5, #08306b);
+      background: linear-gradient(to right, #440154, #31688e, #35b779, #fde725);
     }
     .map-year-controls {
       display: flex;
@@ -350,14 +345,12 @@
     let mapYearSelection = MAP_YEAR_MEAN;
     let mapFeaturesCache = null;
     let mapFeaturesCacheCountry = null;
-    let mapWorldFeaturesCache = null;
 
     const HAS_DYNAMIC_MAPS = Boolean(
       MAP_DATA && MAP_DATA.datasets && Object.keys(MAP_DATA.datasets).length
         && MAP_DATA.geojson_by_country && Object.keys(MAP_DATA.geojson_by_country).length
     );
     const geoCache = new Map();
-    const worldGeoCache = { href: null, features: null };
     const REGION_MAP_WIDTH = 520;
     const REGION_MAP_HEIGHT = 420;
     const REGION_MAP_MARGIN = 10;
@@ -366,25 +359,6 @@
     function fmtMap(v, digits = 2) {
       if (v === null || v === undefined || Number.isNaN(v)) return "—";
       return Number(v).toFixed(digits);
-    }
-
-    async function loadWorldGeojson() {
-      const href = MAP_DATA.world_geojson_href;
-      if (!href) return null;
-      if (worldGeoCache.href === href && worldGeoCache.features) {
-        return worldGeoCache.features;
-      }
-      try {
-        const geo = await d3.json(href);
-        if (!geo || !geo.features) return null;
-        const features = geo.features.map(f => rewindFeatureForSvg({ ...f }));
-        worldGeoCache.href = href;
-        worldGeoCache.features = features;
-        return features;
-      } catch (err) {
-        console.warn("World GeoJSON load failed:", href, err);
-        return null;
-      }
     }
 
     async function loadCountryGeojson(country) {
@@ -456,9 +430,9 @@
     function yieldColor(value, extent) {
       if (value == null || !extent) return REGION_FILL_MISSING;
       const [lo, hi] = extent;
-      if (hi <= lo) return d3.interpolateBlues(0.55);
+      if (hi <= lo) return d3.interpolateViridis(0.5);
       const t = Math.max(0, Math.min(1, (value - lo) / (hi - lo)));
-      return d3.interpolateBlues(0.15 + t * 0.85);
+      return d3.interpolateViridis(t);
     }
 
     function sharedYieldExtent(actualMap, predMap) {
@@ -489,7 +463,6 @@
       valueByLoc,
       extent,
       title,
-      worldFeatures,
     ) {
       container.innerHTML = "";
       if (!regionFeatures || !regionFeatures.length) {
@@ -517,13 +490,6 @@
         .attr("width", REGION_MAP_WIDTH)
         .attr("height", REGION_MAP_HEIGHT)
         .attr("fill", "#f8f9fa");
-      if (worldFeatures && worldFeatures.length) {
-        svg.selectAll("path.world-country")
-          .data(worldFeatures)
-          .join("path")
-          .attr("class", "world-country")
-          .attr("d", path);
-      }
       svg.selectAll("path.region")
         .data(regionFeatures)
         .join("path")
@@ -621,7 +587,6 @@
         actual,
         extent,
         `Ground truth (${yearSuffix})`,
-        mapWorldFeaturesCache,
       );
       renderRegionChoropleth(
         regionMapPred,
@@ -629,7 +594,6 @@
         pred,
         extent,
         `Model prediction (${model}, ${yearSuffix})`,
-        mapWorldFeaturesCache,
       );
       if (extent) {
         const label = `${fmtMap(extent[0])} → ${fmtMap(extent[1])}`;
@@ -646,10 +610,7 @@
       setupMapYearSlider(slice);
       if (mapFeaturesCacheCountry !== country) {
         mapFeaturesCache = await loadCountryGeojson(country);
-        mapWorldFeaturesCache = await loadWorldGeojson();
         mapFeaturesCacheCountry = country;
-      } else if (!mapWorldFeaturesCache) {
-        mapWorldFeaturesCache = await loadWorldGeojson();
       }
       if (!mapFeaturesCache) return false;
       return renderDynamicMapLayers(dataset, model, mapYearSelection);

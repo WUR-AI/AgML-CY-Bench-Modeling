@@ -14,7 +14,7 @@ from cybench.runs.viz.region_map_lib import (
     bundle_region_map_assets,
     dataset_country_code,
     dataset_crop,
-    export_country_border_geojson,
+    export_region_geojson,
     infer_pred_column,
     load_dataset_year_csvs,
     prepare_geometry_for_geojson,
@@ -175,31 +175,17 @@ def test_bundle_region_map_survives_referenced_assets(tmp_path: Path, monkeypatc
         )
         return dest
 
-    def _fake_world(dest: Path, **kwargs):
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(
-            '{"type":"FeatureCollection","features":[{"type":"Feature",'
-            '"properties":{"ISO_A2":"US"},"geometry":{"type":"Polygon","coordinates":[[[0,0],[2,0],[2,2],[0,0]]]}}]}',
-            encoding="utf-8",
-        )
-        return dest
-
     monkeypatch.setattr(
         "cybench.runs.viz.region_map_lib.export_region_geojson",
         _fake_export,
-    )
-    monkeypatch.setattr(
-        "cybench.runs.viz.region_map_lib.export_world_context_geojson",
-        _fake_world,
     )
 
     write_model_comparison_dashboard(output_dir, summary_rows, bundle_assets=True)
     geojson = output_dir / "assets" / "regions_US.geojson"
     assert geojson.is_file(), "regions_US.geojson must survive asset bundling"
-    assert (output_dir / "assets" / "world_countries.geojson").is_file()
     html = (output_dir / "compare_models.html").read_text(encoding="utf-8")
     assert "regions_US.geojson" in html
-    assert "world_countries.geojson" in html
+    assert "mask_US.geojson" not in html
     assert (output_dir / "assets" / "maize_US_scatter.png").is_file()
 
 
@@ -223,7 +209,7 @@ def test_benchmark_locs_by_country():
     assert locs["NL"] == {"NL01"}
 
 
-def test_bundle_region_map_assets_exports_world_and_regions(tmp_path: Path, monkeypatch):
+def test_bundle_region_map_assets_exports_regions(tmp_path: Path, monkeypatch):
     payload = build_region_map_payload(
         tmp_path,
         [{"dataset": "maize_DE", "model": "ridge", "horizon": "eos"}],
@@ -247,25 +233,35 @@ def test_bundle_region_map_assets_exports_world_and_regions(tmp_path: Path, monk
         "cybench.runs.viz.region_map_lib.export_region_geojson",
         _fake_export,
     )
-    def _fake_world(dest: Path, **kwargs):
-        dest.write_text('{"type":"FeatureCollection","features":[]}', encoding="utf-8")
-        return dest
-
     monkeypatch.setattr(
-        "cybench.runs.viz.region_map_lib.export_world_context_geojson",
-        _fake_world,
+        "cybench.runs.viz.region_map_lib.export_region_geojson",
+        _fake_export,
     )
     out = bundle_region_map_assets(payload, tmp_path)
     assert out["geojson_by_country"]["DE"] == "assets/regions_DE.geojson"
-    assert out["world_geojson_href"] == "assets/world_countries.geojson"
+    assert "mask_geojson_by_country" not in out
 
 
-def test_export_country_border_geojson(tmp_path: Path):
-    dest = tmp_path / "border_DE.geojson"
-    exported = export_country_border_geojson("DE", dest)
+def test_export_us_regions_are_conus_only(tmp_path: Path):
+    dest = tmp_path / "regions_US.geojson"
+    exported = export_region_geojson("US", dest)
     if exported is None:
-        pytest.skip("Natural Earth / polygon data not available")
-    assert dest.is_file()
+        pytest.skip("US polygon data not available")
     payload = json.loads(dest.read_text(encoding="utf-8"))
-    assert payload["type"] == "FeatureCollection"
-    assert payload["features"]
+    lats = []
+    lons = []
+    for feat in payload["features"]:
+        geom = feat["geometry"]
+        if geom["type"] == "Polygon":
+            ring = geom["coordinates"][0]
+        elif geom["type"] == "MultiPolygon":
+            ring = geom["coordinates"][0][0]
+        else:
+            continue
+        for lon, lat in ring:
+            lats.append(lat)
+            lons.append(lon)
+    assert max(lats) < 51.0
+    assert min(lats) > 24.0
+    assert min(lons) > -126.0
+    assert max(lons) < -66.0

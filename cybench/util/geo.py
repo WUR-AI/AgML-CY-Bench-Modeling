@@ -13,7 +13,27 @@ _EXCLUDED_MAP_ISOS = frozenset({"AQ"})
 # Clip metropolitan extent for countries whose admin-0 polygon includes overseas territories.
 _METROPOLITAN_BBOX_WGS84: dict[str, tuple[float, float, float, float]] = {
     "FR": (-5.5, 41.0, 10.0, 51.5),
+    # CONUS only — exclude Alaska, Hawaii, and Caribbean/Pacific territories.
+    "US": (-124.85, 24.45, -66.90, 49.40),
 }
+
+
+def mainland_bbox_for_country(country_code: str) -> tuple[float, float, float, float] | None:
+    return _METROPOLITAN_BBOX_WGS84.get(map_iso_for_country(country_code))
+
+
+def filter_gdf_to_mainland(gdf: gpd.GeoDataFrame, country_code: str) -> gpd.GeoDataFrame:
+    """Keep admin units whose centroid lies in the metropolitan map extent."""
+    bbox = mainland_bbox_for_country(country_code)
+    if bbox is None or gdf.empty:
+        return gdf
+    min_lon, min_lat, max_lon, max_lat = bbox
+    centroids = gdf.geometry.representative_point()
+    keep = (
+        centroids.x.between(min_lon, max_lon)
+        & centroids.y.between(min_lat, max_lat)
+    )
+    return gdf.loc[keep].copy()
 
 
 def map_iso_for_country(country_code: str) -> str:
