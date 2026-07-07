@@ -10,6 +10,7 @@ import pytest
 from cybench.runs.viz.region_map_lib import (
     build_region_map_payload,
     dataset_country_code,
+    dataset_crop,
     infer_pred_column,
     load_dataset_year_csvs,
     region_means,
@@ -21,6 +22,11 @@ def test_dataset_country_code():
     assert dataset_country_code("maize_DE") == "DE"
     assert dataset_country_code("wheat_NL") == "NL"
     assert dataset_country_code("bad") == ""
+
+
+def test_dataset_crop():
+    assert dataset_crop("maize_DE") == "maize"
+    assert dataset_crop("wheat_NL") == "wheat"
 
 
 def test_region_means_and_infer_pred_column():
@@ -76,6 +82,9 @@ def test_build_region_map_payload(tmp_path: Path):
     assert "maize_DE" in payload["datasets"]
     ds = payload["datasets"]["maize_DE"]
     assert ds["country"] == "DE"
+    assert ds["crop"] == "maize"
+    assert ds["yield_range"] == {"min": 0, "max": 14}
+    assert payload["yield_ranges"]["maize"]["max"] == 14
     assert ds["actual"]["DE01"] == pytest.approx(10.5)
     assert ds["models"]["ridge"]["DE01"] == pytest.approx(9.75)
 

@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from cybench.config import KEY_LOC, KEY_TARGET
+from cybench.config import CROP_YIELD_RANGES, KEY_LOC, KEY_TARGET
 
 _NON_VALUE_COLS = frozenset(
     {KEY_LOC, "adm_id", "year", "country_code", "crop", KEY_TARGET, "yield"}
@@ -20,6 +20,11 @@ def dataset_country_code(dataset: str) -> str:
     if len(parts) >= 2 and len(parts[1]) == 2:
         return parts[1].upper()
     return ""
+
+
+def dataset_crop(dataset: str) -> str:
+    parts = str(dataset).split("_")
+    return parts[0].lower() if parts else ""
 
 
 def export_region_geojson(
@@ -147,8 +152,12 @@ def build_region_map_payload(
             continue
 
         countries_needed.add(country)
+        crop = dataset_crop(dataset)
+        yield_range = CROP_YIELD_RANGES.get(crop)
         datasets[dataset] = {
             "country": country,
+            "crop": crop,
+            "yield_range": dict(yield_range) if yield_range else None,
             "actual": actual,
             "models": models,
             "n_regions": len(actual or next(iter(models.values()), {})),
@@ -156,10 +165,12 @@ def build_region_map_payload(
 
     return {
         "geojson_by_country": {cc: "" for cc in sorted(countries_needed)},
+        "yield_ranges": CROP_YIELD_RANGES,
         "datasets": datasets,
         "note": (
             "Regional means across years (same aggregation as matplotlib map panels). "
-            "Geometry is simplified admin boundaries from cybench/data/polygons."
+            "Map extent uses regions with data only; colors use fixed crop yield ranges "
+            "when available. Geometry is simplified admin boundaries from cybench/data/polygons."
         ),
     }
 

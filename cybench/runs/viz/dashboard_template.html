@@ -210,7 +210,7 @@
       height: 10px;
       border-radius: 3px;
       border: 1px solid var(--border);
-      background: linear-gradient(to right, #ffffcc, #fd8d3c, #800026);
+      background: linear-gradient(to right, #440154, #31688e, #35b779, #fde725);
     }
   </style>
 </head>
@@ -342,9 +342,37 @@
     function yieldColor(value, extent) {
       if (value == null || !extent) return REGION_FILL_MISSING;
       const [lo, hi] = extent;
-      if (hi <= lo) return d3.interpolateOrRd(0.5);
+      if (hi <= lo) return d3.interpolateViridis(0.5);
       const t = Math.max(0, Math.min(1, (value - lo) / (hi - lo)));
-      return d3.interpolateOrRd(t);
+      return d3.interpolateViridis(t);
+    }
+
+    function yieldExtentForDataset(dataset) {
+      const slice = (MAP_DATA.datasets || {})[dataset];
+      const yr = slice && slice.yield_range;
+      if (!yr || yr.min == null || yr.max == null) return null;
+      return [Number(yr.min), Number(yr.max)];
+    }
+
+    function featuresWithValues(features, valueByLoc) {
+      if (!features || !valueByLoc) return [];
+      return features.filter(f => {
+        const loc = f.properties.loc;
+        const v = valueByLoc[loc];
+        return v != null && !Number.isNaN(v);
+      });
+    }
+
+    function unionDataFeatures(features, ...maps) {
+      const locs = new Set();
+      for (const m of maps) {
+        if (!m) continue;
+        for (const [loc, v] of Object.entries(m)) {
+          if (v != null && !Number.isNaN(v)) locs.add(loc);
+        }
+      }
+      if (!locs.size) return [];
+      return features.filter(f => locs.has(f.properties.loc));
     }
 
     function sharedYieldExtent(actualMap, predMap) {
@@ -359,12 +387,16 @@
       return [lo - pad, hi + pad];
     }
 
-    function renderRegionChoropleth(container, features, valueByLoc, extent, title) {
+    function renderRegionChoropleth(container, features, valueByLoc, extent, title, boundsFeatures) {
       container.innerHTML = "";
-      if (!features || !features.length) {
-        container.innerHTML = `<p class="muted">${title}: no geometry.</p>`;
+      const plotFeatures = featuresWithValues(features, valueByLoc);
+      if (!plotFeatures.length) {
+        container.innerHTML = `<p class="muted">${title}: no regions with data.</p>`;
         return;
       }
+      const fitFeatures = (boundsFeatures && boundsFeatures.length)
+        ? boundsFeatures
+        : plotFeatures;
       const svg = d3.select(container).append("svg")
         .attr("viewBox", `0 0 ${REGION_MAP_WIDTH} ${REGION_MAP_HEIGHT}`)
         .attr("role", "img")
@@ -372,11 +404,11 @@
       const projection = d3.geoMercator().fitExtent(
         [[REGION_MAP_MARGIN, REGION_MAP_MARGIN],
          [REGION_MAP_WIDTH - REGION_MAP_MARGIN, REGION_MAP_HEIGHT - REGION_MAP_MARGIN]],
-        { type: "FeatureCollection", features },
+        { type: "FeatureCollection", features: fitFeatures },
       );
       const path = d3.geoPath(projection);
       svg.selectAll("path.region")
-        .data(features)
+        .data(plotFeatures)
         .join("path")
         .attr("class", "region")
         .attr("d", path)
@@ -385,7 +417,8 @@
           const v = valueByLoc ? valueByLoc[loc] : null;
           return yieldColor(v, extent);
         })
-        .attr("stroke", "#fff")
+        .attr("stroke", "#333")
+        .attr("stroke-width", 0.35)
         .selectAll("title")
         .data(d => [d])
         .join("title")
@@ -404,13 +437,15 @@
       if (!features) return false;
       const actual = slice.actual || {};
       const pred = (slice.models || {})[model] || {};
-      const extent = sharedYieldExtent(actual, pred);
+      const boundsFeatures = unionDataFeatures(features, actual, pred);
+      const extent = yieldExtentForDataset(dataset) || sharedYieldExtent(actual, pred);
       renderRegionChoropleth(
         regionMapActual,
         features,
         actual,
         extent,
         "Ground truth (mean yield)",
+        boundsFeatures,
       );
       renderRegionChoropleth(
         regionMapPred,
@@ -418,6 +453,7 @@
         pred,
         extent,
         `Model prediction (${model})`,
+        boundsFeatures,
       );
       if (extent) {
         const label = `${fmtMap(extent[0])} → ${fmtMap(extent[1])}`;
