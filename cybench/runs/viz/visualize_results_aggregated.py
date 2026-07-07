@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-import geopandas as gpd
 import matplotlib
 
 matplotlib.use("Agg")
@@ -19,7 +18,6 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 
-from cybench.util.geo import get_shapes_from_polygons, world_shape_path
 from cybench.config import KEY_LOC, KEY_TARGET
 from cybench.evaluation.aggregated_metrics import (
     MIN_SLICE_REGIONS,
@@ -384,9 +382,8 @@ th.left, td.left { text-align: left; }
     return html
 
 
-ALL_PANELS = ("map_actual", "map_pred", "scatter", "temporal")
-DASHBOARD_PANELS = ("map_actual", "map_pred", "scatter", "temporal")
-MAP_PANEL_DPI = 90
+ALL_PANELS = ("scatter", "temporal")
+DASHBOARD_PANELS = ALL_PANELS
 DEFAULT_PANEL_DPI = 160
 
 # Switch to hexbin when overplotting would obscure structure.
@@ -424,8 +421,7 @@ def save_panel_images(
         bbox = tight_bbox.transformed(fig.dpi_scale_trans.inverted())
         fn = f"{dataset_key}_{panel_name}.png"
         fp = os.path.join(output_dir, fn)
-        dpi = MAP_PANEL_DPI if panel_name in ("map_actual", "map_pred") else DEFAULT_PANEL_DPI
-        fig.savefig(fp, dpi=dpi, bbox_inches=bbox)
+        fig.savefig(fp, dpi=DEFAULT_PANEL_DPI, bbox_inches=bbox)
         out_paths[panel_name] = fp
 
     return out_paths
@@ -443,8 +439,6 @@ def generate_local_report_html(stats_list: List[dict], pdf_filename: str) -> str
         rows.append(
             f"""
       <tr data-dataset="{s['dataset']}"
-          data-map-actual="{paths.get('map_actual', '')}"
-          data-map-pred="{paths.get('map_pred', '')}"
           data-scatter="{paths.get('scatter', '')}"
           data-temporal="{paths.get('temporal', '')}">
         <td>{s['dataset']}</td>
@@ -509,9 +503,7 @@ def generate_local_report_html(stats_list: List[dict], pdf_filename: str) -> str
     </tbody>
   </table>
   <div class="toolbar">
-    <button data-panel="map_actual" class="active">Map actual</button>
-    <button data-panel="map_pred">Map prediction</button>
-    <button data-panel="scatter">Scatter</button>
+    <button data-panel="scatter" class="active">Scatter</button>
     <button data-panel="temporal">Temporal</button>
   </div>
   <div class="meta" id="selection-label">Select a dataset row.</div>
@@ -524,7 +516,7 @@ def generate_local_report_html(stats_list: List[dict], pdf_filename: str) -> str
     const label = document.getElementById("selection-label");
     const panelImage = document.getElementById("panel-image");
     let activeDataset = null;
-    let activePanel = "map_actual";
+    let activePanel = "scatter";
 
     function refresh() {{
       if (!activeDataset) {{
@@ -705,7 +697,6 @@ def process_dataset(
     df: pd.DataFrame,
     model: str,
     *,
-    world: gpd.GeoDataFrame | None,
     panels: tuple[str, ...] = ALL_PANELS,
     results_dir: str | None = None,
 ) -> Tuple[Figure, dict, dict[str, Axes]]:
@@ -728,7 +719,7 @@ def process_dataset(
 
     df_filtered = cast(pd.DataFrame, df[df[KEY_LOC].isin(valid_locs)].copy())
     # Region-year metrics and scatter use the full cleaned frame (matches collect / table).
-    # df_filtered is only for map panels (long-run spatial means).
+    # df_filtered: locations with sufficient core-year coverage (temporal spatial means).
     df_metrics = df
 
     overlay = _load_dashboard_metrics_overlay(results_dir, dataset_key)
@@ -749,37 +740,6 @@ def process_dataset(
             ) + f"[WARN] N={len(df_metrics)} here vs {int(table_n)} in table"
     else:
         metrics_model = get_metrics_dict(df_metrics, KEY_TARGET, model)
-
-    need_maps = "map_actual" in panels or "map_pred" in panels
-    geo_df = None
-    bounds = None
-    if need_maps:
-        if world is None:
-            raise ValueError("World geometry is required for map panels")
-        try:
-            _, region_code = dataset_key.split("_")[:2]
-        except ValueError:
-            region_code = "XX"
-
-        shapes = get_shapes_from_polygons(region=region_code)
-        geo_df = shapes[[KEY_LOC, "geometry"]].merge(
-            df_filtered.groupby(KEY_LOC)[[KEY_TARGET, model]].mean().reset_index(),
-            on=KEY_LOC,
-            how="inner",
-        )
-
-        if geo_df.empty:
-            raise ValueError(f"No geometry matches found for regions in {dataset_key}.")
-
-        raw_bounds = geo_df.total_bounds
-        pad_x = (raw_bounds[2] - raw_bounds[0]) * 0.05
-        pad_y = (raw_bounds[3] - raw_bounds[1]) * 0.05
-        bounds = (
-            raw_bounds[0] - pad_x,
-            raw_bounds[2] + pad_x,
-            raw_bounds[1] - pad_y,
-            raw_bounds[3] + pad_y,
-        )
 
     # Stats calculation (Baseline)
     has_baseline = BASELINE_MODEL in df_metrics.columns
@@ -847,23 +807,7 @@ def process_dataset(
     panel_axes: dict[str, Axes] = {}
     for panel_name, ax in zip(panels, axes_list):
         panel_axes[panel_name] = ax
-        if panel_name == "map_actual":
-            assert geo_df is not None and bounds is not None and world is not None
-            world.plot(ax=ax, color="lightgrey", edgecolor="k", linewidth=0.1)
-            geo_df.plot(column=KEY_TARGET, ax=ax, legend=True, legend_kwds={"shrink": 0.5})
-            ax.set_xlim(bounds[0], bounds[1])
-            ax.set_ylim(bounds[2], bounds[3])
-            ax.set_title(f"Ground Truth (Mean)\n($N_{{reg}}={n_regions}$)")
-            ax.axis("off")
-        elif panel_name == "map_pred":
-            assert geo_df is not None and bounds is not None and world is not None
-            world.plot(ax=ax, color="lightgrey", edgecolor="k", linewidth=0.1)
-            geo_df.plot(column=model, ax=ax, legend=True, legend_kwds={"shrink": 0.5})
-            ax.set_xlim(bounds[0], bounds[1])
-            ax.set_ylim(bounds[2], bounds[3])
-            ax.set_title(f"Prediction (Mean)\n({model})")
-            ax.axis("off")
-        elif panel_name == "scatter":
+        if panel_name == "scatter":
             _plot_scatter_panel(
                 ax,
                 df_metrics,
@@ -1005,12 +949,6 @@ def main():
         print("[INFO] No datasets matched. Exiting.")
         return
 
-    need_maps = "map_actual" in panels or "map_pred" in panels
-    world = None
-    if need_maps:
-        print("[INFO] Loading world geometry...")
-        world = gpd.read_file(world_shape_path())
-
     if pdf_path:
         print(f"[INFO] Processing {len(datasets_to_run)} dataset(s). PDF: {pdf_path}")
         os.makedirs(os.path.dirname(os.path.abspath(pdf_path)), exist_ok=True)
@@ -1039,7 +977,7 @@ def main():
             return
         try:
             fig, stats, panel_axes = process_dataset(
-                key, df, args.model, world=world, panels=panels, results_dir=args.results_dir
+                key, df, args.model, panels=panels, results_dir=args.results_dir
             )
             if pdf is not None:
                 pdf.savefig(fig)

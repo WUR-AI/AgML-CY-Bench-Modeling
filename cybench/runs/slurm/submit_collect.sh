@@ -21,7 +21,7 @@ Manifest and collect job options (forwarded to generate_collect_manifest.py):
   --country CC      Repeatable
   --horizon eos|mid|qtr|early Repeatable
   --version N       Batch version suffix (e.g. 3 for baselines_DE_eos_v3)
-  --plot            Dashboard drill-down PNGs (maps, scatter, temporal; no PDF)
+  --plot            Dashboard drill-down PNGs (scatter, temporal; maps are dynamic)
   --no-plot         Metrics + preds + compare_models.html only (default)
 
 Examples:

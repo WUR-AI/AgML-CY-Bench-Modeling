@@ -913,44 +913,27 @@
       missingNote.textContent = "";
 
       if (activePanel === "maps") {
-        if (HAS_DYNAMIC_MAPS && (MAP_DATA.datasets || {})[selectedCell.dataset]) {
-          showMapMode(true);
-          renderDynamicMaps(selectedCell.dataset, selectedCell.model).then(ok => {
-            if (!ok) {
-              showMapMode(false);
-              const href = ((MAP_DATA.geojson_by_country || {})[
-                (MAP_DATA.datasets[selectedCell.dataset] || {}).country
-              ]) || "assets/regions_*.geojson";
-              missingNote.textContent =
-                `Could not load map geometry (${href} missing or failed). `
-                + "Re-run collect + publish so regions_*.geojson is bundled in assets/.";
-            }
-          }).catch(err => {
-            showMapMode(false);
-            missingNote.textContent = `Map error: ${err}`;
-          });
-          return;
-        }
-
-        showMapMode(false);
-        imgGrid.classList.add("two");
-        drillColB.style.display = "";
-        mapCaptionLeft.style.display = "";
-        mapCaptionRight.style.display = "";
-        mapCaptionLeft.textContent = "Ground truth (mean yield)";
-        mapCaptionRight.textContent = "Model prediction";
-
-        const actual = images["map_actual"] || "";
-        const pred = images["map_pred"] || "";
-        if (!actual && !pred) {
-          drillImageA.removeAttribute("src");
-          drillImageB.removeAttribute("src");
+        if (!HAS_DYNAMIC_MAPS || !(MAP_DATA.datasets || {})[selectedCell.dataset]) {
+          showMapMode(false);
           missingNote.textContent =
-            "No map images found. Re-run collect with --plot, or ensure preds/ exists for dynamic maps.";
+            "No dynamic map data for this dataset. Re-run collect with preds and polygons.";
           return;
         }
-        if (actual) drillImageA.src = actual; else drillImageA.removeAttribute("src");
-        if (pred) drillImageB.src = pred; else drillImageB.removeAttribute("src");
+        showMapMode(true);
+        renderDynamicMaps(selectedCell.dataset, selectedCell.model).then(ok => {
+          if (!ok) {
+            showMapMode(false);
+            const href = ((MAP_DATA.geojson_by_country || {})[
+              (MAP_DATA.datasets[selectedCell.dataset] || {}).country
+            ]) || "assets/regions_*.geojson";
+            missingNote.textContent =
+              `Could not load map geometry (${href} missing or failed). `
+              + "Re-run collect + publish so regions_*.geojson is bundled in assets/.";
+          }
+        }).catch(err => {
+          showMapMode(false);
+          missingNote.textContent = `Map error: ${err}`;
+        });
         return;
       }
 

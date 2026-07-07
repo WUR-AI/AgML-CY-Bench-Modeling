@@ -137,7 +137,7 @@ def load_records_from_runs_root(
 
             panel_dir = os.path.join(run_dir, "report_assets")
             images = {}
-            for p in ["map_actual", "map_pred", "scatter", "temporal"]:
+            for p in ["scatter", "temporal"]:
                 fp = os.path.join(panel_dir, f"{dataset}_{p}.png")
                 if os.path.exists(fp):
                     images[p] = os.path.relpath(fp, output_dir).replace(os.sep, "/")
@@ -198,7 +198,7 @@ def load_records_from_runs_root(
 
         panel_dir = os.path.join(run_dir, "report_assets")
         images = {}
-        for p in ["map_actual", "map_pred", "scatter", "temporal"]:
+        for p in ["scatter", "temporal"]:
             fp = os.path.join(panel_dir, f"{dataset}_{p}.png")
             if os.path.exists(fp):
                 images[p] = os.path.relpath(fp, output_dir).replace(os.sep, "/")
@@ -367,8 +367,6 @@ def load_records(sources: List[SourceConfig], output_dir: str) -> List[Dict]:
                 continue
 
             panel_paths_abs = {
-                "map_actual": os.path.join(panel_dir, f"{dataset}_map_actual.png"),
-                "map_pred": os.path.join(panel_dir, f"{dataset}_map_pred.png"),
                 "scatter": os.path.join(panel_dir, f"{dataset}_scatter.png"),
                 "temporal": os.path.join(panel_dir, f"{dataset}_temporal.png"),
             }
@@ -424,7 +422,7 @@ def bundle_referenced_assets(
     copied_by_source: Dict[str, str] = {}
     copied_by_hash: Dict[str, str] = {}
     used_names = set()
-    image_keys = ["map_actual", "map_pred", "scatter", "temporal"]
+    image_keys = ["scatter", "temporal"]
 
     def file_sha256(path: str) -> str:
         hasher = hashlib.sha256()

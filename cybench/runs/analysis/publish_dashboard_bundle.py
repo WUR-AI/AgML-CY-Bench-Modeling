@@ -24,8 +24,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
-
 _COUNTRY_NAMES: dict[str, str] = {
     "ao": "Angola",
     "ar": "Argentina",
@@ -177,47 +175,19 @@ def prune_obsolete_dashboard_dirs(
 # GitHub Pages artifact limit (deploy fails above this).
 GITHUB_PAGES_MAX_BYTES = 1_073_741_824
 
-# Map PNGs are ~45% of each dashboard; downscale for Pages to stay under 1 GB.
-PAGES_MAP_MARKERS = ("map_actual", "map_pred")
-# Linear scale before palette quantize (~65% side length, 128-color maps).
-PAGES_MAP_SCALE = 0.65
-PAGES_MAP_PALETTE_COLORS = 128
-PAGES_MAP_PNG_OPTIMIZE = True
 
-
-def _is_map_asset(filename: str) -> bool:
-    return any(marker in filename for marker in PAGES_MAP_MARKERS)
-
-
-def _flatten_for_map_export(img: Image.Image) -> Image.Image:
-    """RGBA/LA choropleth panels → RGB on white (better PNG palette compression)."""
-    if img.mode in ("RGBA", "LA"):
-        background = Image.new("RGB", img.size, (255, 255, 255))
-        background.paste(img, mask=img.split()[-1])
-        return background
-    if img.mode != "RGB":
-        return img.convert("RGB")
-    return img
-
-
-def downgrade_map_png(
-    src: Path,
-    dest: Path,
-    *,
-    scale: float = PAGES_MAP_SCALE,
-    palette_colors: int = PAGES_MAP_PALETTE_COLORS,
-) -> int:
-    """Downscale + palette-compress a map PNG for GitHub Pages."""
-    with Image.open(src) as img:
-        img = _flatten_for_map_export(img)
-        width, height = img.size
-        new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
-        if new_size != (width, height):
-            img = img.resize(new_size, Image.Resampling.LANCZOS)
-        img = img.convert("P", palette=Image.Palette.ADAPTIVE, colors=palette_colors)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        img.save(dest, format="PNG", optimize=PAGES_MAP_PNG_OPTIMIZE)
-    return dest.stat().st_size
+def _copy_assets(assets_src: Path, dest_assets: Path) -> int:
+    """Copy assets/; return number of files copied."""
+    if dest_assets.exists():
+        shutil.rmtree(dest_assets)
+    dest_assets.mkdir(parents=True)
+    n_copied = 0
+    for src_file in sorted(assets_src.iterdir()):
+        if not src_file.is_file():
+            continue
+        shutil.copy2(src_file, dest_assets / src_file.name)
+        n_copied += 1
+    return n_copied
 
 
 def estimate_publish_bundle_size(publish_root: Path) -> dict[str, Any]:
@@ -259,47 +229,6 @@ def estimate_publish_bundle_size(publish_root: Path) -> dict[str, Any]:
     }
 
 
-def apply_pages_lite_to_publish_root(
-    publish_root: Path,
-    *,
-    dry_run: bool = False,
-    scale: float = PAGES_MAP_SCALE,
-) -> tuple[int, int]:
-    """Downscale map PNGs in every published dashboard (scatter/temporal unchanged).
-
-    Returns (maps_processed, bytes_saved).
-    """
-    publish_root = publish_root.resolve()
-    processed = 0
-    saved = 0
-    for child in publish_root.iterdir():
-        if not child.is_dir() or child.name in {"assets", ".git"}:
-            continue
-        assets = child / "assets"
-        if not assets.is_dir():
-            continue
-        for asset in assets.glob("*.png"):
-            if not _is_map_asset(asset.name):
-                continue
-            before = asset.stat().st_size
-            if dry_run:
-                print(f"[DRY-RUN] downgrade {child.name}/assets/{asset.name}")
-                processed += 1
-                continue
-            tmp = asset.with_name(asset.name + ".tmp")
-            after = downgrade_map_png(asset, tmp, scale=scale)
-            tmp.replace(asset)
-            processed += 1
-            saved += max(0, before - after)
-    if processed:
-        action = "would downgrade" if dry_run else "downgraded"
-        print(
-            f"[OK] {action} {processed} map PNG(s)"
-            + (f", saved {saved / (1024 * 1024):.1f} MB" if saved else "")
-        )
-    return processed, saved
-
-
 def report_publish_bundle_size(publish_root: Path) -> None:
     stats = estimate_publish_bundle_size(publish_root)
     print(
@@ -313,34 +242,11 @@ def report_publish_bundle_size(publish_root: Path) -> None:
         over_mb = stats["total_bytes"] / (1024 * 1024) - stats["pages_limit_mb"]
         print(
             f"[WARN] Over GitHub Pages artifact limit ({stats['pages_limit_mb']} MB) "
-            f"by ~{over_mb:.0f} MB. Run --downgrade-maps-only or republish with --pages-lite."
+            f"by ~{over_mb:.0f} MB."
         )
     else:
         headroom = stats["pages_limit_mb"] - stats["total_mb"]
         print(f"[OK] Within GitHub Pages limit ({headroom:.0f} MB headroom)")
-
-
-def _copy_assets(
-    assets_src: Path,
-    dest_assets: Path,
-    *,
-    pages_lite: bool,
-) -> int:
-    """Copy assets/; return number of files copied."""
-    if dest_assets.exists():
-        shutil.rmtree(dest_assets)
-    dest_assets.mkdir(parents=True)
-    n_copied = 0
-    for src_file in sorted(assets_src.iterdir()):
-        if not src_file.is_file():
-            continue
-        dest_file = dest_assets / src_file.name
-        if pages_lite and _is_map_asset(src_file.name):
-            downgrade_map_png(src_file, dest_file)
-        else:
-            shutil.copy2(src_file, dest_file)
-        n_copied += 1
-    return n_copied
 
 
 def publish_bundle(
@@ -348,7 +254,6 @@ def publish_bundle(
     source_dir: Path,
     dest_dir: Path,
     title: str | None = None,
-    pages_lite: bool = False,
 ) -> Path:
     """Copy HTML + assets into dest_dir/dashboard.html (+ assets/)."""
     html_src, assets_src = _resolve_html_and_assets(source_dir)
@@ -359,12 +264,8 @@ def publish_bundle(
 
     dest_assets = dest_dir / "assets"
     if assets_src and assets_src.is_dir():
-        n_assets = _copy_assets(assets_src, dest_assets, pages_lite=pages_lite)
-        if pages_lite:
-            print(
-                f"[INFO] pages-lite: copied {n_assets} asset(s) "
-                f"(maps → {PAGES_MAP_SCALE:.0%} scale, {PAGES_MAP_PALETTE_COLORS}-color palette)"
-            )
+        n_assets = _copy_assets(assets_src, dest_assets)
+        print(f"[INFO] copied {n_assets} asset(s)")
     elif dest_assets.exists():
         shutil.rmtree(dest_assets)
 
@@ -682,21 +583,6 @@ def main() -> None:
         help="Print prune actions without deleting",
     )
     parser.add_argument(
-        "--pages-lite",
-        action="store_true",
-        help="Downscale map PNGs when copying assets (keeps all panels; fits GitHub Pages 1 GB limit)",
-    )
-    parser.add_argument(
-        "--downgrade-maps-only",
-        action="store_true",
-        help="Downscale map PNGs in existing published dashboards, then report size",
-    )
-    parser.add_argument(
-        "--strip-maps-only",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
         "--report-size",
         action="store_true",
         help="Print publish-root size breakdown and exit",
@@ -708,12 +594,6 @@ def main() -> None:
 
     if args.report_size:
         report_publish_bundle_size(publish_root)
-        return
-
-    if args.downgrade_maps_only or args.strip_maps_only:
-        apply_pages_lite_to_publish_root(publish_root, dry_run=args.dry_run)
-        if not args.dry_run:
-            report_publish_bundle_size(publish_root)
         return
 
     if args.prune_only:
@@ -737,7 +617,6 @@ def main() -> None:
             source_dir=source_dir,
             dest_dir=dest_dir,
             title=args.title,
-            pages_lite=args.pages_lite,
         )
         print(f"[DONE] Bundle: {html_path}")
         if (dest_dir / "assets").is_dir():

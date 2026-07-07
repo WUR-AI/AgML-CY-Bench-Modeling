@@ -56,7 +56,7 @@ def publish_slug(paper_dir: Path) -> str:
     return f"{country.lower()}_walk_forward_{hz}_v{ver}"
 
 
-def refresh_one(paper_dir: Path, publish_root: Path, *, dry_run: bool = False, pages_lite: bool = False) -> None:
+def refresh_one(paper_dir: Path, publish_root: Path, *, dry_run: bool = False) -> None:
     summary_path = paper_dir / "walk_forward_summary.csv"
     rows = pd.read_csv(summary_path).to_dict(orient="records")
     slug = publish_slug(paper_dir)
@@ -68,7 +68,6 @@ def refresh_one(paper_dir: Path, publish_root: Path, *, dry_run: bool = False, p
         source_dir=paper_dir,
         dest_dir=publish_root / slug,
         title=None,
-        pages_lite=pages_lite,
     )
     print(f"[OK] {paper_dir.name} -> {slug}")
 
@@ -80,13 +79,7 @@ def main() -> int:
     parser.add_argument("--version", type=int, default=3, help="Batch version (default: 3)")
     parser.add_argument("--country", action="append", dest="countries", metavar="CC")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument(
-        "--full-assets",
-        action="store_true",
-        help="Publish all plot PNGs including maps (may exceed GitHub Pages 1 GB limit)",
-    )
     args = parser.parse_args()
-    pages_lite = not args.full_assets
 
     output_root = args.output_root.resolve()
     publish_root = args.publish_root.resolve()
@@ -101,7 +94,7 @@ def main() -> int:
         return 1
 
     for paper_dir in dirs:
-        refresh_one(paper_dir, publish_root, dry_run=args.dry_run, pages_lite=pages_lite)
+        refresh_one(paper_dir, publish_root, dry_run=args.dry_run)
 
     if not args.dry_run:
         from cybench.runs.analysis.build_global_insights_dashboard import write_insights_dashboard
@@ -109,7 +102,6 @@ def main() -> int:
             write_model_family_radar_dashboard,
         )
         from cybench.runs.analysis.publish_dashboard_bundle import (
-            apply_pages_lite_to_publish_root,
             discover_index_entries,
             prune_obsolete_dashboard_dirs,
             report_publish_bundle_size,
@@ -127,8 +119,6 @@ def main() -> int:
             version=args.version,
         )
         prune_obsolete_dashboard_dirs(publish_root)
-        if pages_lite:
-            apply_pages_lite_to_publish_root(publish_root)
         update_index(publish_root, discover_index_entries(publish_root))
         report_publish_bundle_size(publish_root)
         print(f"[OK] insights.html, model_families.html, index.html")

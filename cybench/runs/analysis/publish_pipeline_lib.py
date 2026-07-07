@@ -14,7 +14,6 @@ from cybench.runs.analysis.benchmark_run_catalog import discover_benchmark_runs
 from cybench.runs.analysis.collect_walk_forward_results import load_pooled_predictions
 from cybench.runs.analysis.publish_dashboard_bundle import (
     _COUNTRY_NAMES,
-    apply_pages_lite_to_publish_root,
     discover_index_entries,
     prune_obsolete_dashboard_dirs,
     publish_bundle,
@@ -62,7 +61,6 @@ class PipelineDefaults:
     repo_root: Path = Path("/lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-AAAI")
     publish_root: Path = Path("/lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard")
     min_run_fraction: float = 1.0
-    pages_lite: bool = True
 
 
 @dataclass
@@ -74,7 +72,6 @@ class PublishTarget:
     repo_root: Path = field(default_factory=lambda: PipelineDefaults().repo_root)
     publish_root: Path = field(default_factory=lambda: PipelineDefaults().publish_root)
     min_run_fraction: float = 1.0
-    pages_lite: bool = True
     title: str | None = None
 
     @property
@@ -243,7 +240,6 @@ def discover_baselines_batches(
                 repo_root=defaults.repo_root,
                 publish_root=defaults.publish_root,
                 min_run_fraction=defaults.min_run_fraction,
-                pages_lite=defaults.pages_lite,
             )
         )
 
@@ -269,7 +265,6 @@ def discover_baselines_batches(
                         repo_root=defaults.repo_root,
                         publish_root=defaults.publish_root,
                         min_run_fraction=defaults.min_run_fraction,
-                pages_lite=defaults.pages_lite,
                     )
                 )
     return targets
@@ -306,7 +301,6 @@ def discover_baselines_batches_fast(
                 repo_root=defaults.repo_root,
                 publish_root=defaults.publish_root,
                 min_run_fraction=defaults.min_run_fraction,
-                pages_lite=defaults.pages_lite,
             )
         )
     return targets
@@ -359,7 +353,6 @@ def discover_paper_walk_forward_targets(
                 repo_root=defaults.repo_root,
                 publish_root=defaults.publish_root,
                 min_run_fraction=defaults.min_run_fraction,
-                pages_lite=defaults.pages_lite,
             )
         )
     return filter_publish_targets(
@@ -428,7 +421,6 @@ def load_pipeline_defaults(
         repo_root=Path(cfg.get("repo_root", base.repo_root)),
         publish_root=Path(cfg.get("publish_root", base.publish_root)).expanduser(),
         min_run_fraction=float(cfg.get("min_run_fraction", base.min_run_fraction)),
-        pages_lite=bool(cfg.get("pages_lite", base.pages_lite)),
     )
 
 
@@ -456,7 +448,6 @@ def _explicit_targets_from_config(
                     repo_root=defaults.repo_root,
                     publish_root=defaults.publish_root,
                     min_run_fraction=float(item.get("min_run_fraction", defaults.min_run_fraction)),
-                    pages_lite=bool(item.get("pages_lite", defaults.pages_lite)),
                     title=item.get("title"),
                 )
             )
@@ -769,7 +760,6 @@ def run_publish_stage(
         source_dir=target.collect_dir,
         dest_dir=target.publish_dir,
         title=target.default_title(),
-        pages_lite=target.pages_lite,
     )
     collect_state = _read_json(collect_state_path(target)) or {}
     _write_json(
@@ -795,8 +785,6 @@ def run_index_stage(
         print(f"[DRY-RUN] rebuild index under {target.publish_root}")
         return StageStatus("index", False, "would rebuild index.html")
     prune_obsolete_dashboard_dirs(target.publish_root)
-    if target.pages_lite:
-        apply_pages_lite_to_publish_root(target.publish_root)
     entries = discover_index_entries(target.publish_root)
     index_path = update_index(target.publish_root, entries)
     version = insights_version if insights_version is not None else target.version

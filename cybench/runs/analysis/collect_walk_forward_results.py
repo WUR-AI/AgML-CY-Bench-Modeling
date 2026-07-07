@@ -58,7 +58,6 @@ from cybench.runs.viz.build_results_dashboard import (
 from cybench.runs.viz.region_map_lib import (
     build_region_map_payload,
     bundle_region_map_assets,
-    strip_map_pngs_from_records,
     write_region_map_sidecar,
 )
 
@@ -379,7 +378,7 @@ def _panel_search_dirs(output_dir: Path, row: dict[str, Any]) -> list[Path]:
 def _panel_images_for_dataset(
     output_dir: Path, row: dict[str, Any], dataset: str
 ) -> dict[str, str]:
-    panel_names = ("map_actual", "map_pred", "scatter", "temporal")
+    panel_names = ("scatter", "temporal")
     for base in _panel_search_dirs(output_dir, row):
         assets = base / "report_assets"
         rel: dict[str, str] = {}
@@ -466,10 +465,6 @@ def write_model_comparison_dashboard(
             )
             if map_payload.get("geojson_by_country"):
                 write_region_map_sidecar(output_dir, map_payload)
-        if map_payload.get("datasets") and map_payload.get("geojson_by_country"):
-            records = strip_map_pngs_from_records(records)
-    elif map_payload.get("datasets") and map_payload.get("geojson_by_country"):
-        records = strip_map_pngs_from_records(records)
     html_path = output_dir / "compare_models.html"
     html_path.write_text(build_html(records, map_payload=map_payload), encoding="utf-8")
     return html_path

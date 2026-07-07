@@ -15,7 +15,6 @@ from cybench.runs.viz.region_map_lib import (
     load_dataset_year_csvs,
     prepare_geometry_for_geojson,
     region_means,
-    strip_map_pngs_from_records,
 )
 
 
@@ -109,23 +108,6 @@ def test_build_region_map_payload(tmp_path: Path):
     assert payload["yield_ranges"]["maize"]["max"] == 14
     assert ds["actual"]["DE01"] == pytest.approx(10.5)
     assert ds["models"]["ridge"]["DE01"] == pytest.approx(9.75)
-
-
-def test_strip_map_pngs_from_records():
-    records = [
-        {
-            "model": "ridge",
-            "images": {
-                "map_actual": "a.png",
-                "map_pred": "b.png",
-                "scatter": "c.png",
-            },
-        }
-    ]
-    strip_map_pngs_from_records(records)
-    assert "map_actual" not in records[0]["images"]
-    assert "map_pred" not in records[0]["images"]
-    assert records[0]["images"]["scatter"] == "c.png"
 
 
 def test_bundle_region_map_survives_referenced_assets(tmp_path: Path, monkeypatch):

@@ -411,7 +411,7 @@ poetry run python cybench/runs/analysis/collect_walk_forward_results.py \
   --dashboard-only
 ```
 
-Open `compare_models.html` — heatmap of all models × datasets; click a row for scatter/maps.
+Open `compare_models.html` — heatmap of all models × datasets; click a row for dynamic maps / scatter / temporal.
 Copy `compare_models.html` + `assets/` to your laptop to view offline.
 
 Outputs:
@@ -446,7 +446,7 @@ CSV columns are prefixed per group (`wf__nrmse`, `scr__r2`, …) plus `delta__*`
 Rows match on `(crop, country, model)`; horizons can differ between groups (`eos__horizon`, `mid__horizon`).
 NRMSE is lower-is-better; correlation and R² are higher-is-better.
 
-**Polygons for maps** (if `--plot` fails on shapefiles):
+**Polygons for dynamic dashboard maps** (required when building `compare_models.html`):
 
 ```bash
 poetry run python data_preparation/fetch_zenodo_data.py --geometries
@@ -458,10 +458,6 @@ For map geometry only (no 6.2 GB cybench-data.zip):
 ```bash
 poetry run python data_preparation/fetch_zenodo_data.py --geometries-only
 ```
-
-**World outline** (grey background in map panels): bundled at
-``data_preparation/ne_50m_admin_0_countries/`` (default). Falls back to 110m if missing.
-Override with ``CYBENCH_WORLD_MAP_SCALE=10|50|110``.
 
 Run collect from the same repo clone (paths resolve via ``REPO_DIR``).
 

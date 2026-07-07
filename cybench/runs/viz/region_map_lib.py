@@ -191,10 +191,9 @@ def build_region_map_payload(
         "yield_ranges": CROP_YIELD_RANGES,
         "datasets": datasets,
         "note": (
-            "Regional means across years (same aggregation as matplotlib map panels). "
-            "Map extent uses regions with data only; colors autoscale to pooled actual+pred "
-            "(same as geopandas map PNGs). Geometry is simplified admin boundaries from "
-            "cybench/data/polygons."
+            "Regional means across years (same aggregation as dashboard maps). "
+            "Map extent uses regions with data only; colors autoscale to pooled actual+pred. "
+            "Geometry is simplified admin boundaries from cybench/data/polygons."
         ),
     }
 
@@ -220,18 +219,6 @@ def bundle_region_map_assets(
             geojson_by_country[country] = f"{assets_dirname}/{dest.name}"
 
     return {**map_payload, "geojson_by_country": geojson_by_country}
-
-
-def strip_map_pngs_from_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Drop static map image paths when dynamic maps will be used."""
-    for rec in records:
-        images = rec.get("images")
-        if not isinstance(images, dict):
-            continue
-        images.pop("map_actual", None)
-        images.pop("map_pred", None)
-    return records
-
 
 def write_region_map_sidecar(
     output_dir: Path,
