@@ -34,6 +34,7 @@ cybench/runs/slurm/manifests/
 *.zip
 *.pkl
 *.lock
+!poetry.lock
 Scratch.R
 
 .idea

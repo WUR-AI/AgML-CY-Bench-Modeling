@@ -10,13 +10,15 @@ jobs:
       steps:
       - uses: actions/checkout@v3
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
 
-          pip install poetry
-          poetry install
+          pip install "poetry>=2.0,<3"
+          poetry install --no-interaction
 
           git clone https://github.com/WUR-AI/sample_data.git ${GITHUB_WORKSPACE}/cybench/data
       - name: Lint with flake8
