@@ -42,6 +42,7 @@ transformers = ">=4.55.0,<5.0.0"
 tabpfn = ">=6.4.0,<7.0.0"
 tabicl = ">=2.1.0"
 tabdpt = ">=1.2.0"
+zenodo-get = "^1.6.1"
 
 [build-system]
 requires = ["poetry-core"]

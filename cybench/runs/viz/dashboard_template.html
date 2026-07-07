@@ -324,13 +324,19 @@
       if (geoCache.has(country)) return geoCache.get(country);
       const href = (MAP_DATA.geojson_by_country || {})[country];
       if (!href) return null;
-      const geo = await d3.json(href);
-      const features = (geo.features || []).map(f => ({
-        ...f,
-        properties: { ...f.properties, loc: String(f.properties.loc ?? "") },
-      }));
-      geoCache.set(country, features);
-      return features;
+      try {
+        const geo = await d3.json(href);
+        if (!geo || !geo.features) return null;
+        const features = geo.features.map(f => ({
+          ...f,
+          properties: { ...f.properties, loc: String(f.properties.loc ?? "") },
+        }));
+        geoCache.set(country, features);
+        return features;
+      } catch (err) {
+        console.warn("GeoJSON load failed:", href, err);
+        return null;
+      }
     }
 
     function yieldColor(value, extent) {
@@ -822,9 +828,12 @@
           renderDynamicMaps(selectedCell.dataset, selectedCell.model).then(ok => {
             if (!ok) {
               showMapMode(false);
+              const href = ((MAP_DATA.geojson_by_country || {})[
+                (MAP_DATA.datasets[selectedCell.dataset] || {}).country
+              ]) || "assets/regions_*.geojson";
               missingNote.textContent =
-                "Could not render dynamic maps (missing geometry or preds). "
-                + "Re-run collect to export preds/ and ensure polygons exist.";
+                `Could not load map geometry (${href} missing or failed). `
+                + "Re-run collect + publish so regions_*.geojson is bundled in assets/.";
             }
           }).catch(err => {
             showMapMode(false);

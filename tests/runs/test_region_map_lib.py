@@ -95,3 +95,67 @@ def test_strip_map_pngs_from_records():
     assert "map_actual" not in records[0]["images"]
     assert "map_pred" not in records[0]["images"]
     assert records[0]["images"]["scatter"] == "c.png"
+
+
+def test_bundle_region_map_survives_referenced_assets(tmp_path: Path, monkeypatch):
+    """GeoJSON must be written after bundle_referenced_assets (which wipes assets/)."""
+    from cybench.runs.analysis.collect_walk_forward_results import (
+        write_model_comparison_dashboard,
+    )
+
+    output_dir = tmp_path / "paper_walk_forward_us_eos_v2"
+    preds = output_dir / "preds" / "ridge_eos"
+    preds.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "adm_id": ["US-01-001"],
+            "year": [2020],
+            "yield": [10.0],
+            "Ridge": [9.5],
+        }
+    ).to_csv(preds / "maize_US_h10_year_2020.csv", index=False)
+
+    scatter_src = preds / "report_assets"
+    scatter_src.mkdir(parents=True)
+    scatter_src.joinpath("maize_US_scatter.png").write_bytes(b"png")
+
+    summary_rows = [
+        {
+            "dataset": "maize_US",
+            "model": "ridge",
+            "horizon": "eos",
+            "model_col": "Ridge",
+            "nrmse": 0.1,
+            "r2": 0.8,
+            "r_spatial": 0.5,
+            "r_spatial_agg": 0.5,
+            "r_temporal": 0.4,
+            "r_temporal_agg": 0.4,
+            "r_res": 0.3,
+            "r2_res": 0.2,
+            "n_regions": 1,
+            "n_years": 1,
+            "n_samples": 1,
+        }
+    ]
+
+    def _fake_export(country_code: str, dest: Path, **kwargs):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(
+            '{"type":"FeatureCollection","features":[{"type":"Feature",'
+            '"properties":{"loc":"US-01-001"},"geometry":{"type":"Point","coordinates":[0,0]}}]}',
+            encoding="utf-8",
+        )
+        return dest
+
+    monkeypatch.setattr(
+        "cybench.runs.viz.region_map_lib.export_region_geojson",
+        _fake_export,
+    )
+
+    write_model_comparison_dashboard(output_dir, summary_rows, bundle_assets=True)
+    geojson = output_dir / "assets" / "regions_US.geojson"
+    assert geojson.is_file(), "regions_US.geojson must survive asset bundling"
+    html = (output_dir / "compare_models.html").read_text(encoding="utf-8")
+    assert "regions_US.geojson" in html
+    assert (output_dir / "assets" / "maize_US_scatter.png").is_file()

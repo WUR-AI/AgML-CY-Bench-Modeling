@@ -455,6 +455,11 @@ def write_model_comparison_dashboard(
     map_payload = build_region_map_payload(output_dir, summary_rows)
     html_dir = str(output_dir)
     if bundle_assets:
+        records = bundle_referenced_assets(
+            records=records,
+            output_dir=html_dir,
+            assets_dirname="assets",
+        )
         if map_payload.get("datasets"):
             map_payload = bundle_region_map_assets(
                 map_payload, output_dir, assets_dirname="assets"
@@ -463,11 +468,6 @@ def write_model_comparison_dashboard(
                 write_region_map_sidecar(output_dir, map_payload)
         if map_payload.get("datasets") and map_payload.get("geojson_by_country"):
             records = strip_map_pngs_from_records(records)
-        records = bundle_referenced_assets(
-            records=records,
-            output_dir=html_dir,
-            assets_dirname="assets",
-        )
     elif map_payload.get("datasets") and map_payload.get("geojson_by_country"):
         records = strip_map_pngs_from_records(records)
     html_path = output_dir / "compare_models.html"
