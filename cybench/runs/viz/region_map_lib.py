@@ -10,6 +10,17 @@ import pandas as pd
 
 from cybench.config import CROP_YIELD_RANGES, KEY_LOC, KEY_TARGET
 
+try:
+    from shapely.geometry.base import BaseGeometry
+    from shapely.ops import orient as orient_polygon
+except ImportError:  # pragma: no cover
+    BaseGeometry = object  # type: ignore[misc,assignment]
+    orient_polygon = None  # type: ignore[assignment]
+
+# Skip geometries that break map fitting (dateline-spanning admin units).
+_MAX_MAP_LON_SPAN = 60.0
+_MAX_MAP_LAT_SPAN = 40.0
+
 _NON_VALUE_COLS = frozenset(
     {KEY_LOC, "adm_id", "year", "country_code", "crop", KEY_TARGET, "yield"}
 )
@@ -25,6 +36,18 @@ def dataset_country_code(dataset: str) -> str:
 def dataset_crop(dataset: str) -> str:
     parts = str(dataset).split("_")
     return parts[0].lower() if parts else ""
+
+
+def prepare_geometry_for_geojson(geometry: BaseGeometry | None) -> BaseGeometry | None:
+    """Rewind rings for GeoJSON/SVG and drop pathological footprints."""
+    if geometry is None or geometry.is_empty:
+        return None
+    if orient_polygon is not None:
+        geometry = orient_polygon(geometry, sign=1.0)
+    minx, miny, maxx, maxy = geometry.bounds
+    if (maxx - minx) > _MAX_MAP_LON_SPAN or (maxy - miny) > _MAX_MAP_LAT_SPAN:
+        return None
+    return geometry
 
 
 def export_region_geojson(
@@ -51,6 +74,10 @@ def export_region_geojson(
 
     slim = gdf[[loc_col, "geometry"]].copy()
     slim["geometry"] = slim.geometry.simplify(simplify, preserve_topology=True)
+    slim["geometry"] = slim.geometry.map(prepare_geometry_for_geojson)
+    slim = slim[slim.geometry.notna()].copy()
+    if slim.empty:
+        return None
     slim = slim.rename(columns={loc_col: "loc"})
     slim["loc"] = slim["loc"].astype(str)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -169,8 +196,9 @@ def build_region_map_payload(
         "datasets": datasets,
         "note": (
             "Regional means across years (same aggregation as matplotlib map panels). "
-            "Map extent uses regions with data only; colors use fixed crop yield ranges "
-            "when available. Geometry is simplified admin boundaries from cybench/data/polygons."
+            "Map extent uses regions with data only; colors autoscale to pooled actual+pred "
+            "(same as geopandas map PNGs). Geometry is simplified admin boundaries from "
+            "cybench/data/polygons."
         ),
     }
 

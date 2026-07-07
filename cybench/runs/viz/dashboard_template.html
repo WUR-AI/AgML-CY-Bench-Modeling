@@ -347,13 +347,6 @@
       return d3.interpolateViridis(t);
     }
 
-    function yieldExtentForDataset(dataset) {
-      const slice = (MAP_DATA.datasets || {})[dataset];
-      const yr = slice && slice.yield_range;
-      if (!yr || yr.min == null || yr.max == null) return null;
-      return [Number(yr.min), Number(yr.max)];
-    }
-
     function featuresWithValues(features, valueByLoc) {
       if (!features || !valueByLoc) return [];
       return features.filter(f => {
@@ -387,6 +380,16 @@
       return [lo - pad, hi + pad];
     }
 
+    function featuresForProjectionFit(features) {
+      if (!features || !features.length) return [];
+      return features.filter(f => {
+        const b = d3.geoBounds(f);
+        const lonSpan = b[1][0] - b[0][0];
+        const latSpan = b[1][1] - b[0][1];
+        return lonSpan <= 50 && latSpan <= 35;
+      });
+    }
+
     function renderRegionChoropleth(container, features, valueByLoc, extent, title, boundsFeatures) {
       container.innerHTML = "";
       const plotFeatures = featuresWithValues(features, valueByLoc);
@@ -394,9 +397,11 @@
         container.innerHTML = `<p class="muted">${title}: no regions with data.</p>`;
         return;
       }
-      const fitFeatures = (boundsFeatures && boundsFeatures.length)
+      let fitFeatures = (boundsFeatures && boundsFeatures.length)
         ? boundsFeatures
         : plotFeatures;
+      fitFeatures = featuresForProjectionFit(fitFeatures);
+      if (!fitFeatures.length) fitFeatures = plotFeatures;
       const svg = d3.select(container).append("svg")
         .attr("viewBox", `0 0 ${REGION_MAP_WIDTH} ${REGION_MAP_HEIGHT}`)
         .attr("role", "img")
@@ -411,6 +416,7 @@
         .data(plotFeatures)
         .join("path")
         .attr("class", "region")
+        .attr("fill-rule", "evenodd")
         .attr("d", path)
         .attr("fill", d => {
           const loc = d.properties.loc;
@@ -438,7 +444,8 @@
       const actual = slice.actual || {};
       const pred = (slice.models || {})[model] || {};
       const boundsFeatures = unionDataFeatures(features, actual, pred);
-      const extent = yieldExtentForDataset(dataset) || sharedYieldExtent(actual, pred);
+      // Match matplotlib PNG panels: autoscale to pooled actual+pred (not fixed 0–max).
+      const extent = sharedYieldExtent(actual, pred);
       renderRegionChoropleth(
         regionMapActual,
         features,

@@ -13,6 +13,7 @@ from cybench.runs.viz.region_map_lib import (
     dataset_crop,
     infer_pred_column,
     load_dataset_year_csvs,
+    prepare_geometry_for_geojson,
     region_means,
     strip_map_pngs_from_records,
 )
@@ -27,6 +28,27 @@ def test_dataset_country_code():
 def test_dataset_crop():
     assert dataset_crop("maize_DE") == "maize"
     assert dataset_crop("wheat_NL") == "wheat"
+
+
+def test_prepare_geometry_rewinds_clockwise_ring():
+    from shapely.geometry import Polygon
+
+    cw = Polygon([(0, 0), (0, 1), (1, 1), (1, 0), (0, 0)])
+    fixed = prepare_geometry_for_geojson(cw)
+    assert fixed is not None
+    ring = list(fixed.exterior.coords)
+    signed = sum(
+        (ring[i + 1][0] - ring[i][0]) * (ring[i + 1][1] + ring[i][1])
+        for i in range(len(ring) - 1)
+    )
+    assert signed < 0
+
+
+def test_prepare_geometry_drops_dateline_spanning_polygon():
+    from shapely.geometry import Polygon
+
+    huge = Polygon([(-179, 50), (179, 50), (179, 55), (-179, 55), (-179, 50)])
+    assert prepare_geometry_for_geojson(huge) is None
 
 
 def test_region_means_and_infer_pred_column():
