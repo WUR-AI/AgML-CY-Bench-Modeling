@@ -46,6 +46,33 @@ def prepare_geometry_for_geojson(geometry: BaseGeometry | None) -> BaseGeometry 
     return geometry
 
 
+def export_country_border_geojson(
+    country_code: str,
+    dest: Path,
+    *,
+    simplify: float = 0.05,
+) -> Path | None:
+    """Write simplified admin-0 country outline GeoJSON (Natural Earth background)."""
+    try:
+        from cybench.util.geo import get_country_border_gdf
+    except ImportError:
+        return None
+
+    country = country_code.upper()
+    try:
+        gdf = get_country_border_gdf(country)
+    except (FileNotFoundError, OSError, ValueError):
+        return None
+
+    slim = gdf[["geometry"]].copy()
+    slim["geometry"] = slim.geometry.simplify(simplify, preserve_topology=True)
+    if slim.empty:
+        return None
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    slim.to_file(dest, driver="GeoJSON")
+    return dest
+
+
 def export_region_geojson(
     country_code: str,
     dest: Path,
@@ -188,12 +215,15 @@ def build_region_map_payload(
 
     return {
         "geojson_by_country": {cc: "" for cc in sorted(countries_needed)},
+        "border_geojson_by_country": {cc: "" for cc in sorted(countries_needed)},
         "yield_ranges": CROP_YIELD_RANGES,
         "datasets": datasets,
         "note": (
             "Regional means across years (same aggregation as dashboard maps). "
-            "Map extent uses regions with data only; colors autoscale to pooled actual+pred. "
-            "Geometry is simplified admin boundaries from cybench/data/polygons."
+            "Map extent is the full country; grey regions are outside the benchmark. "
+            "Colors autoscale to pooled actual+pred. "
+            "Geometry is simplified admin boundaries from cybench/data/polygons; "
+            "country outline from Natural Earth admin-0."
         ),
     }
 
@@ -211,6 +241,7 @@ def bundle_region_map_assets(
     assets_dir = Path(output_dir) / assets_dirname
     assets_dir.mkdir(parents=True, exist_ok=True)
     geojson_by_country: dict[str, str] = {}
+    border_geojson_by_country: dict[str, str] = {}
 
     for country in map_payload.get("geojson_by_country", {}):
         dest = assets_dir / f"regions_{country}.geojson"
@@ -218,7 +249,16 @@ def bundle_region_map_assets(
         if exported is not None:
             geojson_by_country[country] = f"{assets_dirname}/{dest.name}"
 
-    return {**map_payload, "geojson_by_country": geojson_by_country}
+        border_dest = assets_dir / f"border_{country}.geojson"
+        border_exported = export_country_border_geojson(country, border_dest)
+        if border_exported is not None:
+            border_geojson_by_country[country] = f"{assets_dirname}/{border_dest.name}"
+
+    return {
+        **map_payload,
+        "geojson_by_country": geojson_by_country,
+        "border_geojson_by_country": border_geojson_by_country,
+    }
 
 def write_region_map_sidecar(
     output_dir: Path,

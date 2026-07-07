@@ -194,6 +194,11 @@
       stroke-width: 0.6px;
       transition: fill 0.12s;
     }
+    .region-map-wrap .country-border {
+      fill: #d3d3d3;
+      stroke: #222;
+      stroke-width: 0.8px;
+    }
     .region-map-legend {
       display: flex;
       flex-wrap: wrap;
@@ -310,6 +315,7 @@
         && MAP_DATA.geojson_by_country && Object.keys(MAP_DATA.geojson_by_country).length
     );
     const geoCache = new Map();
+    const borderCache = new Map();
     const REGION_MAP_WIDTH = 520;
     const REGION_MAP_HEIGHT = 420;
     const REGION_MAP_MARGIN = 10;
@@ -335,6 +341,22 @@
         return features;
       } catch (err) {
         console.warn("GeoJSON load failed:", href, err);
+        return null;
+      }
+    }
+
+    async function loadCountryBorderGeojson(country) {
+      if (borderCache.has(country)) return borderCache.get(country);
+      const href = (MAP_DATA.border_geojson_by_country || {})[country];
+      if (!href) return null;
+      try {
+        const geo = await d3.json(href);
+        if (!geo || !geo.features) return null;
+        const features = geo.features.map(f => rewindFeatureForSvg({ ...f }));
+        borderCache.set(country, features);
+        return features;
+      } catch (err) {
+        console.warn("Country border GeoJSON load failed:", href, err);
         return null;
       }
     }
@@ -389,27 +411,6 @@
       return d3.interpolateViridis(t);
     }
 
-    function featuresWithValues(features, valueByLoc) {
-      if (!features || !valueByLoc) return [];
-      return features.filter(f => {
-        const loc = f.properties.loc;
-        const v = valueByLoc[loc];
-        return v != null && !Number.isNaN(v);
-      });
-    }
-
-    function unionDataFeatures(features, ...maps) {
-      const locs = new Set();
-      for (const m of maps) {
-        if (!m) continue;
-        for (const [loc, v] of Object.entries(m)) {
-          if (v != null && !Number.isNaN(v)) locs.add(loc);
-        }
-      }
-      if (!locs.size) return [];
-      return features.filter(f => locs.has(f.properties.loc));
-    }
-
     function sharedYieldExtent(actualMap, predMap) {
       const vals = [
         ...Object.values(actualMap || {}),
@@ -432,18 +433,26 @@
       });
     }
 
-    function renderRegionChoropleth(container, features, valueByLoc, extent, title, boundsFeatures) {
+    function renderRegionChoropleth(
+      container,
+      features,
+      valueByLoc,
+      extent,
+      title,
+      borderFeatures,
+    ) {
       container.innerHTML = "";
-      const plotFeatures = featuresWithValues(features, valueByLoc);
-      if (!plotFeatures.length) {
-        container.innerHTML = `<p class="muted">${title}: no regions with data.</p>`;
+      const hasRegions = features && features.length;
+      const hasBorder = borderFeatures && borderFeatures.length;
+      if (!hasRegions && !hasBorder) {
+        container.innerHTML = `<p class="muted">${title}: no map geometry.</p>`;
         return;
       }
-      let fitFeatures = (boundsFeatures && boundsFeatures.length)
-        ? boundsFeatures
-        : plotFeatures;
-      fitFeatures = featuresForProjectionFit(fitFeatures);
-      if (!fitFeatures.length) fitFeatures = plotFeatures;
+      // Frame the whole country so gaps in benchmark coverage are visible.
+      let fitFeatures = hasBorder
+        ? borderFeatures
+        : featuresForProjectionFit(features);
+      if (!fitFeatures.length && hasRegions) fitFeatures = features;
       const svg = d3.select(container).append("svg")
         .attr("viewBox", `0 0 ${REGION_MAP_WIDTH} ${REGION_MAP_HEIGHT}`)
         .attr("role", "img")
@@ -460,38 +469,48 @@
         .attr("width", REGION_MAP_WIDTH)
         .attr("height", REGION_MAP_HEIGHT)
         .attr("fill", "#f8f9fa");
-      svg.selectAll("path.region")
-        .data(plotFeatures)
-        .join("path")
-        .attr("class", "region")
-        .attr("d", path)
-        .attr("fill", d => {
-          const loc = d.properties.loc;
-          const v = valueByLoc ? valueByLoc[loc] : null;
-          return yieldColor(v, extent);
-        })
-        .attr("stroke", "#fff")
-        .attr("stroke-width", 0.5)
-        .selectAll("title")
-        .data(d => [d])
-        .join("title")
-        .text(d => {
-          const loc = d.properties.loc;
-          const v = valueByLoc ? valueByLoc[loc] : null;
-          return v == null ? `${loc}: no data` : `${loc}: ${fmtMap(v)}`;
-        });
+      if (hasBorder) {
+        svg.selectAll("path.country-border")
+          .data(borderFeatures)
+          .join("path")
+          .attr("class", "country-border")
+          .attr("d", path);
+      }
+      if (hasRegions) {
+        svg.selectAll("path.region")
+          .data(features)
+          .join("path")
+          .attr("class", "region")
+          .attr("d", path)
+          .attr("fill", d => {
+            const loc = d.properties.loc;
+            const v = valueByLoc ? valueByLoc[loc] : null;
+            return yieldColor(v, extent);
+          })
+          .attr("stroke", "#fff")
+          .attr("stroke-width", 0.5)
+          .selectAll("title")
+          .data(d => [d])
+          .join("title")
+          .text(d => {
+            const loc = d.properties.loc;
+            const v = valueByLoc ? valueByLoc[loc] : null;
+            return v == null ? `${loc}: not in benchmark` : `${loc}: ${fmtMap(v)}`;
+          });
+      }
     }
 
     async function renderDynamicMaps(dataset, model) {
       const slice = (MAP_DATA.datasets || {})[dataset];
       if (!slice) return false;
       const country = slice.country;
-      const features = await loadCountryGeojson(country);
+      const [features, borderFeatures] = await Promise.all([
+        loadCountryGeojson(country),
+        loadCountryBorderGeojson(country),
+      ]);
       if (!features) return false;
       const actual = slice.actual || {};
       const pred = (slice.models || {})[model] || {};
-      const boundsFeatures = unionDataFeatures(features, actual, pred);
-      // Match matplotlib PNG panels: autoscale to pooled actual+pred (not fixed 0–max).
       const extent = sharedYieldExtent(actual, pred);
       renderRegionChoropleth(
         regionMapActual,
@@ -499,7 +518,7 @@
         actual,
         extent,
         "Ground truth (mean yield)",
-        boundsFeatures,
+        borderFeatures,
       );
       renderRegionChoropleth(
         regionMapPred,
@@ -507,7 +526,7 @@
         pred,
         extent,
         `Model prediction (${model})`,
-        boundsFeatures,
+        borderFeatures,
       );
       if (extent) {
         const label = `${fmtMap(extent[0])} → ${fmtMap(extent[1])}`;

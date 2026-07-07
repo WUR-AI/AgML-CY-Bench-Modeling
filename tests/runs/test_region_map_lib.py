@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -9,8 +10,10 @@ import pytest
 
 from cybench.runs.viz.region_map_lib import (
     build_region_map_payload,
+    bundle_region_map_assets,
     dataset_country_code,
     dataset_crop,
+    export_country_border_geojson,
     infer_pred_column,
     load_dataset_year_csvs,
     prepare_geometry_for_geojson,
@@ -161,14 +164,71 @@ def test_bundle_region_map_survives_referenced_assets(tmp_path: Path, monkeypatc
         )
         return dest
 
+    def _fake_border_export(country_code: str, dest: Path, **kwargs):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(
+            '{"type":"FeatureCollection","features":[{"type":"Feature",'
+            '"properties":{},"geometry":{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}}]}',
+            encoding="utf-8",
+        )
+        return dest
+
     monkeypatch.setattr(
         "cybench.runs.viz.region_map_lib.export_region_geojson",
         _fake_export,
+    )
+    monkeypatch.setattr(
+        "cybench.runs.viz.region_map_lib.export_country_border_geojson",
+        _fake_border_export,
     )
 
     write_model_comparison_dashboard(output_dir, summary_rows, bundle_assets=True)
     geojson = output_dir / "assets" / "regions_US.geojson"
     assert geojson.is_file(), "regions_US.geojson must survive asset bundling"
+    border = output_dir / "assets" / "border_US.geojson"
+    assert border.is_file(), "border_US.geojson must survive asset bundling"
     html = (output_dir / "compare_models.html").read_text(encoding="utf-8")
     assert "regions_US.geojson" in html
+    assert "border_US.geojson" in html
     assert (output_dir / "assets" / "maize_US_scatter.png").is_file()
+
+
+def test_export_country_border_geojson(tmp_path: Path):
+    dest = tmp_path / "border_DE.geojson"
+    exported = export_country_border_geojson("DE", dest)
+    assert exported is not None
+    assert dest.is_file()
+    payload = json.loads(dest.read_text(encoding="utf-8"))
+    assert payload["type"] == "FeatureCollection"
+    assert payload["features"]
+
+
+def test_bundle_region_map_assets_includes_border(tmp_path: Path, monkeypatch):
+    payload = build_region_map_payload(
+        tmp_path,
+        [{"dataset": "maize_DE", "model": "ridge", "horizon": "eos"}],
+    )
+    payload["datasets"] = {
+        "maize_DE": {
+            "country": "DE",
+            "crop": "maize",
+            "actual": {"DE01": 1.0},
+            "models": {"ridge": {"DE01": 0.9}},
+        }
+    }
+    payload["geojson_by_country"] = {"DE": ""}
+
+    def _fake_border(country_code: str, dest: Path, **kwargs):
+        dest.write_text('{"type":"FeatureCollection","features":[]}', encoding="utf-8")
+        return dest
+
+    monkeypatch.setattr(
+        "cybench.runs.viz.region_map_lib.export_region_geojson",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "cybench.runs.viz.region_map_lib.export_country_border_geojson",
+        _fake_border,
+    )
+    out = bundle_region_map_assets(payload, tmp_path)
+    assert out["border_geojson_by_country"]["DE"] == "assets/border_DE.geojson"
