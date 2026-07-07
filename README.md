@@ -125,18 +125,17 @@ To run the benchmark for many crops and countries, follow the steps for [install
 [requirements](#requirements) from the previous section  in a machine with significant amount of resources (memory and storage).
 
 Get the dataset from [Zenodo](https://doi.org/10.5281/zenodo.11502142).
-After downloading the dataset, move the unzipped data inside `AgML-CY-Bench/cybench/data` or
-make sure `AgML-CY-Bench/cybench/data` points to the directory containing unzipped data.
+The recommended way is the `zenodo-get` helper script (Python 3.10+; ~6.2 GB download):
 
-Unzip the downloaded data:
 ```
-unzip cybench-data.zip -d <target_dir>
+poetry run python data_preparation/fetch_zenodo_data.py
 ```
-Move the data to the expected data path:
-```
-mv <target_dir> cybench/data
-```
-or create a symbolic link from `cybench/data` to the target directory:
+
+Optional: also fetch shapefiles for maps (`--geometries`).
+
+Manual download: unzip `cybench-data.zip` so `maize/` and `wheat/` end up under `cybench/data/`,
+or symlink `cybench/data` to your data directory:
+
 ```
 ln -sf <target_dir> cybench/data
 ```

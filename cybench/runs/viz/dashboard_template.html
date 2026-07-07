@@ -194,11 +194,6 @@
       stroke-width: 0.6px;
       transition: fill 0.12s;
     }
-    .region-map-wrap .country-border {
-      fill: #d3d3d3;
-      stroke: #222;
-      stroke-width: 0.8px;
-    }
     .region-map-legend {
       display: flex;
       flex-wrap: wrap;
@@ -216,6 +211,29 @@
       border-radius: 3px;
       border: 1px solid var(--border);
       background: linear-gradient(to right, #440154, #31688e, #35b779, #fde725);
+    }
+    .map-year-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem 1rem;
+      margin: 0.35rem 0 0.75rem;
+      font-size: 0.88rem;
+    }
+    .map-year-controls label {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 0.75rem;
+    }
+    .map-year-controls input[type="range"] {
+      width: min(320px, 100%);
+      accent-color: var(--accent);
+    }
+    #map-year-label {
+      min-width: 7rem;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
     }
   </style>
 </head>
@@ -248,7 +266,7 @@
           </select>
         </label>
       </div>
-      <div class="muted" style="margin-bottom: 0.5rem;">Click a column header to sort. Lower NRMSE is better; higher R² and r are better. Pattern axes use Pearson r (med/yr, med/reg, or aggregate). Fixed colors: NRMSE 0–0.5, R² 0–1, r −1–1.</div>
+      <div class="muted" style="margin-bottom: 0.5rem;">Click a column header to sort. Lower NRMSE is better; higher R² and r are better. Pattern axes: spatial r/year, temporal r/reg, anomaly anom/reg or pooled. Fixed colors: NRMSE 0–0.5, R² 0–1, r −1–1.</div>
       <div class="table-scroll" id="heatmap-wrap"></div>
     </div>
 
@@ -261,6 +279,13 @@
         <button data-panel="temporal">Temporal</button>
       </div>
       <div id="missing-note" class="muted"></div>
+      <div id="map-year-controls" class="map-year-controls" style="display:none;">
+        <label for="map-year-slider">
+          Map year
+          <input type="range" id="map-year-slider" min="0" max="0" step="1" value="0" />
+          <span id="map-year-label">Mean (all years)</span>
+        </label>
+      </div>
       <div id="map-grid-dynamic" class="img-grid two" style="display:none;">
         <div>
           <div id="map-caption-left-dyn" class="map-caption muted">Ground truth (mean yield)</div>
@@ -308,14 +333,24 @@
     const regionMapPred = document.getElementById("region-map-pred");
     const regionMapLegendActual = document.getElementById("region-map-legend-actual");
     const regionMapLegendPred = document.getElementById("region-map-legend-pred");
+    const mapYearControls = document.getElementById("map-year-controls");
+    const mapYearSlider = document.getElementById("map-year-slider");
+    const mapYearLabel = document.getElementById("map-year-label");
+    const mapCaptionLeftDyn = document.getElementById("map-caption-left-dyn");
+    const mapCaptionRightDyn = document.getElementById("map-caption-right-dyn");
     const panelButtons = Array.from(document.querySelectorAll(".toolbar button"));
+
+    const MAP_YEAR_MEAN = "__mean__";
+    let mapYearKeys = [MAP_YEAR_MEAN];
+    let mapYearSelection = MAP_YEAR_MEAN;
+    let mapFeaturesCache = null;
+    let mapFeaturesCacheCountry = null;
 
     const HAS_DYNAMIC_MAPS = Boolean(
       MAP_DATA && MAP_DATA.datasets && Object.keys(MAP_DATA.datasets).length
         && MAP_DATA.geojson_by_country && Object.keys(MAP_DATA.geojson_by_country).length
     );
     const geoCache = new Map();
-    const borderCache = new Map();
     const REGION_MAP_WIDTH = 520;
     const REGION_MAP_HEIGHT = 420;
     const REGION_MAP_MARGIN = 10;
@@ -341,22 +376,6 @@
         return features;
       } catch (err) {
         console.warn("GeoJSON load failed:", href, err);
-        return null;
-      }
-    }
-
-    async function loadCountryBorderGeojson(country) {
-      if (borderCache.has(country)) return borderCache.get(country);
-      const href = (MAP_DATA.border_geojson_by_country || {})[country];
-      if (!href) return null;
-      try {
-        const geo = await d3.json(href);
-        if (!geo || !geo.features) return null;
-        const features = geo.features.map(f => rewindFeatureForSvg({ ...f }));
-        borderCache.set(country, features);
-        return features;
-      } catch (err) {
-        console.warn("Country border GeoJSON load failed:", href, err);
         return null;
       }
     }
@@ -403,6 +422,16 @@
       };
     }
 
+    function featuresForDataset(features, ...valueMaps) {
+      const locs = new Set();
+      for (const m of valueMaps) {
+        if (!m) continue;
+        Object.keys(m).forEach(k => locs.add(k));
+      }
+      if (!locs.size) return features || [];
+      return (features || []).filter(f => locs.has(f.properties.loc));
+    }
+
     function yieldColor(value, extent) {
       if (value == null || !extent) return REGION_FILL_MISSING;
       const [lo, hi] = extent;
@@ -439,20 +468,14 @@
       valueByLoc,
       extent,
       title,
-      borderFeatures,
     ) {
       container.innerHTML = "";
-      const hasRegions = features && features.length;
-      const hasBorder = borderFeatures && borderFeatures.length;
-      if (!hasRegions && !hasBorder) {
+      if (!features || !features.length) {
         container.innerHTML = `<p class="muted">${title}: no map geometry.</p>`;
         return;
       }
-      // Frame the whole country so gaps in benchmark coverage are visible.
-      let fitFeatures = hasBorder
-        ? borderFeatures
-        : featuresForProjectionFit(features);
-      if (!fitFeatures.length && hasRegions) fitFeatures = features;
+      let fitFeatures = featuresForProjectionFit(features);
+      if (!fitFeatures.length) fitFeatures = features;
       const svg = d3.select(container).append("svg")
         .attr("viewBox", `0 0 ${REGION_MAP_WIDTH} ${REGION_MAP_HEIGHT}`)
         .attr("role", "img")
@@ -469,64 +492,108 @@
         .attr("width", REGION_MAP_WIDTH)
         .attr("height", REGION_MAP_HEIGHT)
         .attr("fill", "#f8f9fa");
-      if (hasBorder) {
-        svg.selectAll("path.country-border")
-          .data(borderFeatures)
-          .join("path")
-          .attr("class", "country-border")
-          .attr("d", path);
-      }
-      if (hasRegions) {
-        svg.selectAll("path.region")
-          .data(features)
-          .join("path")
-          .attr("class", "region")
-          .attr("d", path)
-          .attr("fill", d => {
-            const loc = d.properties.loc;
-            const v = valueByLoc ? valueByLoc[loc] : null;
-            return yieldColor(v, extent);
-          })
-          .attr("stroke", "#fff")
-          .attr("stroke-width", 0.5)
-          .selectAll("title")
-          .data(d => [d])
-          .join("title")
-          .text(d => {
-            const loc = d.properties.loc;
-            const v = valueByLoc ? valueByLoc[loc] : null;
-            return v == null ? `${loc}: not in benchmark` : `${loc}: ${fmtMap(v)}`;
-          });
-      }
+      svg.selectAll("path.region")
+        .data(features)
+        .join("path")
+        .attr("class", "region")
+        .attr("d", path)
+        .attr("fill", d => {
+          const loc = d.properties.loc;
+          const v = valueByLoc ? valueByLoc[loc] : null;
+          return yieldColor(v, extent);
+        })
+        .attr("stroke", "#fff")
+        .attr("stroke-width", 0.5)
+        .selectAll("title")
+        .data(d => [d])
+        .join("title")
+        .text(d => {
+          const loc = d.properties.loc;
+          const v = valueByLoc ? valueByLoc[loc] : null;
+          return v == null ? loc : `${loc}: ${fmtMap(v)}`;
+        });
     }
 
-    async function renderDynamicMaps(dataset, model) {
+    function mapYearLabelText(yearKey) {
+      return yearKey === MAP_YEAR_MEAN ? "Mean (all years)" : String(yearKey);
+    }
+
+    function setupMapYearSlider(slice) {
+      const years = Array.isArray(slice.years) ? slice.years.map(String) : [];
+      mapYearKeys = years.length > 1 ? [MAP_YEAR_MEAN, ...years] : years;
+      mapYearSelection = mapYearKeys[0] || MAP_YEAR_MEAN;
+
+      if (mapYearKeys.length <= 1) {
+        mapYearControls.style.display = "none";
+        return;
+      }
+
+      mapYearControls.style.display = "";
+      mapYearSlider.min = "0";
+      mapYearSlider.max = String(mapYearKeys.length - 1);
+      mapYearSlider.step = "1";
+      mapYearSlider.value = "0";
+      mapYearLabel.textContent = mapYearLabelText(mapYearSelection);
+    }
+
+    function mapValuesForSelection(slice, model, yearKey) {
+      if (yearKey === MAP_YEAR_MEAN) {
+        return {
+          actual: slice.actual || {},
+          pred: (slice.models || {})[model] || {},
+        };
+      }
+      return {
+        actual: (slice.actual_by_year || {})[yearKey] || {},
+        pred: ((slice.models_by_year || {})[model] || {})[yearKey] || {},
+      };
+    }
+
+    function pooledMapExtent(slice, model) {
+      const vals = [];
+      const pushMap = (m) => {
+        Object.values(m || {}).forEach(v => {
+          if (v != null && !Number.isNaN(v)) vals.push(v);
+        });
+      };
+      pushMap(slice.actual);
+      pushMap((slice.models || {})[model]);
+      Object.values(slice.actual_by_year || {}).forEach(pushMap);
+      Object.values((slice.models_by_year || {})[model] || {}).forEach(pushMap);
+      if (!vals.length) return null;
+      const lo = Math.min(...vals);
+      const hi = Math.max(...vals);
+      const pad = (hi - lo) * 0.05 || 0.5;
+      return [lo - pad, hi + pad];
+    }
+
+    function renderDynamicMapLayers(dataset, model, yearKey) {
       const slice = (MAP_DATA.datasets || {})[dataset];
-      if (!slice) return false;
-      const country = slice.country;
-      const [features, borderFeatures] = await Promise.all([
-        loadCountryGeojson(country),
-        loadCountryBorderGeojson(country),
-      ]);
-      if (!features) return false;
-      const actual = slice.actual || {};
-      const pred = (slice.models || {})[model] || {};
-      const extent = sharedYieldExtent(actual, pred);
+      if (!slice || !mapFeaturesCache) return false;
+      const { actual, pred } = mapValuesForSelection(slice, model, yearKey);
+      const features = featuresForDataset(mapFeaturesCache, actual, pred);
+      if (!features.length) return false;
+      const extent = pooledMapExtent(slice, model);
+      const yearSuffix = yearKey === MAP_YEAR_MEAN ? "mean yield" : yearKey;
+      if (mapCaptionLeftDyn) {
+        mapCaptionLeftDyn.textContent = `Ground truth (${yearSuffix})`;
+      }
+      if (mapCaptionRightDyn) {
+        mapCaptionRightDyn.textContent = `Model prediction (${model}, ${yearSuffix})`;
+      }
       renderRegionChoropleth(
         regionMapActual,
         features,
         actual,
         extent,
-        "Ground truth (mean yield)",
-        borderFeatures,
+        `Ground truth (${yearSuffix})`,
       );
       renderRegionChoropleth(
         regionMapPred,
         features,
         pred,
         extent,
-        `Model prediction (${model})`,
-        borderFeatures,
+        `Model prediction (${model}, ${yearSuffix})`,
       );
       if (extent) {
         const label = `${fmtMap(extent[0])} → ${fmtMap(extent[1])}`;
@@ -536,9 +603,31 @@
       return true;
     }
 
+    async function renderDynamicMaps(dataset, model) {
+      const slice = (MAP_DATA.datasets || {})[dataset];
+      if (!slice) return false;
+      const country = slice.country;
+      setupMapYearSlider(slice);
+      if (mapFeaturesCacheCountry !== country) {
+        mapFeaturesCache = await loadCountryGeojson(country);
+        mapFeaturesCacheCountry = country;
+      }
+      if (!mapFeaturesCache) return false;
+      return renderDynamicMapLayers(dataset, model, mapYearSelection);
+    }
+
+    mapYearSlider.addEventListener("input", () => {
+      if (!selectedCell || activePanel !== "maps") return;
+      const idx = Number(mapYearSlider.value);
+      mapYearSelection = mapYearKeys[idx] || MAP_YEAR_MEAN;
+      mapYearLabel.textContent = mapYearLabelText(mapYearSelection);
+      renderDynamicMapLayers(selectedCell.dataset, selectedCell.model, mapYearSelection);
+    });
+
     function showMapMode(useDynamic) {
       mapGridDynamic.style.display = useDynamic ? "" : "none";
       imgGrid.style.display = useDynamic ? "none" : "";
+      mapYearControls.style.display = useDynamic && mapYearKeys.length > 1 ? "" : "none";
     }
 
     const METRIC_COLUMNS = [
@@ -546,7 +635,7 @@
       { key: "region_year_nrmse", label: "NRMSE", group: "Region-Year", higherBetter: false, title: "Normalized RMSE on absolute yields" },
       {
         key: "spatial_r",
-        label: "r<br><span class=\"metric-sub\">med/yr</span>",
+        label: "r<br><span class=\"metric-sub\">r/year</span>",
         group: "Spatial",
         higherBetter: true,
         title: "Slice by year; Pearson r across regions each year; median across years (years with ≥3 regions)",
@@ -574,10 +663,10 @@
       },
       {
         key: "anomaly_r",
-        label: "r<br><span class=\"metric-sub\">med/reg</span>",
+        label: "r<br><span class=\"metric-sub\">anom/reg</span>",
         group: "Anomaly",
         higherBetter: true,
-        title: "Per region: Pearson r on yield minus regional mean; median across regions",
+        title: "Per region: Pearson r on location-demeaned yields; median across regions",
       },
       {
         key: "anomaly_r_pooled",
@@ -821,9 +910,9 @@
       <th rowspan="2" class="sortable" data-sort="n_regions">Regions ${sortMark("n_regions")}</th>
       <th rowspan="2" class="sortable" data-sort="n_years">Years ${sortMark("n_years")}</th>
       <th rowspan="2" class="sortable" data-sort="n_samples">Samples ${sortMark("n_samples")}</th>
-      <th colspan="3" class="group-head">Region-Year</th>
-      <th colspan="2" class="group-head" title="Spatial pattern recovery">Spatial<span class="group-hint">slice by year → R² → median</span></th>
-      <th colspan="2" class="group-head" title="Temporal dynamics recovery">Temporal<span class="group-hint">slice by region → R² → median</span></th>
+      <th colspan="2" class="group-head">Region-Year</th>
+      <th colspan="2" class="group-head" title="Spatial pattern recovery">Spatial<span class="group-hint">slice by year → r across regions → median</span></th>
+      <th colspan="2" class="group-head" title="Temporal dynamics recovery">Temporal<span class="group-hint">slice by region → r across years → median</span></th>
       <th colspan="2" class="group-head">Anomaly</th>
     </tr>
     <tr>`;

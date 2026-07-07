@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from cybench.config import CROP_YIELD_RANGES, KEY_LOC, KEY_TARGET
+from cybench.config import CROP_YIELD_RANGES, KEY_LOC, KEY_TARGET, KEY_YEAR
 
 try:
     from shapely.geometry.base import BaseGeometry
@@ -46,40 +46,14 @@ def prepare_geometry_for_geojson(geometry: BaseGeometry | None) -> BaseGeometry 
     return geometry
 
 
-def export_country_border_geojson(
-    country_code: str,
-    dest: Path,
-    *,
-    simplify: float = 0.05,
-) -> Path | None:
-    """Write simplified admin-0 country outline GeoJSON (Natural Earth background)."""
-    try:
-        from cybench.util.geo import get_country_border_gdf
-    except ImportError:
-        return None
-
-    country = country_code.upper()
-    try:
-        gdf = get_country_border_gdf(country)
-    except (FileNotFoundError, OSError, ValueError):
-        return None
-
-    slim = gdf[["geometry"]].copy()
-    slim["geometry"] = slim.geometry.simplify(simplify, preserve_topology=True)
-    if slim.empty:
-        return None
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    slim.to_file(dest, driver="GeoJSON")
-    return dest
-
-
 def export_region_geojson(
     country_code: str,
     dest: Path,
     *,
     simplify: float = 0.01,
+    locations: set[str] | frozenset[str] | None = None,
 ) -> Path | None:
-    """Write simplified admin-region GeoJSON for one CY-Bench country."""
+    """Write simplified admin-region GeoJSON for benchmark locations in one country."""
     try:
         from cybench.util.geo import get_shapes_from_polygons
     except ImportError:
@@ -103,6 +77,10 @@ def export_region_geojson(
         return None
     slim = slim.rename(columns={loc_col: "loc"})
     slim["loc"] = slim["loc"].astype(str)
+    if locations is not None:
+        slim = slim[slim["loc"].isin(locations)]
+    if slim.empty:
+        return None
     dest.parent.mkdir(parents=True, exist_ok=True)
     slim.to_file(dest, driver="GeoJSON")
     return dest
@@ -156,6 +134,43 @@ def region_means(df: pd.DataFrame, value_col: str) -> dict[str, float]:
     return {str(k): round(float(v), 4) for k, v in grouped.items()}
 
 
+def region_values_by_year(df: pd.DataFrame, value_col: str) -> dict[str, dict[str, float]]:
+    """Per-calendar-year regional values; outer keys are year strings."""
+    loc_col = KEY_LOC if KEY_LOC in df.columns else "adm_id"
+    year_col = KEY_YEAR if KEY_YEAR in df.columns else "year"
+    if (
+        loc_col not in df.columns
+        or year_col not in df.columns
+        or value_col not in df.columns
+    ):
+        return {}
+    sub = df[[year_col, loc_col, value_col]].copy()
+    sub[value_col] = pd.to_numeric(sub[value_col], errors="coerce")
+    sub = sub.dropna()
+    if sub.empty:
+        return {}
+    grouped = sub.groupby([year_col, loc_col], sort=True)[value_col].mean()
+    out: dict[str, dict[str, float]] = {}
+    for (year, loc), val in grouped.items():
+        out.setdefault(str(int(year)), {})[str(loc)] = round(float(val), 4)
+    return out
+
+
+def benchmark_locs_by_country(map_payload: dict[str, Any]) -> dict[str, set[str]]:
+    """Union of region ids with yield data, grouped by country code."""
+    out: dict[str, set[str]] = {}
+    for ds in map_payload.get("datasets", {}).values():
+        country = ds.get("country")
+        if not country:
+            continue
+        locs: set[str] = set(ds.get("actual", {}))
+        for model_preds in ds.get("models", {}).values():
+            locs.update(model_preds)
+        if locs:
+            out.setdefault(str(country), set()).update(locs)
+    return out
+
+
 def build_region_map_payload(
     output_dir: Path,
     summary_rows: list[dict[str, Any]],
@@ -175,7 +190,10 @@ def build_region_map_payload(
             continue
 
         actual: dict[str, float] = {}
+        actual_by_year: dict[str, dict[str, float]] = {}
         models: dict[str, dict[str, float]] = {}
+        models_by_year: dict[str, dict[str, dict[str, float]]] = {}
+        years_seen: set[int] = set()
 
         for row in rows:
             preds_dir = preds_dir_for_row(output_dir, row)
@@ -188,15 +206,22 @@ def build_region_map_payload(
             target_col = KEY_TARGET if KEY_TARGET in df.columns else "yield"
             if not actual and target_col in df.columns:
                 actual = region_means(df, target_col)
+                actual_by_year = region_values_by_year(df, target_col)
+                years_seen.update(int(y) for y in actual_by_year)
 
             pred_col = infer_pred_column(
                 df, model_col=str(row.get("model_col") or "") or None
             )
             if pred_col is None:
                 continue
+            model_name = str(row["model"])
             model_preds = region_means(df, pred_col)
             if model_preds:
-                models[str(row["model"])] = model_preds
+                models[model_name] = model_preds
+            model_by_year = region_values_by_year(df, pred_col)
+            if model_by_year:
+                models_by_year[model_name] = model_by_year
+                years_seen.update(int(y) for y in model_by_year)
 
         if not actual and not models:
             continue
@@ -208,22 +233,23 @@ def build_region_map_payload(
             "country": country,
             "crop": crop,
             "yield_range": dict(yield_range) if yield_range else None,
+            "years": sorted(years_seen),
             "actual": actual,
+            "actual_by_year": actual_by_year,
             "models": models,
+            "models_by_year": models_by_year,
             "n_regions": len(actual or next(iter(models.values()), {})),
         }
 
     return {
         "geojson_by_country": {cc: "" for cc in sorted(countries_needed)},
-        "border_geojson_by_country": {cc: "" for cc in sorted(countries_needed)},
         "yield_ranges": CROP_YIELD_RANGES,
         "datasets": datasets,
         "note": (
-            "Regional means across years (same aggregation as dashboard maps). "
-            "Map extent is the full country; grey regions are outside the benchmark. "
-            "Colors autoscale to pooled actual+pred. "
-            "Geometry is simplified admin boundaries from cybench/data/polygons; "
-            "country outline from Natural Earth admin-0."
+            "Maps default to multi-year regional means; use the year slider for single years. "
+            "Map extent covers benchmark regions only. "
+            "Colors autoscale to pooled actual+pred across all years. "
+            "Geometry is simplified admin boundaries from cybench/data/polygons."
         ),
     }
 
@@ -241,23 +267,21 @@ def bundle_region_map_assets(
     assets_dir = Path(output_dir) / assets_dirname
     assets_dir.mkdir(parents=True, exist_ok=True)
     geojson_by_country: dict[str, str] = {}
-    border_geojson_by_country: dict[str, str] = {}
+    locs_by_country = benchmark_locs_by_country(map_payload)
 
     for country in map_payload.get("geojson_by_country", {}):
         dest = assets_dir / f"regions_{country}.geojson"
-        exported = export_region_geojson(country, dest)
+        exported = export_region_geojson(
+            country,
+            dest,
+            locations=locs_by_country.get(country),
+        )
         if exported is not None:
             geojson_by_country[country] = f"{assets_dirname}/{dest.name}"
-
-        border_dest = assets_dir / f"border_{country}.geojson"
-        border_exported = export_country_border_geojson(country, border_dest)
-        if border_exported is not None:
-            border_geojson_by_country[country] = f"{assets_dirname}/{border_dest.name}"
 
     return {
         **map_payload,
         "geojson_by_country": geojson_by_country,
-        "border_geojson_by_country": border_geojson_by_country,
     }
 
 def write_region_map_sidecar(
