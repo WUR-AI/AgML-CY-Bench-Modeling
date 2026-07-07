@@ -12,10 +12,8 @@ from cybench.config import CROP_YIELD_RANGES, KEY_LOC, KEY_TARGET
 
 try:
     from shapely.geometry.base import BaseGeometry
-    from shapely.ops import orient as orient_polygon
 except ImportError:  # pragma: no cover
     BaseGeometry = object  # type: ignore[misc,assignment]
-    orient_polygon = None  # type: ignore[assignment]
 
 # Skip geometries that break map fitting (dateline-spanning admin units).
 _MAX_MAP_LON_SPAN = 60.0
@@ -39,11 +37,9 @@ def dataset_crop(dataset: str) -> str:
 
 
 def prepare_geometry_for_geojson(geometry: BaseGeometry | None) -> BaseGeometry | None:
-    """Rewind rings for GeoJSON/SVG and drop pathological footprints."""
+    """Drop pathological footprints; ring winding is fixed in the dashboard (D3/SVG)."""
     if geometry is None or geometry.is_empty:
         return None
-    if orient_polygon is not None:
-        geometry = orient_polygon(geometry, sign=1.0)
     minx, miny, maxx, maxy = geometry.bounds
     if (maxx - minx) > _MAX_MAP_LON_SPAN or (maxy - miny) > _MAX_MAP_LAT_SPAN:
         return None

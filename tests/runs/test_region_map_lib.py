@@ -30,18 +30,18 @@ def test_dataset_crop():
     assert dataset_crop("wheat_NL") == "wheat"
 
 
-def test_prepare_geometry_rewinds_clockwise_ring():
+def test_prepare_geometry_keeps_ring_orientation():
     from shapely.geometry import Polygon
 
     cw = Polygon([(0, 0), (0, 1), (1, 1), (1, 0), (0, 0)])
-    fixed = prepare_geometry_for_geojson(cw)
-    assert fixed is not None
-    ring = list(fixed.exterior.coords)
+    kept = prepare_geometry_for_geojson(cw)
+    assert kept is not None
+    ring = list(kept.exterior.coords)
     signed = sum(
         (ring[i + 1][0] - ring[i][0]) * (ring[i + 1][1] + ring[i][1])
         for i in range(len(ring) - 1)
     )
-    assert signed < 0
+    assert signed > 0
 
 
 def test_prepare_geometry_drops_dateline_spanning_polygon():

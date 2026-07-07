@@ -327,7 +327,7 @@
       try {
         const geo = await d3.json(href);
         if (!geo || !geo.features) return null;
-        const features = geo.features.map(f => ({
+        const features = geo.features.map(f => rewindFeatureForSvg({
           ...f,
           properties: { ...f.properties, loc: String(f.properties.loc ?? "") },
         }));
@@ -337,6 +337,48 @@
         console.warn("GeoJSON load failed:", href, err);
         return null;
       }
+    }
+
+    // Mapbox geojson-rewind (RFC 7946): outer rings CCW for D3/SVG fills.
+    function rewindRing(ring, clockwise) {
+      let area = 0;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const p0 = ring[i];
+        const p1 = ring[j];
+        area += (p1[0] - p0[0]) * (p1[1] + p0[1]);
+      }
+      if ((area < 0) === clockwise) ring.reverse();
+      return ring;
+    }
+
+    function rewindGeometry(geometry, outerClockwise) {
+      if (!geometry) return geometry;
+      if (geometry.type === "Polygon") {
+        return {
+          ...geometry,
+          coordinates: geometry.coordinates.map((ring, i) =>
+            rewindRing(ring.slice(), i === 0 ? outerClockwise : !outerClockwise),
+          ),
+        };
+      }
+      if (geometry.type === "MultiPolygon") {
+        return {
+          ...geometry,
+          coordinates: geometry.coordinates.map(poly =>
+            poly.map((ring, i) =>
+              rewindRing(ring.slice(), i === 0 ? outerClockwise : !outerClockwise),
+            ),
+          ),
+        };
+      }
+      return geometry;
+    }
+
+    function rewindFeatureForSvg(feature) {
+      return {
+        ...feature,
+        geometry: rewindGeometry(feature.geometry, false),
+      };
     }
 
     function yieldColor(value, extent) {
@@ -412,19 +454,24 @@
         { type: "FeatureCollection", features: fitFeatures },
       );
       const path = d3.geoPath(projection);
+      svg.append("rect")
+        .attr("x", 0)
+        .attr("y", 0)
+        .attr("width", REGION_MAP_WIDTH)
+        .attr("height", REGION_MAP_HEIGHT)
+        .attr("fill", "#f8f9fa");
       svg.selectAll("path.region")
         .data(plotFeatures)
         .join("path")
         .attr("class", "region")
-        .attr("fill-rule", "evenodd")
         .attr("d", path)
         .attr("fill", d => {
           const loc = d.properties.loc;
           const v = valueByLoc ? valueByLoc[loc] : null;
           return yieldColor(v, extent);
         })
-        .attr("stroke", "#333")
-        .attr("stroke-width", 0.35)
+        .attr("stroke", "#fff")
+        .attr("stroke-width", 0.5)
         .selectAll("title")
         .data(d => [d])
         .join("title")
