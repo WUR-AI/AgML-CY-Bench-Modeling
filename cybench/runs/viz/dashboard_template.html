@@ -190,9 +190,14 @@
     .region-map-wrap { width: 100%; overflow: hidden; min-height: 280px; }
     .region-map-wrap svg { display: block; width: 100%; height: auto; }
     .region-map-wrap .region {
-      stroke: #fff;
-      stroke-width: 0.6px;
+      stroke: #000;
+      stroke-width: 0.2px;
       transition: fill 0.12s;
+    }
+    .region-map-wrap .world-country {
+      fill: #d3d3d3;
+      stroke: #000;
+      stroke-width: 0.15px;
     }
     .region-map-legend {
       display: flex;
@@ -210,7 +215,7 @@
       height: 10px;
       border-radius: 3px;
       border: 1px solid var(--border);
-      background: linear-gradient(to right, #440154, #31688e, #35b779, #fde725);
+      background: linear-gradient(to right, #f7fbff, #c6dbef, #6baed6, #2171b5, #08306b);
     }
     .map-year-controls {
       display: flex;
@@ -345,20 +350,41 @@
     let mapYearSelection = MAP_YEAR_MEAN;
     let mapFeaturesCache = null;
     let mapFeaturesCacheCountry = null;
+    let mapWorldFeaturesCache = null;
 
     const HAS_DYNAMIC_MAPS = Boolean(
       MAP_DATA && MAP_DATA.datasets && Object.keys(MAP_DATA.datasets).length
         && MAP_DATA.geojson_by_country && Object.keys(MAP_DATA.geojson_by_country).length
     );
     const geoCache = new Map();
+    const worldGeoCache = { href: null, features: null };
     const REGION_MAP_WIDTH = 520;
     const REGION_MAP_HEIGHT = 420;
     const REGION_MAP_MARGIN = 10;
-    const REGION_FILL_MISSING = "#f0f0f0";
+    const REGION_FILL_MISSING = "#d3d3d3";
 
     function fmtMap(v, digits = 2) {
       if (v === null || v === undefined || Number.isNaN(v)) return "—";
       return Number(v).toFixed(digits);
+    }
+
+    async function loadWorldGeojson() {
+      const href = MAP_DATA.world_geojson_href;
+      if (!href) return null;
+      if (worldGeoCache.href === href && worldGeoCache.features) {
+        return worldGeoCache.features;
+      }
+      try {
+        const geo = await d3.json(href);
+        if (!geo || !geo.features) return null;
+        const features = geo.features.map(f => rewindFeatureForSvg({ ...f }));
+        worldGeoCache.href = href;
+        worldGeoCache.features = features;
+        return features;
+      } catch (err) {
+        console.warn("World GeoJSON load failed:", href, err);
+        return null;
+      }
     }
 
     async function loadCountryGeojson(country) {
@@ -422,22 +448,17 @@
       };
     }
 
-    function featuresForDataset(features, ...valueMaps) {
-      const locs = new Set();
-      for (const m of valueMaps) {
-        if (!m) continue;
-        Object.keys(m).forEach(k => locs.add(k));
-      }
-      if (!locs.size) return features || [];
-      return (features || []).filter(f => locs.has(f.properties.loc));
+    function regionsWithData(features, valueByLoc) {
+      if (!features || !valueByLoc) return [];
+      return features.filter(f => valueByLoc[f.properties.loc] != null);
     }
 
     function yieldColor(value, extent) {
       if (value == null || !extent) return REGION_FILL_MISSING;
       const [lo, hi] = extent;
-      if (hi <= lo) return d3.interpolateViridis(0.5);
+      if (hi <= lo) return d3.interpolateBlues(0.55);
       const t = Math.max(0, Math.min(1, (value - lo) / (hi - lo)));
-      return d3.interpolateViridis(t);
+      return d3.interpolateBlues(0.15 + t * 0.85);
     }
 
     function sharedYieldExtent(actualMap, predMap) {
@@ -464,18 +485,22 @@
 
     function renderRegionChoropleth(
       container,
-      features,
+      regionFeatures,
       valueByLoc,
       extent,
       title,
+      worldFeatures,
     ) {
       container.innerHTML = "";
-      if (!features || !features.length) {
+      if (!regionFeatures || !regionFeatures.length) {
         container.innerHTML = `<p class="muted">${title}: no map geometry.</p>`;
         return;
       }
-      let fitFeatures = featuresForProjectionFit(features);
-      if (!fitFeatures.length) fitFeatures = features;
+      const dataFeatures = regionsWithData(regionFeatures, valueByLoc);
+      let fitFeatures = featuresForProjectionFit(
+        dataFeatures.length ? dataFeatures : regionFeatures,
+      );
+      if (!fitFeatures.length) fitFeatures = regionFeatures;
       const svg = d3.select(container).append("svg")
         .attr("viewBox", `0 0 ${REGION_MAP_WIDTH} ${REGION_MAP_HEIGHT}`)
         .attr("role", "img")
@@ -492,8 +517,15 @@
         .attr("width", REGION_MAP_WIDTH)
         .attr("height", REGION_MAP_HEIGHT)
         .attr("fill", "#f8f9fa");
+      if (worldFeatures && worldFeatures.length) {
+        svg.selectAll("path.world-country")
+          .data(worldFeatures)
+          .join("path")
+          .attr("class", "world-country")
+          .attr("d", path);
+      }
       svg.selectAll("path.region")
-        .data(features)
+        .data(regionFeatures)
         .join("path")
         .attr("class", "region")
         .attr("d", path)
@@ -502,15 +534,15 @@
           const v = valueByLoc ? valueByLoc[loc] : null;
           return yieldColor(v, extent);
         })
-        .attr("stroke", "#fff")
-        .attr("stroke-width", 0.5)
         .selectAll("title")
         .data(d => [d])
         .join("title")
         .text(d => {
           const loc = d.properties.loc;
           const v = valueByLoc ? valueByLoc[loc] : null;
-          return v == null ? loc : `${loc}: ${fmtMap(v)}`;
+          return v == null
+            ? `${loc}: outside benchmark`
+            : `${loc}: ${fmtMap(v)}`;
         });
     }
 
@@ -571,8 +603,10 @@
       const slice = (MAP_DATA.datasets || {})[dataset];
       if (!slice || !mapFeaturesCache) return false;
       const { actual, pred } = mapValuesForSelection(slice, model, yearKey);
-      const features = featuresForDataset(mapFeaturesCache, actual, pred);
-      if (!features.length) return false;
+      if (!regionsWithData(mapFeaturesCache, actual).length
+          && !regionsWithData(mapFeaturesCache, pred).length) {
+        return false;
+      }
       const extent = pooledMapExtent(slice, model);
       const yearSuffix = yearKey === MAP_YEAR_MEAN ? "mean yield" : yearKey;
       if (mapCaptionLeftDyn) {
@@ -583,17 +617,19 @@
       }
       renderRegionChoropleth(
         regionMapActual,
-        features,
+        mapFeaturesCache,
         actual,
         extent,
         `Ground truth (${yearSuffix})`,
+        mapWorldFeaturesCache,
       );
       renderRegionChoropleth(
         regionMapPred,
-        features,
+        mapFeaturesCache,
         pred,
         extent,
         `Model prediction (${model}, ${yearSuffix})`,
+        mapWorldFeaturesCache,
       );
       if (extent) {
         const label = `${fmtMap(extent[0])} → ${fmtMap(extent[1])}`;
@@ -610,7 +646,10 @@
       setupMapYearSlider(slice);
       if (mapFeaturesCacheCountry !== country) {
         mapFeaturesCache = await loadCountryGeojson(country);
+        mapWorldFeaturesCache = await loadWorldGeojson();
         mapFeaturesCacheCountry = country;
+      } else if (!mapWorldFeaturesCache) {
+        mapWorldFeaturesCache = await loadWorldGeojson();
       }
       if (!mapFeaturesCache) return false;
       return renderDynamicMapLayers(dataset, model, mapYearSelection);
