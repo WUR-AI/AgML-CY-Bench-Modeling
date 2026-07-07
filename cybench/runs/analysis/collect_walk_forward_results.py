@@ -55,6 +55,12 @@ from cybench.runs.viz.build_results_dashboard import (
     build_html,
     bundle_referenced_assets,
 )
+from cybench.runs.viz.region_map_lib import (
+    build_region_map_payload,
+    bundle_region_map_assets,
+    strip_map_pngs_from_records,
+    write_region_map_sidecar,
+)
 
 
 def _model_column_from_hydra(run_dir: Path) -> str | None:
@@ -446,15 +452,26 @@ def write_model_comparison_dashboard(
     records = summary_rows_to_dashboard_records(summary_rows, output_dir)
     if not records:
         raise ValueError("No summary rows available for dashboard.")
+    map_payload = build_region_map_payload(output_dir, summary_rows)
     html_dir = str(output_dir)
     if bundle_assets:
+        if map_payload.get("datasets"):
+            map_payload = bundle_region_map_assets(
+                map_payload, output_dir, assets_dirname="assets"
+            )
+            if map_payload.get("geojson_by_country"):
+                write_region_map_sidecar(output_dir, map_payload)
+        if map_payload.get("datasets") and map_payload.get("geojson_by_country"):
+            records = strip_map_pngs_from_records(records)
         records = bundle_referenced_assets(
             records=records,
             output_dir=html_dir,
             assets_dirname="assets",
         )
+    elif map_payload.get("datasets") and map_payload.get("geojson_by_country"):
+        records = strip_map_pngs_from_records(records)
     html_path = output_dir / "compare_models.html"
-    html_path.write_text(build_html(records), encoding="utf-8")
+    html_path.write_text(build_html(records, map_payload=map_payload), encoding="utf-8")
     return html_path
 
 

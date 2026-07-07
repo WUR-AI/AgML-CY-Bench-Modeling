@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>CY-Bench Multi-Model Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <style>
     :root {
       --bg: #f6f8fa;
@@ -186,6 +187,31 @@
       min-height: 120px;
       background: #fff;
     }
+    .region-map-wrap { width: 100%; overflow: hidden; min-height: 280px; }
+    .region-map-wrap svg { display: block; width: 100%; height: auto; }
+    .region-map-wrap .region {
+      stroke: #fff;
+      stroke-width: 0.6px;
+      transition: fill 0.12s;
+    }
+    .region-map-legend {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 0.75rem;
+      margin-top: 0.35rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+      justify-content: center;
+    }
+    .region-map-gradient {
+      display: inline-block;
+      width: 140px;
+      height: 10px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      background: linear-gradient(to right, #ffffcc, #fd8d3c, #800026);
+    }
   </style>
 </head>
 <body>
@@ -230,6 +256,18 @@
         <button data-panel="temporal">Temporal</button>
       </div>
       <div id="missing-note" class="muted"></div>
+      <div id="map-grid-dynamic" class="img-grid two" style="display:none;">
+        <div>
+          <div id="map-caption-left-dyn" class="map-caption muted">Ground truth (mean yield)</div>
+          <div id="region-map-actual" class="region-map-wrap"></div>
+          <div class="region-map-legend"><span class="region-map-gradient" aria-hidden="true"></span><span id="region-map-legend-actual">—</span></div>
+        </div>
+        <div>
+          <div id="map-caption-right-dyn" class="map-caption muted">Model prediction</div>
+          <div id="region-map-pred" class="region-map-wrap"></div>
+          <div class="region-map-legend"><span class="region-map-gradient" aria-hidden="true"></span><span id="region-map-legend-pred">—</span></div>
+        </div>
+      </div>
       <div id="img-grid" class="img-grid two">
         <div>
           <div id="map-caption-left" class="map-caption muted">Ground truth (mean yield)</div>
@@ -245,6 +283,7 @@
 
   <script>
     const DATA = __DATA_JSON__;
+    const MAP_DATA = __MAP_DATA_JSON__;
     const coverageInfo = document.getElementById("coverage-info");
     const heatmapWrap = document.getElementById("heatmap-wrap");
     const datasetFilter = document.getElementById("dataset-filter");
@@ -259,7 +298,133 @@
     const mapCaptionRight = document.getElementById("map-caption-right");
     const drillImageA = document.getElementById("drill-image-a");
     const drillImageB = document.getElementById("drill-image-b");
+    const mapGridDynamic = document.getElementById("map-grid-dynamic");
+    const regionMapActual = document.getElementById("region-map-actual");
+    const regionMapPred = document.getElementById("region-map-pred");
+    const regionMapLegendActual = document.getElementById("region-map-legend-actual");
+    const regionMapLegendPred = document.getElementById("region-map-legend-pred");
     const panelButtons = Array.from(document.querySelectorAll(".toolbar button"));
+
+    const HAS_DYNAMIC_MAPS = Boolean(
+      MAP_DATA && MAP_DATA.datasets && Object.keys(MAP_DATA.datasets).length
+        && MAP_DATA.geojson_by_country && Object.keys(MAP_DATA.geojson_by_country).length
+    );
+    const geoCache = new Map();
+    const REGION_MAP_WIDTH = 520;
+    const REGION_MAP_HEIGHT = 420;
+    const REGION_MAP_MARGIN = 10;
+    const REGION_FILL_MISSING = "#f0f0f0";
+
+    function fmtMap(v, digits = 2) {
+      if (v === null || v === undefined || Number.isNaN(v)) return "—";
+      return Number(v).toFixed(digits);
+    }
+
+    async function loadCountryGeojson(country) {
+      if (geoCache.has(country)) return geoCache.get(country);
+      const href = (MAP_DATA.geojson_by_country || {})[country];
+      if (!href) return null;
+      const geo = await d3.json(href);
+      const features = (geo.features || []).map(f => ({
+        ...f,
+        properties: { ...f.properties, loc: String(f.properties.loc ?? "") },
+      }));
+      geoCache.set(country, features);
+      return features;
+    }
+
+    function yieldColor(value, extent) {
+      if (value == null || !extent) return REGION_FILL_MISSING;
+      const [lo, hi] = extent;
+      if (hi <= lo) return d3.interpolateOrRd(0.5);
+      const t = Math.max(0, Math.min(1, (value - lo) / (hi - lo)));
+      return d3.interpolateOrRd(t);
+    }
+
+    function sharedYieldExtent(actualMap, predMap) {
+      const vals = [
+        ...Object.values(actualMap || {}),
+        ...Object.values(predMap || {}),
+      ].filter(v => v != null && !Number.isNaN(v));
+      if (!vals.length) return null;
+      const lo = Math.min(...vals);
+      const hi = Math.max(...vals);
+      const pad = (hi - lo) * 0.05 || 0.5;
+      return [lo - pad, hi + pad];
+    }
+
+    function renderRegionChoropleth(container, features, valueByLoc, extent, title) {
+      container.innerHTML = "";
+      if (!features || !features.length) {
+        container.innerHTML = `<p class="muted">${title}: no geometry.</p>`;
+        return;
+      }
+      const svg = d3.select(container).append("svg")
+        .attr("viewBox", `0 0 ${REGION_MAP_WIDTH} ${REGION_MAP_HEIGHT}`)
+        .attr("role", "img")
+        .attr("aria-label", title);
+      const projection = d3.geoMercator().fitExtent(
+        [[REGION_MAP_MARGIN, REGION_MAP_MARGIN],
+         [REGION_MAP_WIDTH - REGION_MAP_MARGIN, REGION_MAP_HEIGHT - REGION_MAP_MARGIN]],
+        { type: "FeatureCollection", features },
+      );
+      const path = d3.geoPath(projection);
+      svg.selectAll("path.region")
+        .data(features)
+        .join("path")
+        .attr("class", "region")
+        .attr("d", path)
+        .attr("fill", d => {
+          const loc = d.properties.loc;
+          const v = valueByLoc ? valueByLoc[loc] : null;
+          return yieldColor(v, extent);
+        })
+        .attr("stroke", "#fff")
+        .selectAll("title")
+        .data(d => [d])
+        .join("title")
+        .text(d => {
+          const loc = d.properties.loc;
+          const v = valueByLoc ? valueByLoc[loc] : null;
+          return v == null ? `${loc}: no data` : `${loc}: ${fmtMap(v)}`;
+        });
+    }
+
+    async function renderDynamicMaps(dataset, model) {
+      const slice = (MAP_DATA.datasets || {})[dataset];
+      if (!slice) return false;
+      const country = slice.country;
+      const features = await loadCountryGeojson(country);
+      if (!features) return false;
+      const actual = slice.actual || {};
+      const pred = (slice.models || {})[model] || {};
+      const extent = sharedYieldExtent(actual, pred);
+      renderRegionChoropleth(
+        regionMapActual,
+        features,
+        actual,
+        extent,
+        "Ground truth (mean yield)",
+      );
+      renderRegionChoropleth(
+        regionMapPred,
+        features,
+        pred,
+        extent,
+        `Model prediction (${model})`,
+      );
+      if (extent) {
+        const label = `${fmtMap(extent[0])} → ${fmtMap(extent[1])}`;
+        regionMapLegendActual.textContent = label;
+        regionMapLegendPred.textContent = label;
+      }
+      return true;
+    }
+
+    function showMapMode(useDynamic) {
+      mapGridDynamic.style.display = useDynamic ? "" : "none";
+      imgGrid.style.display = useDynamic ? "none" : "";
+    }
 
     const METRIC_COLUMNS = [
       { key: "region_year_r2", label: "R²", group: "Region-Year", higherBetter: true, title: "R² on all region-year rows (absolute prediction quality)" },
@@ -652,6 +817,23 @@
       missingNote.textContent = "";
 
       if (activePanel === "maps") {
+        if (HAS_DYNAMIC_MAPS && (MAP_DATA.datasets || {})[selectedCell.dataset]) {
+          showMapMode(true);
+          renderDynamicMaps(selectedCell.dataset, selectedCell.model).then(ok => {
+            if (!ok) {
+              showMapMode(false);
+              missingNote.textContent =
+                "Could not render dynamic maps (missing geometry or preds). "
+                + "Re-run collect to export preds/ and ensure polygons exist.";
+            }
+          }).catch(err => {
+            showMapMode(false);
+            missingNote.textContent = `Map error: ${err}`;
+          });
+          return;
+        }
+
+        showMapMode(false);
         imgGrid.classList.add("two");
         drillColB.style.display = "";
         mapCaptionLeft.style.display = "";
@@ -665,7 +847,7 @@
           drillImageA.removeAttribute("src");
           drillImageB.removeAttribute("src");
           missingNote.textContent =
-            "No map images found. Re-run collect with plot enabled.";
+            "No map images found. Re-run collect with --plot, or ensure preds/ exists for dynamic maps.";
           return;
         }
         if (actual) drillImageA.src = actual; else drillImageA.removeAttribute("src");
@@ -673,6 +855,7 @@
         return;
       }
 
+      showMapMode(false);
       imgGrid.classList.remove("two");
       drillColB.style.display = "none";
       mapCaptionLeft.style.display = "none";

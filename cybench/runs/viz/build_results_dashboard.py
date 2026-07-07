@@ -401,11 +401,14 @@ def load_records(sources: List[SourceConfig], output_dir: str) -> List[Dict]:
     return records
 
 
-def build_html(records: List[Dict]) -> str:
+def build_html(records: List[Dict], map_payload: dict | None = None) -> str:
     data_json = json.dumps(records)
+    map_json = json.dumps(map_payload or {})
     template_path = Path(__file__).with_name("dashboard_template.html")
     template = template_path.read_text(encoding="utf-8")
-    return template.replace("__DATA_JSON__", data_json)
+    return (
+        template.replace("__DATA_JSON__", data_json).replace("__MAP_DATA_JSON__", map_json)
+    )
 
 
 def bundle_referenced_assets(
