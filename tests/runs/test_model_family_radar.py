@@ -15,6 +15,7 @@ from cybench.runs.analysis.model_family_radar_lib import (
     absolute_scores,
     ai_error_reduction_pct,
     build_family_dataset_rows,
+    build_paper_family_table_latex,
     build_radar_payload,
     build_radar_slice,
     build_sample_scatter_slice,
@@ -206,7 +207,7 @@ def test_build_family_dataset_rows_includes_all_view_metrics():
     rows = build_family_dataset_rows(df, reps)
     assert len(rows) == 1
     assert rows[0]["dataset"] == "maize_DE"
-    assert set(rows[0]["metrics"]) == {"nrmse", "r_spatial", "r_temporal", "r_res"}
+    assert set(rows[0]["metrics"]) == {"nrmse", "r2", "r_spatial", "r_temporal", "r_res"}
 
 
 def test_build_radar_slice_includes_country_iqr():
@@ -380,3 +381,24 @@ def test_build_radar_html_embeds_payload(tmp_path: Path):
     assert 'id="table-export-latex"' in html
     assert "buildMetricsTableLatex" in html
     assert "booktabs" in html
+
+
+def test_build_paper_family_table_latex_includes_r2():
+    rows = []
+    for crop, country, model, nrmse, r2 in [
+        ("maize", "DE", "trend", 0.24, 0.31),
+        ("maize", "US", "trend", 0.22, 0.35),
+        ("maize", "DE", "random_forest", 0.25, 0.42),
+        ("maize", "US", "random_forest", 0.23, 0.44),
+        ("wheat", "DE", "tabicl", 0.16, 0.55),
+        ("wheat", "FR", "tabicl", 0.17, 0.52),
+    ]:
+        rows.append(_summary_row(model, crop=crop, country=country, nrmse=nrmse, r2=r2))
+    df = pd.DataFrame(rows)
+    latex = build_paper_family_table_latex(df, batch_horizon="eos", crops=("maize", "wheat"))
+
+    assert "\\textbf{Maize}" in latex
+    assert "\\textbf{Wheat}" in latex
+    assert "$R^2$" in latex
+    assert "Random Forest" in latex
+    assert "TabICL" in latex

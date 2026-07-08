@@ -778,14 +778,15 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
     function buildMetricsTableLatex(families) {
       if (!families.length) return "";
       const { hzLabel, cropLabel } = tableExportMeta();
-      const headers = ["Family", "Representative", ...DATA.views.map(latexViewHeader)];
-      const colSpec = `ll${"r".repeat(DATA.views.length)}`;
+      const cols = tableColumns();
+      const headers = ["Family", "Representative", ...cols.map(v => v.latex || v.header || v.label)];
+      const colSpec = `ll${"r".repeat(cols.length)}`;
       const headerRow = headers.map(escapeLatex).join(" & ");
       const bodyRows = families.map(fam => {
         const cells = [
           escapeLatex(fam.family),
           escapeLatex(fam.display_name),
-          ...DATA.views.map(v => formatMetricLatex(fam, v.metric)),
+          ...cols.map(v => formatMetricLatex(fam, v.metric)),
         ];
         return `    ${cells.join(" & ")} \\\\`;
       }).join("\n");
@@ -830,15 +831,24 @@ ${bodyRows}
       }
     }
 
+    function tableColumns() {
+      return DATA.table_columns || DATA.views;
+    }
+
     function renderTable(families) {
       currentTableFamilies = families;
-      const viewHeaders = DATA.views.map(v => `${v.label} (${v.display || v.metric})`);
+      const cols = tableColumns();
+      const viewHeaders = cols.map(v => {
+        const metric = v.display || v.metric;
+        if (v.header) return `${v.header}`;
+        return `${v.label} (${metric})`;
+      });
       const headers = ["Family", "Representative", ...viewHeaders];
       metricsTable.querySelector("thead").innerHTML =
         `<tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
 
       metricsTable.querySelector("tbody").innerHTML = families.map(fam => {
-        const cells = DATA.views.map(v => formatMetricWithIqr(fam, v.metric));
+        const cells = cols.map(v => formatMetricWithIqr(fam, v.metric));
         return `<tr>
           <td>${fam.family}</td>
           <td>${fam.display_name}</td>

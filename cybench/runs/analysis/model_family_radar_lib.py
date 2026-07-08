@@ -49,7 +49,24 @@ EVALUATION_VIEWS: tuple[dict[str, Any], ...] = (
 )
 
 RAW_TABLE_METRICS: tuple[str, ...] = tuple(v["metric"] for v in EVALUATION_VIEWS)
-VIEW_METRICS: tuple[str, ...] = RAW_TABLE_METRICS
+
+# Table / LaTeX export includes pooled overall R² alongside NRMSE.
+PAPER_FAMILY_TABLE_METRICS: tuple[str, ...] = (
+    "nrmse",
+    "r2",
+    "r_spatial",
+    "r_temporal",
+    "r_res",
+)
+VIEW_METRICS: tuple[str, ...] = PAPER_FAMILY_TABLE_METRICS
+
+PAPER_FAMILY_TABLE_COLUMNS: tuple[dict[str, str], ...] = (
+    {"metric": "nrmse", "header": "NRMSE", "latex": "NRMSE"},
+    {"metric": "r2", "header": "R²", "latex": "$R^2$"},
+    {"metric": "r_spatial", "header": "Spatial (r)", "latex": "$r$"},
+    {"metric": "r_temporal", "header": "Temporal (r)", "latex": "$r$"},
+    {"metric": "r_res", "header": "Anomaly (r)", "latex": "$r$"},
+)
 
 MODEL_FAMILIES: dict[str, list[str]] = {
     "Naive baselines": ["average", "average_yield", "trend"],
@@ -87,6 +104,7 @@ RADAR_NORMALIZATION_NOTE = (
 
 RADAR_ABSOLUTE_SCALES: dict[str, dict[str, Any]] = {
     "nrmse": {"lo": 0.1, "hi": 0.30, "higher_better": False, "display": "NRMSE"},
+    "r2": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "R²"},
     "r_spatial": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "r"},
     "r_temporal": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "r"},
     "r_res": {"lo": 0.0, "hi": 1.0, "higher_better": True, "display": "r"},
@@ -528,6 +546,9 @@ def build_family_dataset_rows(
         metrics: dict[str, float | None] = {
             view["metric"]: _metric_cell(row, view["metric"]) for view in EVALUATION_VIEWS
         }
+        for metric in PAPER_FAMILY_TABLE_METRICS:
+            if metric not in metrics:
+                metrics[metric] = _metric_cell(row, metric)
         rows.append(
             {
                 "family": family,
@@ -776,6 +797,196 @@ def build_winner_map_payload(
     return out
 
 
+LATEX_MODEL_DISPLAY_OVERRIDES: dict[str, str] = {
+    "tst_lf": "\\textsc{TST-LF}",
+}
+
+
+def _latex_escape(text: str) -> str:
+    return (
+        str(text)
+        .replace("\\", "\\textbackslash{}")
+        .replace("&", "\\&")
+        .replace("%", "\\%")
+        .replace("$", "\\$")
+        .replace("#", "\\#")
+        .replace("_", "\\_")
+        .replace("{", "\\{")
+        .replace("}", "\\}")
+        .replace("~", "\\textasciitilde{}")
+        .replace("^", "\\textasciicaret{}")
+    )
+
+
+def _latex_display_name(model: str, display_name: str) -> str:
+    override = LATEX_MODEL_DISPLAY_OVERRIDES.get(model)
+    if override:
+        return override
+    return _latex_escape(display_name)
+
+
+def _format_metric_latex_iqr(
+    median: float | None,
+    q25: float | None,
+    q75: float | None,
+) -> str:
+    if median is None or pd.isna(median):
+        return "---"
+    med = float(median)
+    med_str = f"{med:.3f}"
+    if med < 0:
+        med_str = f"${med_str}$"
+    if q25 is None or q75 is None or pd.isna(q25) or pd.isna(q75):
+        return med_str
+    lo = float(q25)
+    hi = float(q75)
+    lo_str = f"{lo:.3f}"
+    hi_str = f"{hi:.3f}"
+    if lo < 0:
+        lo_str = f"${lo_str}$"
+    if hi < 0:
+        hi_str = f"${hi_str}$"
+    return f"{med_str} [{lo_str}, {hi_str}]"
+
+
+def build_paper_family_table_slice(
+    df: pd.DataFrame,
+    *,
+    batch_horizon: str,
+    crop: str,
+    representatives: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    """One row per family for a single crop (median [IQR] across countries)."""
+    work = _filter_summary_work(df, batch_horizon=batch_horizon, crop=crop)
+    reps = pick_representatives(work, overrides=representatives)
+    rep_models = list(reps.values())
+    medians = median_model_metrics_across_countries(
+        work, PAPER_FAMILY_TABLE_METRICS, models=rep_models
+    )
+    q25_all, q75_all = quantile_model_metrics_across_countries(
+        work, PAPER_FAMILY_TABLE_METRICS, models=rep_models
+    )
+    rows: list[dict[str, Any]] = []
+    for family in FAMILY_ORDER:
+        if family not in reps:
+            continue
+        model = reps[family]
+        if model not in medians.index:
+            continue
+        metrics: dict[str, dict[str, float | None]] = {}
+        for metric in PAPER_FAMILY_TABLE_METRICS:
+            med_val = medians.loc[model, metric] if metric in medians.columns else float("nan")
+            q25 = (
+                q25_all.loc[model, metric]
+                if q25_all is not None and metric in q25_all.columns and model in q25_all.index
+                else float("nan")
+            )
+            q75 = (
+                q75_all.loc[model, metric]
+                if q75_all is not None and metric in q75_all.columns and model in q75_all.index
+                else float("nan")
+            )
+            metrics[metric] = {
+                "median": None if pd.isna(med_val) else float(med_val),
+                "q25": None if pd.isna(q25) else float(q25),
+                "q75": None if pd.isna(q75) else float(q75),
+            }
+        rows.append(
+            {
+                "family": family,
+                "model": model,
+                "display_name": MODEL_DISPLAY_NAMES.get(model, model),
+                "metrics": metrics,
+            }
+        )
+    return rows
+
+
+def build_paper_family_table_latex(
+    df: pd.DataFrame,
+    *,
+    batch_horizon: str = "eos",
+    crops: tuple[str, ...] = ("maize", "wheat"),
+    representatives: dict[str, str] | None = None,
+    caption: str | None = None,
+    label: str = "tab:family_representatives_crops",
+) -> str:
+    """LaTeX table* with maize/wheat sections and overall NRMSE + R² columns."""
+    if caption is None:
+        caption = (
+            "Representative models for the crop-specific benchmarks. For each crop, each model "
+            "family is represented by the model achieving the lowest median end-of-season NRMSE "
+            "across countries. Values denote the median across countries; brackets indicate the "
+            "interquartile range."
+        )
+    n_metric_cols = len(PAPER_FAMILY_TABLE_COLUMNS)
+    col_spec = "ll" + "c" * n_metric_cols
+    header_metrics = (
+        "\\textbf{Overall} & \\textbf{Overall} & "
+        "\\textbf{Spatial} & \\textbf{Temporal} & \\textbf{Anomaly}"
+    )
+    subheader_metrics = (
+        "\\textbf{(NRMSE)} & \\textbf{($R^2$)} & "
+        "\\textbf{($r$)} & \\textbf{($r$)} & \\textbf{($r$)}"
+    )
+
+    body_parts: list[str] = []
+    for crop in crops:
+        rows = build_paper_family_table_slice(
+            df,
+            batch_horizon=batch_horizon,
+            crop=crop,
+            representatives=representatives,
+        )
+        if not rows:
+            continue
+        crop_title = crop.capitalize()
+        body_parts.append(f"\\multicolumn{{{2 + n_metric_cols}}}{{l}}{{\\textbf{{{crop_title}}}}}\\\\")
+        body_parts.append(f"\\cmidrule(l){{1-{2 + n_metric_cols}}}")
+        for row in rows:
+            cells = [
+                _latex_escape(row["family"]),
+                _latex_display_name(row["model"], row["display_name"]),
+            ]
+            for col in PAPER_FAMILY_TABLE_COLUMNS:
+                metric = col["metric"]
+                band = row["metrics"].get(metric, {})
+                cells.append(
+                    _format_metric_latex_iqr(
+                        band.get("median"),
+                        band.get("q25"),
+                        band.get("q75"),
+                    )
+                )
+            body_parts.append(" &\n".join(cells) + " \\\\")
+        if crop != crops[-1]:
+            body_parts.append("\\midrule")
+
+    body = "\n\n".join(body_parts)
+    return f"""\\begin{{table*}}[t]
+\\centering
+\\caption{{{caption}}}
+\\label{{{label}}}
+\\renewcommand{{\\arraystretch}}{{1.15}}
+
+\\begin{{tabular}}{{{col_spec}}}
+\\toprule
+\\textbf{{Model family}} &
+\\textbf{{Representative}} &
+{header_metrics} \\\\
+&
+&
+{subheader_metrics} \\\\
+\\midrule
+
+{body}
+
+\\bottomrule
+\\end{{tabular}}
+\\end{{table*}}
+"""
+
+
 def build_radar_payload(
     output_root: Path,
     *,
@@ -822,6 +1033,7 @@ def build_radar_payload(
         "crops": crops,
         "horizon_labels": {hz: HORIZON_DISPLAY_LABELS.get(hz, hz) for hz in horizons_in_data(df)},
         "views": list(EVALUATION_VIEWS),
+        "table_columns": list(PAPER_FAMILY_TABLE_COLUMNS),
         "family_catalog": {
             family: {"models": models, "color": FAMILY_COLORS.get(family, "#666")}
             for family, models in MODEL_FAMILIES.items()
