@@ -383,6 +383,18 @@ def test_build_radar_html_embeds_payload(tmp_path: Path):
     assert "booktabs" in html
 
 
+def test_build_radar_slice_includes_r2_in_family_raw():
+    df = pd.DataFrame(
+        [
+            _summary_row("xgboost", country="DE", crop="maize", nrmse=0.2, r2=0.51),
+            _summary_row("xgboost", country="US", crop="maize", nrmse=0.22, r2=0.48),
+        ]
+    )
+    sl = build_radar_slice(df, batch_horizon="eos", crop="maize")
+    xgb = next(f for f in sl["families"] if f["model"] == "xgboost")
+    assert xgb["raw"]["r2"] == pytest.approx(0.495, abs=0.01)
+
+
 def test_build_paper_family_table_latex_includes_r2():
     rows = []
     for crop, country, model, nrmse, r2 in [

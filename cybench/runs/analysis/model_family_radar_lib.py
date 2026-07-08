@@ -282,7 +282,7 @@ def _records_from_medians(
         raw_row = medians.loc[model_key]
         raw: dict[str, float | None] = {}
         iqr: dict[str, dict[str, float | None]] = {}
-        for col in RAW_TABLE_METRICS:
+        for col in VIEW_METRICS:
             if col not in raw_row.index:
                 continue
             val = raw_row.get(col)
