@@ -354,7 +354,7 @@ configure_parallelism() {
 configure_hpo_extras() {
   local -n _extra=$1
   if [[ "${HP_SEARCH}" == "yes" ]]; then
-    _extra+=(+hp_search=bayesian hp_search.n_trials="${HP_TRIALS:-100}")
+    _extra+=(+hp_search=bayesian hp_search.n_trials="${HP_TRIALS:-20}")
     _extra+=(
       "hp_search.storage.url=sqlite:///${TMPDIR:-/tmp}/optuna_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}.db"
     )
@@ -482,13 +482,35 @@ plan_walk_forward_seeds() {
 }
 
 # Single-seed walk-forward task (GPU manifest with 8th column). Sets WF_RUN_DIR, WF_START_SEED, WF_RUN_REPS=1.
-# Returns 0 run, 1 skip (seed present), 2 error (seed>base without run dir).
+# Returns 0 run, 1 skip (seed present), 2 error (timed out waiting for base-seed run dir).
 plan_walk_forward_single_seed() {
   local crop=$1 country=$2 model_slug=$3 seed=$4
   local base=${WF_BASE_SEED:-42}
   local run_dir=""
+  local wait_secs=${WF_SEED_WAIT_SECS:-7200}
+  local interval=${WF_SEED_WAIT_INTERVAL:-30}
+  local elapsed=0
 
-  run_dir=$(find_latest_walk_forward_run_dir "${crop}" "${country}" "${model_slug}")
+  # Parallel per-seed arrays may start seed 43+ before seed ${base} creates the run dir.
+  while true; do
+    run_dir=$(find_latest_walk_forward_run_dir "${crop}" "${country}" "${model_slug}")
+    if [[ -n "${run_dir}" && -d "${run_dir}" ]]; then
+      break
+    fi
+    if [[ "${seed}" == "${base}" ]]; then
+      break
+    fi
+    if [[ "${elapsed}" -eq 0 ]]; then
+      echo "[WAIT] Seed ${seed} waiting for walk-forward run dir (seed ${base})..." >&2
+    fi
+    if [[ "${elapsed}" -ge "${wait_secs}" ]]; then
+      echo "[ERROR] Seed ${seed} timed out after ${wait_secs}s waiting for walk-forward run (seed ${base})" >&2
+      return 2
+    fi
+    sleep "${interval}"
+    elapsed=$((elapsed + interval))
+  done
+
   if [[ -n "${run_dir}" && -d "${run_dir}" ]]; then
     local -a existing=()
     mapfile -t existing < <(discover_run_seeds_py "${run_dir}")
@@ -500,9 +522,6 @@ plan_walk_forward_single_seed() {
       fi
     done
     WF_RUN_DIR="$(cd "${run_dir}" && pwd)"
-  elif [[ "${seed}" != "${base}" ]]; then
-    echo "[ERROR] Seed ${seed} requires existing walk-forward run (run seed ${base} first)" >&2
-    return 2
   else
     WF_RUN_DIR=""
   fi

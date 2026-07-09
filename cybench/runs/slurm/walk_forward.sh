@@ -52,9 +52,13 @@ WF_START_SEED="${WF_BASE_SEED}"
 WF_RUN_REPS="${WF_REPETITIONS}"
 
 if [[ -n "${WF_SEED:-}" ]]; then
-  if ! plan_walk_forward_single_seed "${CROP}" "${COUNTRY}" "${MODEL}" "${WF_SEED}"; then
-    exit 0
-  fi
+  plan_walk_forward_single_seed "${CROP}" "${COUNTRY}" "${MODEL}" "${WF_SEED}"
+  wf_plan_rc=$?
+  case "${wf_plan_rc}" in
+    0) ;;
+    1) exit 0 ;; # seed already present
+    *) exit 1 ;; # timeout / planning error — do not mask as success
+  esac
 elif ! plan_walk_forward_seeds "${CROP}" "${COUNTRY}" "${MODEL}"; then
   exit 0
 fi
