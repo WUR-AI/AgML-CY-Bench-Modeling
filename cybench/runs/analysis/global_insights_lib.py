@@ -132,7 +132,7 @@ def dashboard_href_for_paper_dir(paper_dir_name: str) -> str | None:
     return f"{slug}/dashboard.html"
 
 
-def build_dashboard_hrefs(output_root: Path, *, version: int = 1) -> dict[str, dict[str, str]]:
+def build_dashboard_hrefs(output_root: Path, *, version: int = 2) -> dict[str, dict[str, str]]:
     """Map CY-Bench country code -> horizon (``eos``/``mid``) -> dashboard HTML href."""
     hrefs: dict[str, dict[str, str]] = {}
     for path in discover_summary_tables(output_root, version=version):
@@ -146,7 +146,7 @@ def build_dashboard_hrefs(output_root: Path, *, version: int = 1) -> dict[str, d
     return hrefs
 
 
-def discover_summary_tables(output_root: Path, *, version: int = 1) -> list[Path]:
+def discover_summary_tables(output_root: Path, *, version: int = 2) -> list[Path]:
     """Return walk_forward_summary.csv paths under paper_walk_forward_* dirs."""
     if not output_root.is_dir():
         return []
@@ -1289,7 +1289,7 @@ def build_crop_comparison_payload(df: pd.DataFrame) -> dict[str, dict[str, Any]]
     return out
 
 
-def build_insights_payload(output_root: Path, *, version: int = 1) -> dict[str, Any]:
+def build_insights_payload(output_root: Path, *, version: int = 2) -> dict[str, Any]:
     """Build JSON-serializable payload for the global insights dashboard."""
     paths = discover_summary_tables(output_root, version=version)
     df = load_summary_frame(paths)

@@ -95,7 +95,7 @@ def main() -> int:
         type=Path,
         default=Path("/lustre/backup/SHARED/AIN/agml/output"),
     )
-    parser.add_argument("--version", type=int, default=3)
+    parser.add_argument("--version", type=int, default=2)
     parser.add_argument("--crop", help="Optional crop filter (maize, wheat, ...)")
     parser.add_argument(
         "--min-sample-ratio",

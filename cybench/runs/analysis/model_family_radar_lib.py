@@ -990,7 +990,7 @@ def build_paper_family_table_latex(
 def build_radar_payload(
     output_root: Path,
     *,
-    version: int = 1,
+    version: int = 2,
     representatives: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """JSON payload for the model-family radar dashboard."""

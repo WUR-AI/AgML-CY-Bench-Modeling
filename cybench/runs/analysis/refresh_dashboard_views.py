@@ -76,7 +76,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--publish-root", type=Path, required=True)
-    parser.add_argument("--version", type=int, default=3, help="Batch version (default: 3)")
+    parser.add_argument("--version", type=int, default=2, help="Batch version (default: 2)")
     parser.add_argument("--country", action="append", dest="countries", metavar="CC")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

@@ -66,7 +66,7 @@ def main() -> int:
         default=Path("/lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard"),
         help="GitHub Pages clone root (used when --dest is omitted)",
     )
-    parser.add_argument("--version", type=int, default=3, help="Batch version tag (default: 3)")
+    parser.add_argument("--version", type=int, default=2, help="Batch version tag (default: 2)")
     args = parser.parse_args()
 
     dest = args.dest or (args.publish_root / "model_families.html")

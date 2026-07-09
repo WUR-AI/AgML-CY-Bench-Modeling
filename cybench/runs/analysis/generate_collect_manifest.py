@@ -92,7 +92,7 @@ def main() -> int:
         "--version",
         type=int,
         metavar="N",
-        help="Limit to batch version suffix (e.g. 3 for baselines_DE_eos_v3)",
+        help="Limit to batch version suffix (e.g. 2 for baselines_DE_eos_v2)",
     )
     parser.add_argument(
         "--plot",

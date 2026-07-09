@@ -5,7 +5,7 @@ Example::
 
     poetry run python cybench/runs/analysis/country_significance_tests.py \\
         --output-root /lustre/backup/SHARED/AIN/agml/output \\
-        --version 3 \\
+        --version 2 \\
         --horizon eos \\
         --latex-table ai_bootstrap_table.tex
 """
@@ -36,7 +36,7 @@ def main() -> int:
         default=Path("/lustre/backup/SHARED/AIN/agml/output"),
         help="Root containing paper_walk_forward_* collect directories",
     )
-    parser.add_argument("--version", type=int, default=3, help="Collect batch version tag")
+    parser.add_argument("--version", type=int, default=2, help="Collect batch version tag")
     parser.add_argument("--horizon", default="eos", help="Batch horizon slug (default: eos)")
     parser.add_argument(
         "--crops",
