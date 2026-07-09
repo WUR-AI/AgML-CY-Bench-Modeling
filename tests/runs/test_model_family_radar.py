@@ -24,6 +24,7 @@ from cybench.runs.analysis.model_family_radar_lib import (
     summarize_sample_scatter,
     _ai_benefit_map_slice,
 )
+from cybench.runs.analysis.country_significance_lib import build_country_bootstrap_payload
 
 
 def _summary_row(model: str, **metrics: float) -> dict:
@@ -366,6 +367,37 @@ def test_summarize_sample_scatter_reports_percentiles():
     assert summary["x_max"] == 10000
 
 
+def test_build_country_bootstrap_payload():
+    df = pd.DataFrame(
+        [
+            _summary_row("trend", country="DE", crop="maize", nrmse=0.20),
+            _summary_row("lightgbm", country="DE", crop="maize", nrmse=0.14),
+            _summary_row("trend", country="FR", crop="maize", nrmse=0.22),
+            _summary_row("lightgbm", country="FR", crop="maize", nrmse=0.19),
+            _summary_row("trend", country="DE", crop="wheat", nrmse=0.18),
+            _summary_row("tabicl", country="DE", crop="wheat", nrmse=0.14),
+        ]
+    )
+    payload = build_country_bootstrap_payload(df, n_bootstrap=200, seed=0)
+    assert "eos" in payload["by_horizon"]
+    assert "maize" in payload["by_horizon"]["eos"]
+    assert payload["by_horizon"]["eos"]["maize"]["n_countries"] == 2
+
+
+def test_build_radar_payload_includes_country_bootstrap(tmp_path: Path):
+    d = tmp_path / "paper_walk_forward_de_eos_v1"
+    d.mkdir(parents=True)
+    pd.DataFrame(
+        [
+            _summary_row("trend", country="DE", nrmse=0.20),
+            _summary_row("lightgbm", country="DE", nrmse=0.14),
+        ]
+    ).to_csv(d / "walk_forward_summary.csv", index=False)
+    payload = build_radar_payload(tmp_path, version=1)
+    assert "country_bootstrap" in payload
+    assert payload["country_bootstrap"]["n_bootstrap"] == 10_000
+
+
 def test_build_radar_html_embeds_payload(tmp_path: Path):
     d = tmp_path / "paper_walk_forward_de_eos_v1"
     d.mkdir(parents=True)
@@ -380,6 +412,8 @@ def test_build_radar_html_embeds_payload(tmp_path: Path):
     assert 'id="map-export-png"' in html
     assert 'id="table-export-latex"' in html
     assert "buildMetricsTableLatex" in html
+    assert 'id="bootstrap-export-latex"' in html
+    assert "buildBootstrapTableLatex" in html
     assert "booktabs" in html
 
 

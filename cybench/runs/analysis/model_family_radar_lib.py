@@ -1013,6 +1013,8 @@ def build_radar_payload(
         by_horizon[hz] = by_crop
 
     crops = sorted({str(c) for c in df["crop"].dropna().unique()}) if "crop" in df.columns else []
+    from cybench.runs.analysis.country_significance_lib import build_country_bootstrap_payload
+
     benchmark_map_isos = (
         sorted({map_iso_for_cybencH(str(c)) for c in df["country"].dropna().unique()})
         if "country" in df.columns
@@ -1044,6 +1046,9 @@ def build_radar_payload(
         "winner_maps": build_winner_map_payload(df, representatives=representatives),
         "ai_benefit_maps": build_ai_benefit_map_payload(df, representatives=representatives),
         "ai_benefit_note": AI_BENEFIT_NOTE,
+        "country_bootstrap": build_country_bootstrap_payload(
+            df, representatives=representatives
+        ),
         "radar_scales": radar_scales_payload(),
         "relative_note": RADAR_NORMALIZATION_NOTE,
         "absolute_note": RADAR_ABSOLUTE_NOTE,

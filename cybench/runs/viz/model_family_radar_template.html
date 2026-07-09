@@ -300,6 +300,30 @@
       </div>
       <p class="muted winner-summary" id="winner-summary"></p>
     </div>
+
+    <div class="card" id="country-bootstrap-card">
+      <h2>Country-level AI advantage (bootstrap)</h2>
+      <p class="muted" id="bootstrap-note"></p>
+      <div class="table-scroll">
+        <table id="bootstrap-table">
+          <thead>
+            <tr>
+              <th>Crop</th>
+              <th>Countries</th>
+              <th>Median ΔNRMSE (%)</th>
+              <th>95% CI</th>
+              <th>AI win rate</th>
+              <th>95% CI</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="export-toolbar">
+        <button type="button" id="bootstrap-export-latex">Download table (LaTeX)</button>
+        <button type="button" id="bootstrap-export-latex-copy">Copy LaTeX</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -329,7 +353,13 @@
     const mapExportPngBtn = document.getElementById("map-export-png");
     const tableExportLatexBtn = document.getElementById("table-export-latex");
     const tableExportLatexCopyBtn = document.getElementById("table-export-latex-copy");
+    const bootstrapNote = document.getElementById("bootstrap-note");
+    const bootstrapTable = document.getElementById("bootstrap-table");
+    const bootstrapExportLatexBtn = document.getElementById("bootstrap-export-latex");
+    const bootstrapExportLatexCopyBtn = document.getElementById("bootstrap-export-latex-copy");
+    const countryBootstrapCard = document.getElementById("country-bootstrap-card");
 
+    let currentBootstrapRows = [];
     let currentTableFamilies = [];
 
     const MAP_FILL_OUTSIDE = "#e8eaed";
@@ -835,6 +865,140 @@ ${bodyRows}
       return DATA.table_columns || DATA.views;
     }
 
+    function bootstrapPayloadRoot() {
+      return DATA.country_bootstrap || {};
+    }
+
+    function bootstrapCropsForSelect() {
+      const crop = cropSelect.value;
+      if (crop !== "all") return [crop];
+      const hz = horizonSelect.value;
+      const byHz = (bootstrapPayloadRoot().by_horizon || {})[hz] || {};
+      const keys = Object.keys(byHz);
+      if (keys.length) return keys.sort();
+      return (DATA.crops || []).slice().sort();
+    }
+
+    function formatBootstrapNum(value, digits = 1) {
+      if (value == null || !Number.isFinite(value)) return "—";
+      return Number(value).toFixed(digits);
+    }
+
+    function formatBootstrapCi(lo, hi, { digits = 1, percent = false } = {}) {
+      if (lo == null || hi == null || !Number.isFinite(lo) || !Number.isFinite(hi)) return "—";
+      if (percent) {
+        return `[${Math.round(100 * lo)}, ${Math.round(100 * hi)}]`;
+      }
+      return `[${Number(lo).toFixed(digits)}, ${Number(hi).toFixed(digits)}]`;
+    }
+
+    function currentBootstrapRowsForView() {
+      const hz = horizonSelect.value;
+      const byHz = (bootstrapPayloadRoot().by_horizon || {})[hz] || {};
+      return bootstrapCropsForSelect()
+        .filter(crop => byHz[crop])
+        .map(crop => ({ crop, ...byHz[crop] }));
+    }
+
+    function renderBootstrapTable() {
+      const root = bootstrapPayloadRoot();
+      const nBoot = root.n_bootstrap;
+      if (bootstrapNote) {
+        const note = root.note || (
+          "Best data-driven vs best traditional baseline per country; seed-averaged NRMSE."
+        );
+        bootstrapNote.textContent = nBoot
+          ? `${note} Bootstrap replicates: ${nBoot.toLocaleString()}.`
+          : note;
+      }
+      currentBootstrapRows = currentBootstrapRowsForView();
+      if (countryBootstrapCard) {
+        countryBootstrapCard.style.display = currentBootstrapRows.length ? "" : "none";
+      }
+      if (!bootstrapTable) return;
+      const tbody = bootstrapTable.querySelector("tbody");
+      if (!currentBootstrapRows.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="muted">No bootstrap summary for this horizon/crop.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = currentBootstrapRows.map(row => {
+        const wr = row.win_rate;
+        return `<tr>
+          <td>${row.crop.charAt(0).toUpperCase() + row.crop.slice(1)}</td>
+          <td>${row.n_ai_wins ?? "—"}/${row.n_countries ?? "—"}</td>
+          <td>${formatBootstrapNum(row.median_delta_pct)}</td>
+          <td>${formatBootstrapCi(row.delta_pct_ci_lo, row.delta_pct_ci_hi)}</td>
+          <td>${wr == null ? "—" : `${Math.round(100 * wr)}%`}</td>
+          <td>${formatBootstrapCi(row.win_rate_ci_lo, row.win_rate_ci_hi, { percent: true })}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function bootstrapExportMeta() {
+      const hz = horizonSelect.value;
+      const crop = cropSelect.value;
+      const hzLabel = horizonLabels[hz] || hz;
+      const cropLabel = crop === "all" ? "maize-wheat" : crop;
+      return { hz, crop, hzLabel, cropLabel };
+    }
+
+    function bootstrapExportFilename() {
+      const { hz, crop } = bootstrapExportMeta();
+      return `ai_country_bootstrap_${hz}_${crop}.tex`;
+    }
+
+    function buildBootstrapTableLatex(rows) {
+      if (!rows.length) return "";
+      const { hzLabel, cropLabel } = bootstrapExportMeta();
+      const nBoot = (bootstrapPayloadRoot().n_bootstrap || 10000).toLocaleString();
+      const bodyRows = rows.map(row => {
+        const wr = row.win_rate == null ? "---" : `${Math.round(100 * row.win_rate)}\\%`;
+        const wrCi = formatBootstrapCi(row.win_rate_ci_lo, row.win_rate_ci_hi, { percent: true });
+        const pctCi = formatBootstrapCi(row.delta_pct_ci_lo, row.delta_pct_ci_hi);
+        return `${row.crop.charAt(0).toUpperCase() + row.crop.slice(1)} & `
+          + `${formatBootstrapNum(row.median_delta_pct)} & ${pctCi} & ${wr} & ${wrCi} \\\\`;
+      }).join("\n");
+      return `% CY-Bench country-level AI bootstrap table (generated from dashboard)
+% Requires: \\usepackage{booktabs}
+\\begin{table}[t]
+\\centering
+\\caption{Country-level bootstrap summary of AI advantage over traditional baselines (best data-driven vs.\\ best among Average, Trend, and LPJmL per country). Median $\\Delta$NRMSE is reported as percent improvement; win rate is the fraction of countries where AI achieved lower NRMSE. Horizon: ${escapeLatex(hzLabel)}; crops: ${escapeLatex(cropLabel)}. Countries resampled with replacement ($B=${nBoot}$); intervals are percentile 95\\% bootstrap CIs.}
+\\label{tab:ai_country_bootstrap}
+\\begin{tabular}{lcccc}
+\\toprule
+Crop & Median $\\Delta$NRMSE (\\%) & 95\\% CI & AI win rate & 95\\% CI \\\\
+\\midrule
+${bodyRows}
+\\bottomrule
+\\end{tabular}
+\\end{table}
+`;
+    }
+
+    function downloadBootstrapTableLatex() {
+      const latex = buildBootstrapTableLatex(currentBootstrapRows);
+      if (!latex) return;
+      triggerBlobDownload(
+        new Blob([latex], { type: "text/plain;charset=utf-8" }),
+        bootstrapExportFilename(),
+      );
+    }
+
+    async function copyBootstrapTableLatex() {
+      const latex = buildBootstrapTableLatex(currentBootstrapRows);
+      if (!latex || !bootstrapExportLatexCopyBtn) return;
+      const original = bootstrapExportLatexCopyBtn.textContent;
+      try {
+        await navigator.clipboard.writeText(latex);
+        bootstrapExportLatexCopyBtn.textContent = "Copied!";
+        setTimeout(() => { bootstrapExportLatexCopyBtn.textContent = original; }, 1600);
+      } catch (_err) {
+        downloadBootstrapTableLatex();
+        bootstrapExportLatexCopyBtn.textContent = "Downloaded instead";
+        setTimeout(() => { bootstrapExportLatexCopyBtn.textContent = original; }, 1600);
+      }
+    }
+
     function renderTable(families) {
       currentTableFamilies = families;
       const cols = tableColumns();
@@ -1166,6 +1330,8 @@ ${bodyRows}
     if (mapExportPngBtn) mapExportPngBtn.addEventListener("click", downloadMapPng);
     if (tableExportLatexBtn) tableExportLatexBtn.addEventListener("click", downloadMetricsTableLatex);
     if (tableExportLatexCopyBtn) tableExportLatexCopyBtn.addEventListener("click", copyMetricsTableLatex);
+    if (bootstrapExportLatexBtn) bootstrapExportLatexBtn.addEventListener("click", downloadBootstrapTableLatex);
+    if (bootstrapExportLatexCopyBtn) bootstrapExportLatexCopyBtn.addEventListener("click", copyBootstrapTableLatex);
 
     function loadWinnerMapGeometry() {
       if (!DATA.geojson_href) {
@@ -1192,6 +1358,7 @@ ${bodyRows}
       renderTable(families);
       renderScatter();
       renderWorldMap();
+      renderBootstrapTable();
     }
 
     horizonSelect.addEventListener("change", () => {
