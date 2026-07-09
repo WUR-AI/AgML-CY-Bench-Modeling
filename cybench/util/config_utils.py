@@ -52,8 +52,44 @@ def remove_keys(model_cfg: DictConfig, key="_search_") -> DictConfig:
 
     return cast(DictConfig, OmegaConf.create(_clean(cfg_dict)))
 
+
 def remove_search_keys(model_cfg: DictConfig) -> DictConfig:
     return remove_keys(model_cfg, key="_search_")
+
+
+def is_cybench_force_cpu() -> bool:
+    """True when Slurm submit_array.sh --cpu exported CYBENCH_FORCE_CPU=1."""
+    val = os.environ.get("CYBENCH_FORCE_CPU", "").strip().lower()
+    return val in ("1", "true", "yes", "on")
+
+
+def walk_forward_force_cpu(cfg: DictConfig) -> bool:
+    """Whether walk-forward should override device in frozen optimal_model.yaml."""
+    if is_cybench_force_cpu():
+        return True
+    if OmegaConf.select(cfg, "model.device") == "cpu":
+        return True
+    return OmegaConf.select(cfg, "experiment.device") == "cpu"
+
+
+def apply_force_cpu_to_frozen_model_cfg(model_cfg: DictConfig) -> DictConfig:
+    """
+    Override device fields baked into screening optimal_model.yaml for CPU runs.
+
+    Walk-forward loads the frozen config wholesale; without this, TabDPT and other
+    GPU-screened models keep device=cuda even on the main partition.
+    """
+    cfg_out = cast(DictConfig, OmegaConf.create(OmegaConf.to_container(model_cfg)))
+    with open_dict(cfg_out):
+        if "device" in cfg_out:
+            cfg_out.device = "cpu"
+        if "allow_cpu_fallback" in cfg_out:
+            cfg_out.allow_cpu_fallback = True
+        torch_model = cfg_out.get("torch_model")
+        if torch_model is not None and "device" in torch_model:
+            with open_dict(torch_model):
+                torch_model.device = "cpu"
+    return cfg_out
 
 
 def reload_config_with_overrides(
@@ -72,7 +108,6 @@ def reload_config_with_overrides(
     with initialize_config_dir(config_dir=str(config_dir.absolute()), version_base=None):
         cfg = compose(config_name=config_name, overrides=overrides)
     return cfg
-
 
 
 def get_run_description(overrides_path: pathlib.Path) -> str:

@@ -21,7 +21,13 @@ from cybench.datasets.data_factory import DataFactory
 from cybench.datasets.dataset import PandasDataset
 from cybench.evaluation.eval import evaluate_predictions
 from cybench.evaluation.aggregated_metrics import compute_report_metrics, format_report_metrics
-from cybench.util.config_utils import adjust_model_cfg_to_dataset, set_seed, remove_search_keys
+from cybench.util.config_utils import (
+    adjust_model_cfg_to_dataset,
+    apply_force_cpu_to_frozen_model_cfg,
+    remove_search_keys,
+    set_seed,
+    walk_forward_force_cpu,
+)
 from cybench.util.optuna_hyper_opt import OptunaOptimizer
 from cybench.util.store_and_cache import make_folder, save_preds, save_meta_dict
 from cybench.util.feature_selection import (
@@ -218,6 +224,14 @@ def main(cfg):
         fs_cfg: DictConfig | None = None
         if is_walk_forward:
             model_cfg = cast(DictConfig, OmegaConf.create(OmegaConf.to_container(frozen_model_cfg)))
+            if walk_forward_force_cpu(cfg):
+                prev_device = OmegaConf.select(model_cfg, "device")
+                model_cfg = apply_force_cpu_to_frozen_model_cfg(model_cfg)
+                if prev_device and prev_device != "cpu":
+                    log.info(
+                        "Walk-forward force CPU: frozen model device %s → cpu",
+                        prev_device,
+                    )
             fs_cfg = (
                 cast(DictConfig, OmegaConf.create(OmegaConf.to_container(frozen_fs_cfg)))
                 if frozen_fs_cfg is not None
