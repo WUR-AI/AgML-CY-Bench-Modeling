@@ -39,7 +39,7 @@ Options:
   --dry-run           With --submit: no sbatch
   --cpu               Force torch/TabPFN group to CPU partition
   --force-gpu         Use gpu partition even when regions < threshold
-  --region-threshold N  gpu when country has >= N regions (default: 105)
+  --region-threshold N  gpu when country has >= N regions (default: 600)
 
 Examples:
   orchestrate_benchmark_complete.sh --country DE --horizons eos mid --list

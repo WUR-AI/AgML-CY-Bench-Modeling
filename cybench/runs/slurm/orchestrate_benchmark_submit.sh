@@ -30,7 +30,7 @@ Options:
   --dry-run           Print submit_benchmark.sh commands without sbatch
   --countries CC ...  Limit to these countries (default: all with data on disk)
   --horizon H ...     eos | mid | qtr | early (alias early-season; repeatable)
-  --region-threshold N  gpu partition when country has >= N regions (default: 105)
+  --region-threshold N  gpu partition when country has >= N regions (default: 600)
   --version N         Batch version suffix (default: 3)
   --phase MODE        screening | walk_forward | all (default: all)
   --repetitions N     Walk-forward seeds 42..42+N-1 (passed to submit_benchmark.sh)
@@ -73,7 +73,7 @@ FORCE=false
 ALL_COUNTRIES=false
 PHASE_MODE="all"
 VERSION=3
-REGION_THRESHOLD=105
+REGION_THRESHOLD=600
 MAX_BATCHES=0
 MANIFEST_ROOT="${SLURM_DIR}/manifests"
 DATA_DIR=""

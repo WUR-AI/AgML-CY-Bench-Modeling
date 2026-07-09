@@ -85,15 +85,16 @@ def test_resolve_batch_dir_and_parse_batch_name(tmp_path: Path):
 def test_gpu_region_threshold_default_routes_fr_to_cpu(tmp_path: Path, monkeypatch):
     from cybench.runs.slurm import benchmark_submit_lib as lib
 
-    assert lib.DEFAULT_GPU_REGION_THRESHOLD == 105
+    assert lib.DEFAULT_GPU_REGION_THRESHOLD == 600
 
     def _fake_count(country: str, data_dir=None) -> int:
-        return {"FR": 100, "IT": 105, "DE": 200}[country.upper()]
+        return {"FR": 100, "DE": 397, "IN": 557, "US": 2509}[country.upper()]
 
     monkeypatch.setattr(lib, "count_regions", _fake_count)
     assert lib.gpu_partition_for_country("FR")[0] is False
-    assert lib.gpu_partition_for_country("IT")[0] is True
-    assert lib.gpu_partition_for_country("DE")[0] is True
+    assert lib.gpu_partition_for_country("DE")[0] is False
+    assert lib.gpu_partition_for_country("IN")[0] is False
+    assert lib.gpu_partition_for_country("US")[0] is True
 
 
 def test_expand_all_country_targets():

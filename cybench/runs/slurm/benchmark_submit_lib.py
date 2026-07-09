@@ -12,7 +12,7 @@ from pathlib import Path
 from cybench.config import DATASETS, PATH_DATA_DIR
 
 # Countries with at least this many regions use the gpu SLURM partition for torch/TabPFN.
-DEFAULT_GPU_REGION_THRESHOLD = 105
+DEFAULT_GPU_REGION_THRESHOLD = 600
 
 _BATCH_RE = re.compile(
     r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid|qtr|early)_v(?P<version>\d+)$"
