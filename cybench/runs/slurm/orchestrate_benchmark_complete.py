@@ -272,6 +272,7 @@ def _process_batch(
         horizon=horizon,
         repo_root=_REPO_ROOT,
         data_dir=args.data_dir,
+        wf_repetitions=args.repetitions,
     )
     retry_jobs = jobs_for_phase(assessments, args.phase, force_rerun=args.force_rerun)
 

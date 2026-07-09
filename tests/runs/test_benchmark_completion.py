@@ -299,3 +299,39 @@ def test_expand_walk_forward_gpu_per_seed(tmp_path: Path):
     assert sum(1 for line in lines if "lstm_lf" in line) == 4
     assert sum(1 for line in lines if "ridge" in line) == 1
     assert all("ridge" not in line or line.count(" ") == 6 for line in lines if "ridge" in line)
+
+
+def test_walk_forward_complete_requires_all_repetitions(tmp_path: Path):
+    from cybench.runs.slurm.benchmark_completion_lib import (
+        JobRow,
+        walk_forward_complete,
+    )
+
+    repo = tmp_path / "repo"
+    baselines = tmp_path / "output" / "baselines_EL_early_v2"
+    run_dir = baselines / "maize_EL_tst_lf_walk_forward_early_season_20260709_120000"
+    pred = "adm_id,year,targets,preds\nEL-01,2019,10,9\n"
+    for seed in (42, 43):
+        d = run_dir / "2019" / str(seed)
+        d.mkdir(parents=True)
+        (d / "test_preds.csv").write_text(pred, encoding="utf-8")
+
+    job = JobRow("maize", "EL", "tst_lf", "torch", "yes", "no", "yes")
+    ok_any, _ = walk_forward_complete(
+        baselines,
+        job,
+        horizon_tag_value="early_season",
+        repo_root=repo,
+    )
+    assert ok_any is True
+
+    ok_all, reason = walk_forward_complete(
+        baselines,
+        job,
+        horizon_tag_value="early_season",
+        repo_root=repo,
+        total_repetitions=5,
+    )
+    assert ok_all is False
+    assert "missing walk-forward seeds" in reason
+    assert "[44, 45, 46]" in reason

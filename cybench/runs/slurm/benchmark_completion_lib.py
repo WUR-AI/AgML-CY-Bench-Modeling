@@ -304,6 +304,8 @@ def walk_forward_complete(
     *,
     horizon_tag_value: str,
     repo_root: Path,
+    base_seed: int = 42,
+    total_repetitions: int | None = None,
 ) -> tuple[bool, str]:
     run_dir = _latest_run(
         baselines_dir,
@@ -316,10 +318,20 @@ def walk_forward_complete(
     )
     if run_dir is None:
         return False, "no walk-forward run"
-    seeds = discover_run_seeds(run_dir)
-    if not seeds:
+    existing = set(discover_run_seeds(run_dir))
+    if not existing:
         return False, "no walk-forward predictions"
-    for seed in seeds:
+    if total_repetitions is not None:
+        targets = target_walk_forward_seeds(
+            base_seed=base_seed, total_repetitions=total_repetitions
+        )
+        missing = [seed for seed in targets if seed not in existing]
+        if missing:
+            return False, f"missing walk-forward seeds {missing} in {run_dir.name}"
+        check_seeds = targets
+    else:
+        check_seeds = sorted(existing)
+    for seed in check_seeds:
         try:
             load_pooled_predictions(run_dir, model_slug=job.model, seed=seed)
         except ValueError as exc:
@@ -336,6 +348,8 @@ def assess_job(
     data_dir: Path | None = None,
     min_year: int = DEFAULT_MIN_YEAR,
     max_year: int = DEFAULT_MAX_YEAR,
+    wf_repetitions: int | None = None,
+    wf_base_seed: int = 42,
 ) -> JobAssessment:
     hz_tag = horizon_tag(horizon)
     years = load_yield_years(
@@ -362,7 +376,12 @@ def assess_job(
         baselines_dir, job, horizon_tag_value=hz_tag, repo_root=repo_root
     )
     wf_ok, wf_reason = walk_forward_complete(
-        baselines_dir, job, horizon_tag_value=hz_tag, repo_root=repo_root
+        baselines_dir,
+        job,
+        horizon_tag_value=hz_tag,
+        repo_root=repo_root,
+        base_seed=wf_base_seed,
+        total_repetitions=wf_repetitions,
     )
     if not scr_ok:
         wf_reason = "waiting for screening"
@@ -385,6 +404,8 @@ def assess_manifest(
     horizon: str,
     repo_root: Path,
     data_dir: Path | None = None,
+    wf_repetitions: int | None = None,
+    wf_base_seed: int = 42,
 ) -> list[JobAssessment]:
     return [
         assess_job(
@@ -393,6 +414,8 @@ def assess_manifest(
             horizon=horizon,
             repo_root=repo_root,
             data_dir=data_dir,
+            wf_repetitions=wf_repetitions,
+            wf_base_seed=wf_base_seed,
         )
         for job in jobs
     ]
