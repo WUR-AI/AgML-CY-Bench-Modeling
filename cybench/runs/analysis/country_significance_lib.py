@@ -112,6 +112,8 @@ def bootstrap_country_ai_metrics(
     """Bootstrap countries; report CIs for median Δ_abs, median Δ%, and win rate."""
     if frame.empty:
         return {
+            "median_nrmse_trad": None,
+            "median_nrmse_ai": None,
             "median_delta_abs": None,
             "delta_abs_ci_lo": None,
             "delta_abs_ci_hi": None,
@@ -127,9 +129,23 @@ def bootstrap_country_ai_metrics(
     delta_pct = frame["delta_pct"].to_numpy(dtype=float)
     ai_wins = frame["ai_wins"].to_numpy(dtype=bool)
     n = delta_abs.size
+    nrmse_trad = (
+        frame["nrmse_trad"].to_numpy(dtype=float)
+        if "nrmse_trad" in frame.columns
+        else np.full(n, np.nan)
+    )
+    nrmse_ai = (
+        frame["nrmse_ai"].to_numpy(dtype=float)
+        if "nrmse_ai" in frame.columns
+        else np.full(n, np.nan)
+    )
+    med_trad = float(np.median(nrmse_trad)) if np.isfinite(nrmse_trad).any() else None
+    med_ai = float(np.median(nrmse_ai)) if np.isfinite(nrmse_ai).any() else None
 
     if n == 1:
         return {
+            "median_nrmse_trad": med_trad,
+            "median_nrmse_ai": med_ai,
             "median_delta_abs": float(delta_abs[0]),
             "delta_abs_ci_lo": float(delta_abs[0]),
             "delta_abs_ci_hi": float(delta_abs[0]),
@@ -157,6 +173,8 @@ def bootstrap_country_ai_metrics(
     wr_lo, wr_hi = _percentile_ci(boot_wr, ci=ci)
 
     return {
+        "median_nrmse_trad": med_trad,
+        "median_nrmse_ai": med_ai,
         "median_delta_abs": float(np.median(delta_abs)),
         "delta_abs_ci_lo": abs_lo,
         "delta_abs_ci_hi": abs_hi,
@@ -256,9 +274,12 @@ def bootstrap_stats_json(result: dict[str, Any]) -> dict[str, Any]:
 
 
 COUNTRY_BOOTSTRAP_NOTE = (
-    "Best data-driven vs best traditional baseline per country (Average, Trend, LPJmL). "
-    "NRMSE is averaged over walk-forward seeds before comparison. Countries are resampled "
-    "with replacement; intervals are percentile 95% bootstrap CIs."
+    "Per country: best traditional NRMSE = min(Average, Trend, LPJmL); best data-driven NRMSE = "
+    "min(feature-engineered, sequence, foundation). NRMSE columns are medians of those "
+    "country-level values. Median improvement (%) is the median of "
+    "100×(traditional−data-driven)/traditional per country. Win rate: fraction of countries "
+    "where data-driven NRMSE is lower. Seed-averaged walk-forward NRMSE; bootstrap resamples "
+    "countries (95% percentile CIs on improvement and win rate)."
 )
 
 
@@ -325,11 +346,18 @@ def _fmt_ci(lo: float | None, hi: float | None, *, digits: int = 1, percent: boo
     return f"[{lo:.{digits}f}, {hi:.{digits}f}]"
 
 
+def _fmt_nrmse_pct(value: float | None) -> str:
+    """Format pooled NRMSE fraction as percent (matches Table 1)."""
+    if value is None or not np.isfinite(value):
+        return "---"
+    return f"{100.0 * float(value):.1f}"
+
+
 def format_results_markdown_table(results: dict[str, dict[str, Any]]) -> str:
     """Paper-style summary table (markdown)."""
     lines = [
-        "| Crop | Median ΔNRMSE (%) | 95% CI | AI win rate | 95% CI |",
-        "|------|-------------------|--------|-------------|--------|",
+        "| Crop | Trad. NRMSE (%) | AI NRMSE (%) | Median improvement (%) | 95% CI | AI win rate | 95% CI |",
+        "|------|-----------------|--------------|------------------------|--------|-------------|--------|",
     ]
     for crop, res in results.items():
         med = res.get("median_delta_pct")
@@ -341,6 +369,8 @@ def format_results_markdown_table(results: dict[str, dict[str, Any]]) -> str:
             + " | ".join(
                 [
                     crop.capitalize(),
+                    _fmt_nrmse_pct(res.get("median_nrmse_trad")),
+                    _fmt_nrmse_pct(res.get("median_nrmse_ai")),
                     _fmt_num(med),
                     _fmt_ci(lo, hi).strip("[]") if lo is not None else "---",
                     f"{100 * wr:.0f}%" if wr is not None else "---",
@@ -363,29 +393,34 @@ def format_results_latex_table(
     """LaTeX table for main paper or supplement."""
     if caption is None:
         caption = (
-            "Country-level bootstrap summary of AI advantage over traditional baselines "
-            "(best data-driven vs.\\ best among Average, Trend, and LPJmL per country). "
-            "Median $\\Delta$NRMSE is reported as percent improvement; win rate is the "
-            "fraction of countries where AI achieved lower NRMSE. Countries were resampled "
-            "with replacement ($B=10{,}000$); intervals are percentile 95\\% bootstrap CIs."
+            "Country-level bootstrap summary of AI advantage over traditional baselines. "
+            "Traditional and data-driven NRMSE are medians across countries of the best "
+            "traditional (Average, Trend, LPJmL) and best data-driven model per country. "
+            "Median improvement (\\%) is the median of "
+            "$100\\times(\\mathrm{NRMSE}_{\\mathrm{trad}}-\\mathrm{NRMSE}_{\\mathrm{AI}})"
+            "/\\mathrm{NRMSE}_{\\mathrm{trad}}$ per country. Win rate: fraction of countries "
+            "where data-driven NRMSE is lower. Bootstrap resamples countries ($B=10{,}000$); "
+            "intervals are percentile 95\\% CIs."
         )
     body_rows: list[str] = []
     for crop, res in results.items():
+        trad = _fmt_nrmse_pct(res.get("median_nrmse_trad"))
+        ai = _fmt_nrmse_pct(res.get("median_nrmse_ai"))
         med = _fmt_num(res.get("median_delta_pct"))
         pct_ci = _fmt_ci(res.get("delta_pct_ci_lo"), res.get("delta_pct_ci_hi"))
         wr = _fmt_pct_rate(res.get("win_rate"))
         wr_ci = _fmt_ci(res.get("win_rate_ci_lo"), res.get("win_rate_ci_hi"), percent=True)
         body_rows.append(
-            f"{crop.capitalize()} & {med} & {pct_ci} & {wr} & {wr_ci} \\\\"
+            f"{crop.capitalize()} & {trad} & {ai} & {med} & {pct_ci} & {wr} & {wr_ci} \\\\"
         )
     body = "\n".join(body_rows)
     return f"""\\begin{{table}}[t]
 \\centering
 \\caption{{{caption}}}
 \\label{{{label}}}
-\\begin{{tabular}}{{lcccc}}
+\\begin{{tabular}}{{lcccccc}}
 \\toprule
-Crop & Median $\\Delta$NRMSE (\\%) & 95\\% CI & AI win rate & 95\\% CI \\\\
+Crop & Trad.\\ NRMSE (\\%) & AI NRMSE (\\%) & Median impr. (\\%) & 95\\% CI & AI win rate & 95\\% CI \\\\
 \\midrule
 {body}
 \\bottomrule

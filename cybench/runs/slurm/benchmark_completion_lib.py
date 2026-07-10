@@ -431,6 +431,11 @@ def filter_jobs_by_models(
     return [job for job in jobs if job.model.lower() in allowed]
 
 
+def filter_jobs_cpu_only(jobs: list[JobRow]) -> list[JobRow]:
+    """Keep naive + CPU-tabular rows (needs_gpu=no); exclude torch / TabPFN / TabDPT."""
+    return [job for job in jobs if job.needs_gpu == "no"]
+
+
 def job_row_key(job: JobRow) -> tuple[str, str, str, str, str, str, str]:
     return (
         job.crop,

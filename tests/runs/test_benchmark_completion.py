@@ -9,6 +9,7 @@ from cybench.runs.slurm.benchmark_completion_lib import (
     assess_job,
     check_screening_years,
     filter_jobs_by_models,
+    filter_jobs_cpu_only,
     jobs_for_phase,
     read_manifest,
     screening_complete,
@@ -109,6 +110,17 @@ def test_filter_jobs_by_models():
     ]
     assert filter_jobs_by_models(jobs, ["lpjml_bc"]) == jobs[1:]
     assert filter_jobs_by_models(jobs, None) == jobs
+
+
+def test_filter_jobs_cpu_only():
+    jobs = [
+        JobRow("maize", "DE", "xgboost", "pandas", "yes", "yes", "no"),
+        JobRow("maize", "DE", "lpjml_bc", "pandas", "no", "no", "no"),
+        JobRow("maize", "DE", "tst_lf", "torch", "yes", "no", "yes"),
+        JobRow("wheat", "DE", "tabdpt", "pandas", "yes", "yes", "yes"),
+    ]
+    cpu = filter_jobs_cpu_only(jobs)
+    assert cpu == jobs[:2]
 
 
 def test_jobs_for_phase_force_rerun_includes_complete():

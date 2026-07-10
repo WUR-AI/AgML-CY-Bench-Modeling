@@ -93,5 +93,7 @@ def test_analyze_country_ai_benefit_returns_bootstrap_fields():
     assert res["win_rate"] == pytest.approx(2 / 3)
     assert res["median_delta_pct"] is not None
     assert res["delta_pct_ci_lo"] is not None
+    assert res["median_nrmse_trad"] == pytest.approx(0.20)
+    assert res["median_nrmse_ai"] == pytest.approx(0.17)
     assert res["median_delta_abs"] is not None
     assert res["delta_abs_ci_lo"] is not None

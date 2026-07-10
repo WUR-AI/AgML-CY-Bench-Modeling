@@ -47,6 +47,7 @@ from cybench.runs.slurm.benchmark_completion_lib import (
     expand_all_country_targets,
     expand_target_batches,
     filter_jobs_by_models,
+    filter_jobs_cpu_only,
     jobs_for_phase,
     merge_jobs_for_models,
     resolve_country_list,
@@ -260,6 +261,13 @@ def _process_batch(
             )
             return 0
 
+    if args.only_cpu:
+        jobs = filter_jobs_cpu_only(jobs)
+        manifest_source = f"{manifest_source} | cpu-models-only"
+        if not jobs:
+            print(f"[WARN] No CPU/naive jobs in manifest for {batch}", file=sys.stderr)
+            return 0
+
     if not baselines_dir.is_dir():
         print(
             f"[WARN] Baselines dir missing (all jobs treated as incomplete): {baselines_dir}",
@@ -453,6 +461,14 @@ def main(argv: list[str] | None = None) -> int:
         "--cpu",
         action="store_true",
         help="Force GPU manifest group to CPU (--cpu on submit_benchmark.sh)",
+    )
+    parser.add_argument(
+        "--only-cpu",
+        action="store_true",
+        help=(
+            "Assess/submit only CPU/naive models (needs_gpu=no); "
+            "exclude tst_lf, tabdpt, TabPFN, etc."
+        ),
     )
     parser.add_argument(
         "--force-gpu",

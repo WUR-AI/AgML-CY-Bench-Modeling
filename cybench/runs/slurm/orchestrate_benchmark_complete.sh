@@ -38,6 +38,7 @@ Options:
   --submit            Write retry manifest and call submit_benchmark.sh
   --dry-run           With --submit: no sbatch
   --cpu               Force torch/TabPFN group to CPU partition
+  --only-cpu          Complete/submit only CPU+naive models (needs_gpu=no)
   --force-gpu         Use gpu partition even when regions < threshold
   --region-threshold N  gpu when country has >= N regions (default: 600)
 
@@ -80,6 +81,7 @@ LIST=false
 SUBMIT=false
 DRY_RUN=false
 FORCE_CPU=false
+ONLY_CPU=false
 FORCE_GPU=false
 REGION_THRESHOLD=""
 
@@ -177,6 +179,10 @@ while [[ $# -gt 0 ]]; do
       FORCE_CPU=true
       shift
       ;;
+    --only-cpu)
+      ONLY_CPU=true
+      shift
+      ;;
     --force-gpu)
       FORCE_GPU=true
       shift
@@ -225,6 +231,7 @@ done
 [[ "${SUBMIT}" == true ]] && cmd+=(--submit)
 [[ "${DRY_RUN}" == true ]] && cmd+=(--dry-run)
 [[ "${FORCE_CPU}" == true ]] && cmd+=(--cpu)
+[[ "${ONLY_CPU}" == true ]] && cmd+=(--only-cpu)
 [[ "${FORCE_GPU}" == true ]] && cmd+=(--force-gpu)
 [[ -n "${REGION_THRESHOLD}" ]] && cmd+=(--region-threshold "${REGION_THRESHOLD}")
 

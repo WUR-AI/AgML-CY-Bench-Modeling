@@ -310,7 +310,9 @@
             <tr>
               <th>Crop</th>
               <th>Countries</th>
-              <th>Median ΔNRMSE (%)</th>
+              <th>Traditional NRMSE (%)</th>
+              <th>Data-driven NRMSE (%)</th>
+              <th>Median improvement (%)</th>
               <th>95% CI</th>
               <th>AI win rate</th>
               <th>95% CI</th>
@@ -879,6 +881,11 @@ ${bodyRows}
       return (DATA.crops || []).slice().sort();
     }
 
+    function formatBootstrapNrmsePct(value) {
+      if (value == null || !Number.isFinite(value)) return "—";
+      return (100 * Number(value)).toFixed(1);
+    }
+
     function formatBootstrapNum(value, digits = 1) {
       if (value == null || !Number.isFinite(value)) return "—";
       return Number(value).toFixed(digits);
@@ -918,7 +925,7 @@ ${bodyRows}
       if (!bootstrapTable) return;
       const tbody = bootstrapTable.querySelector("tbody");
       if (!currentBootstrapRows.length) {
-        tbody.innerHTML = `<tr><td colspan="6" class="muted">No bootstrap summary for this horizon/crop.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="muted">No bootstrap summary for this horizon/crop.</td></tr>`;
         return;
       }
       tbody.innerHTML = currentBootstrapRows.map(row => {
@@ -926,6 +933,8 @@ ${bodyRows}
         return `<tr>
           <td>${row.crop.charAt(0).toUpperCase() + row.crop.slice(1)}</td>
           <td>${row.n_ai_wins ?? "—"}/${row.n_countries ?? "—"}</td>
+          <td>${formatBootstrapNrmsePct(row.median_nrmse_trad)}</td>
+          <td>${formatBootstrapNrmsePct(row.median_nrmse_ai)}</td>
           <td>${formatBootstrapNum(row.median_delta_pct)}</td>
           <td>${formatBootstrapCi(row.delta_pct_ci_lo, row.delta_pct_ci_hi)}</td>
           <td>${wr == null ? "—" : `${Math.round(100 * wr)}%`}</td>
@@ -952,21 +961,23 @@ ${bodyRows}
       const { hzLabel, cropLabel } = bootstrapExportMeta();
       const nBoot = (bootstrapPayloadRoot().n_bootstrap || 10000).toLocaleString();
       const bodyRows = rows.map(row => {
+        const trad = formatBootstrapNrmsePct(row.median_nrmse_trad);
+        const ai = formatBootstrapNrmsePct(row.median_nrmse_ai);
         const wr = row.win_rate == null ? "---" : `${Math.round(100 * row.win_rate)}\\%`;
         const wrCi = formatBootstrapCi(row.win_rate_ci_lo, row.win_rate_ci_hi, { percent: true });
         const pctCi = formatBootstrapCi(row.delta_pct_ci_lo, row.delta_pct_ci_hi);
-        return `${row.crop.charAt(0).toUpperCase() + row.crop.slice(1)} & `
+        return `${row.crop.charAt(0).toUpperCase() + row.crop.slice(1)} & ${trad} & ${ai} & `
           + `${formatBootstrapNum(row.median_delta_pct)} & ${pctCi} & ${wr} & ${wrCi} \\\\`;
       }).join("\n");
       return `% CY-Bench country-level AI bootstrap table (generated from dashboard)
 % Requires: \\usepackage{booktabs}
 \\begin{table}[t]
 \\centering
-\\caption{Country-level bootstrap summary of AI advantage over traditional baselines (best data-driven vs.\\ best among Average, Trend, and LPJmL per country). Median $\\Delta$NRMSE is reported as percent improvement; win rate is the fraction of countries where AI achieved lower NRMSE. Horizon: ${escapeLatex(hzLabel)}; crops: ${escapeLatex(cropLabel)}. Countries resampled with replacement ($B=${nBoot}$); intervals are percentile 95\\% bootstrap CIs.}
+\\caption{Country-level bootstrap summary of AI advantage over traditional baselines. Traditional and data-driven NRMSE are medians across countries of the best traditional (Average, Trend, LPJmL) and best data-driven model per country. Median improvement (\\%) is the median of $100\\times(\\mathrm{NRMSE}_{\\mathrm{trad}}-\\mathrm{NRMSE}_{\\mathrm{AI}})/\\mathrm{NRMSE}_{\\mathrm{trad}}$ per country. Horizon: ${escapeLatex(hzLabel)}; crops: ${escapeLatex(cropLabel)}. Bootstrap resamples countries ($B=${nBoot}$).}
 \\label{tab:ai_country_bootstrap}
-\\begin{tabular}{lcccc}
+\\begin{tabular}{lcccccc}
 \\toprule
-Crop & Median $\\Delta$NRMSE (\\%) & 95\\% CI & AI win rate & 95\\% CI \\\\
+Crop & Trad.\\ NRMSE (\\%) & AI NRMSE (\\%) & Median impr. (\\%) & 95\\% CI & AI win rate & 95\\% CI \\\\
 \\midrule
 ${bodyRows}
 \\bottomrule
