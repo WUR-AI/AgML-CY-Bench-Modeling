@@ -16,6 +16,7 @@ from cybench.runs.analysis.country_significance_lib import (
     family_vs_naive_country_deltas,
     prepare_work_for_family_vs_naive,
 )
+from cybench.runs.analysis.model_family_radar_lib import build_radar_slice
 
 
 def _row(model: str, country: str, nrmse: float, *, crop: str = "maize") -> dict:
@@ -103,6 +104,7 @@ def test_family_vs_naive_country_deltas_nrmse_direction():
             {**_row("lightgbm", "FR", 0.18), "nrmse": 0.18},
         ]
     )
+    reps = {"Naive baselines": "trend", "Feature-Engineered ML": "lightgbm"}
     deltas = family_vs_naive_country_deltas(
         df,
         family_model="lightgbm",
@@ -111,6 +113,47 @@ def test_family_vs_naive_country_deltas_nrmse_direction():
         higher_is_better=False,
     )
     assert deltas.tolist() == pytest.approx([0.06, 0.04])
+
+
+def test_family_vs_naive_skips_country_without_naive_rep():
+    df = pd.DataFrame(
+        [
+            {**_row("average", "DE", 0.20), "nrmse": 0.20},
+            {**_row("lightgbm", "DE", 0.14), "nrmse": 0.14},
+            {**_row("trend", "FR", 0.22), "nrmse": 0.22},
+            {**_row("lightgbm", "FR", 0.18), "nrmse": 0.18},
+        ]
+    )
+    deltas = family_vs_naive_country_deltas(
+        df,
+        family_model="lightgbm",
+        naive_model="trend",
+        metric="nrmse",
+        higher_is_better=False,
+    )
+    assert len(deltas) == 1
+    assert deltas[0] == pytest.approx(0.04)
+
+
+def test_table_median_gap_matches_table_cells():
+    df = pd.DataFrame(
+        [
+            {**_row("trend", "DE", 0.20), "r2": 0.10},
+            {**_row("tabpfn", "DE", 0.16), "r2": 0.45},
+            {**_row("trend", "FR", 0.22), "r2": 0.12},
+            {**_row("tabpfn", "FR", 0.18), "r2": 0.40},
+            {**_row("trend", "NL", 0.21), "r2": 0.50},
+            {**_row("tabpfn", "NL", 0.17), "r2": 0.05},
+            {**_row("trend", "PL", 0.20), "r2": 0.48},
+            {**_row("tabpfn", "PL", 0.19), "r2": 0.06},
+        ]
+    )
+    reps = {"Naive baselines": "trend", "Tabular Foundation": "tabpfn"}
+    slice_ = build_radar_slice(df, batch_horizon="eos")
+    tabpfn = next(f for f in slice_["families"] if f["family"] == "Tabular Foundation")
+    assert tabpfn["vs_naive"]["r2"]["table_median_gap"] == pytest.approx(
+        tabpfn["raw"]["r2"] - next(f for f in slice_["families"] if f["is_naive"])["raw"]["r2"]
+    )
 
 
 def test_build_family_vs_naive_significance_marks_improvement():

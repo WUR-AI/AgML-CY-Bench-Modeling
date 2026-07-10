@@ -327,20 +327,25 @@ def family_vs_naive_country_deltas(
     metric: str,
     higher_is_better: bool,
 ) -> np.ndarray:
-    """Per-country paired improvement; positive => family better than naive."""
+    """Per-country paired improvement; positive => family better than naive.
+
+    Uses the global family and naive representatives only (same models as the table).
+    """
+    from cybench.runs.analysis.model_family_radar_lib import _country_median_metric
+
     column = _resolve_metric_column(work, metric)
-    if work.empty or "country" not in work.columns or column is None:
+    if (
+        work.empty
+        or "country" not in work.columns
+        or column is None
+        or not naive_model
+    ):
         return np.array([], dtype=float)
-    fam_grp = work[work["model"].astype(str) == str(family_model)]
-    naive_grp = work[work["model"].astype(str) == str(naive_model)]
-    countries = sorted(
-        set(fam_grp["country"].dropna().astype(str))
-        & set(naive_grp["country"].dropna().astype(str))
-    )
+
     deltas: list[float] = []
-    for country in countries:
-        fam_val = _country_metric_median(fam_grp, country, column)
-        naive_val = _country_metric_median(naive_grp, country, column)
+    for _, cc_grp in work.groupby("country", sort=True):
+        fam_val = _country_median_metric(cc_grp, family_model, column)
+        naive_val = _country_median_metric(cc_grp, naive_model, column)
         if fam_val is None or naive_val is None:
             continue
         deltas.append((fam_val - naive_val) if higher_is_better else (naive_val - fam_val))
@@ -467,9 +472,9 @@ def build_family_vs_naive_significance(
 
 
 FAMILY_VS_NAIVE_SIG_NOTE = (
-    "* One-sided country bootstrap vs naive family representative (B=10,000): "
-    "median improvement with lower 95% bootstrap bound > 0 (p = one-sided bootstrap p). "
-    "Bold = best family for that metric. Hover cells for Δ, CI, and p."
+    "* One-sided country bootstrap vs naive family representative (B=10,000). "
+    "Hover: median per-country Δ (bootstrap target) and table-median gap "
+    "(difference of the two table cells). Bold = best family for that metric."
 )
 
 

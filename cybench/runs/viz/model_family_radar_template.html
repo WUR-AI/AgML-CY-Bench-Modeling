@@ -437,12 +437,18 @@
       mid: "Mid-season (~50% observed)",
       qtr: "Late season (~75% observed, 25% left)",
     };
-    Object.keys(DATA.by_horizon).forEach(hz => {
-      const opt = document.createElement("option");
-      opt.value = hz;
-      opt.textContent = horizonLabels[hz] || hz;
-      horizonSelect.appendChild(opt);
-    });
+    const horizonOrder = ["eos", "early", "mid", "qtr"];
+    horizonOrder
+      .filter(hz => Object.prototype.hasOwnProperty.call(DATA.by_horizon || {}, hz))
+      .forEach(hz => {
+        const opt = document.createElement("option");
+        opt.value = hz;
+        opt.textContent = horizonLabels[hz] || hz;
+        horizonSelect.appendChild(opt);
+      });
+    if (DATA.by_horizon && DATA.by_horizon.eos) {
+      horizonSelect.value = "eos";
+    }
 
     function populateCropOptions() {
       const hz = horizonSelect.value;
@@ -832,7 +838,10 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       if (stats.median_delta == null) {
         return `Only ${n} countr${n === 1 ? "y" : "ies"} with paired data (bootstrap needs ≥2).`;
       }
-      let text = `vs naive: median Δ = ${Number(stats.median_delta).toFixed(3)}`;
+      let text = `vs naive: median per-country Δ = ${Number(stats.median_delta).toFixed(3)}`;
+      if (stats.table_median_gap != null) {
+        text += `; table median gap = ${Number(stats.table_median_gap) >= 0 ? "+" : ""}${Number(stats.table_median_gap).toFixed(3)}`;
+      }
       if (stats.ci_lo != null && stats.ci_hi != null) {
         text += `, 95% bootstrap CI [${Number(stats.ci_lo).toFixed(3)}, ${Number(stats.ci_hi).toFixed(3)}]`;
       } else if (n < 2) {

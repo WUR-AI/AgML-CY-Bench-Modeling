@@ -564,6 +564,27 @@ def build_family_dataset_rows(
     return rows
 
 
+def _attach_table_median_gaps(
+    vs_naive: dict[str, dict[str, float | bool | int | None]],
+    *,
+    fam_raw: dict[str, float | None],
+    naive_raw: dict[str, float | None],
+) -> dict[str, dict[str, float | bool | int | None]]:
+    """Add table_median_gap = table family median − table naive median per metric."""
+    out: dict[str, dict[str, float | bool | int | None]] = {}
+    for metric, stats in vs_naive.items():
+        merged = dict(stats)
+        fam_val = fam_raw.get(metric)
+        naive_val = naive_raw.get(metric)
+        if fam_val is not None and naive_val is not None:
+            if _metric_higher_is_better(metric):
+                merged["table_median_gap"] = round(float(fam_val) - float(naive_val), 4)
+            else:
+                merged["table_median_gap"] = round(float(naive_val) - float(fam_val), 4)
+        out[metric] = merged
+    return out
+
+
 def build_radar_slice(
     df: pd.DataFrame,
     *,
@@ -600,13 +621,21 @@ def build_radar_slice(
 
     vs_naive = build_family_vs_naive_significance(work_sig, reps)
     empty_vs_naive = empty_family_vs_naive_stats()
+    naive_raw = next(
+        (f["raw"] for f in families if f.get("is_naive")),
+        {},
+    )
     families = [
         {
             **fam,
             "vs_naive": (
                 empty_vs_naive
                 if fam.get("is_naive")
-                else vs_naive.get(fam["family"], empty_vs_naive)
+                else _attach_table_median_gaps(
+                    vs_naive.get(fam["family"], empty_vs_naive),
+                    fam_raw=fam.get("raw") or {},
+                    naive_raw=naive_raw,
+                )
             ),
             "vs_naive_sig": {
                 m: bool(vs_naive.get(fam["family"], {}).get(m, {}).get("significant"))
