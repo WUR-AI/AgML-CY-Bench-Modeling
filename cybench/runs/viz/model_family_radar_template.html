@@ -816,11 +816,18 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       return best;
     }
 
-    function metricSigStar(fam, metric) {
+    function metricSigMarker(fam, metric) {
       if (fam.is_naive || fam.family === "Naive baselines") return "";
       const stats = (fam.vs_naive || {})[metric];
-      const sig = stats && stats.significant;
-      return sig || (fam.vs_naive_sig || {})[metric] ? "*" : "";
+      if (stats && stats.significant_worse) return "†";
+      if (stats && stats.significant) return "*";
+      if ((fam.vs_naive_sig_worse || {})[metric]) return "†";
+      if ((fam.vs_naive_sig || {})[metric]) return "*";
+      return "";
+    }
+
+    function metricSigStar(fam, metric) {
+      return metricSigMarker(fam, metric);
     }
 
     function metricVsNaiveTooltip(fam, metric) {
@@ -848,9 +855,13 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
         text += " (bootstrap CI needs ≥2 countries)";
       }
       if (stats.p_one_sided != null) {
-        text += `, one-sided p = ${Number(stats.p_one_sided).toFixed(3)}`;
+        text += `, p(better) = ${Number(stats.p_one_sided).toFixed(3)}`;
+      }
+      if (stats.p_one_sided_worse != null) {
+        text += `, p(worse) = ${Number(stats.p_one_sided_worse).toFixed(3)}`;
       }
       if (stats.significant) text += " *";
+      if (stats.significant_worse) text += " †";
       text += ` (${n} countries; positive Δ = family better)`;
       return text;
     }
@@ -884,7 +895,8 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
     function formatMetricLatex(fam, metric, isBest) {
       const raw = fam.raw[metric];
       if (raw == null) return "---";
-      const star = metricSigStar(fam, metric) ? "^{*}" : "";
+      const marker = metricSigMarker(fam, metric);
+      const star = marker === "*" ? "^{*}" : marker === "†" ? "^{\\dagger}" : "";
       const band = (fam.iqr || {})[metric];
       const med = Number(raw).toFixed(3);
       let cell = med;

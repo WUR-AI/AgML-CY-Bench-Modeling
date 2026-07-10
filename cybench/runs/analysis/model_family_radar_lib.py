@@ -643,6 +643,12 @@ def build_radar_slice(
                 else False
                 for m in VIEW_METRICS
             },
+            "vs_naive_sig_worse": {
+                m: bool(vs_naive.get(fam["family"], {}).get(m, {}).get("significant_worse"))
+                if not fam.get("is_naive")
+                else False
+                for m in VIEW_METRICS
+            },
         }
         for fam in families
     ]

@@ -90,6 +90,15 @@ def test_bootstrap_family_vs_naive_stats_includes_p_value():
     assert stats["ci_lo"] <= stats["median_delta"] <= stats["ci_hi"]
 
 
+def test_bootstrap_family_vs_naive_stats_marks_significantly_worse():
+    deltas = np.array([-0.05, -0.04, -0.03, -0.02, -0.01])
+    stats = bootstrap_family_vs_naive_stats(deltas, n_bootstrap=2000, seed=3)
+    assert stats["significant_worse"] is True
+    assert stats["significant"] is False
+    assert stats["p_one_sided_worse"] is not None
+    assert stats["p_one_sided_worse"] < 0.05
+
+
 def test_bootstrap_one_sided_not_significant_when_mixed():
     deltas = np.array([0.05, 0.04, -0.03, -0.02, 0.01])
     assert bootstrap_one_sided_significant(deltas, n_bootstrap=2000, seed=2) is False

@@ -370,7 +370,9 @@ def bootstrap_family_vs_naive_stats(
             "ci_lo": None,
             "ci_hi": None,
             "p_one_sided": None,
+            "p_one_sided_worse": None,
             "significant": False,
+            "significant_worse": False,
         }
     median_obs = float(np.median(arr))
     if n < 2:
@@ -380,23 +382,30 @@ def bootstrap_family_vs_naive_stats(
             "ci_lo": None,
             "ci_hi": None,
             "p_one_sided": None,
+            "p_one_sided_worse": None,
             "significant": False,
+            "significant_worse": False,
         }
     rng = np.random.default_rng(seed)
     boots = np.empty(n_bootstrap, dtype=float)
     for i in range(n_bootstrap):
         boots[i] = float(np.median(arr[rng.integers(0, n, size=n)]))
     ci_lo, ci_hi = _percentile_ci(boots, ci=0.95)
-    # One-sided bootstrap p-value (family better than naive).
+    # One-sided: family better than naive (5th percentile of bootstrap medians > 0).
     p_one_sided = float((np.sum(boots <= 0.0) + 1) / (n_bootstrap + 1))
     significant = float(np.quantile(boots, alpha)) > 0.0
+    # One-sided: family worse than naive (95th percentile of bootstrap medians < 0).
+    p_one_sided_worse = float((np.sum(boots >= 0.0) + 1) / (n_bootstrap + 1))
+    significant_worse = float(np.quantile(boots, 1.0 - alpha)) < 0.0
     return {
         "n_countries": int(n),
         "median_delta": round(median_obs, 4),
         "ci_lo": round(ci_lo, 4),
         "ci_hi": round(ci_hi, 4),
         "p_one_sided": round(p_one_sided, 4),
-        "significant": significant,
+        "p_one_sided_worse": round(p_one_sided_worse, 4),
+        "significant": significant and not significant_worse,
+        "significant_worse": significant_worse and not significant,
     }
 
 
@@ -452,7 +461,9 @@ def build_family_vs_naive_significance(
                     "ci_lo": None,
                     "ci_hi": None,
                     "p_one_sided": None,
+                    "p_one_sided_worse": None,
                     "significant": False,
+                    "significant_worse": False,
                 }
                 continue
             deltas = family_vs_naive_country_deltas(
@@ -472,9 +483,10 @@ def build_family_vs_naive_significance(
 
 
 FAMILY_VS_NAIVE_SIG_NOTE = (
-    "* One-sided country bootstrap vs naive family representative (B=10,000). "
-    "Hover: median per-country Δ (bootstrap target) and table-median gap "
-    "(difference of the two table cells). Bold = best family for that metric."
+    "* Family significantly better than naive (one-sided country bootstrap, B=10,000; "
+    "5th percentile of bootstrap medians > 0). "
+    "† Significantly worse (95th percentile < 0). "
+    "Hover: per-country Δ and table-median gap. Bold = best family for that metric."
 )
 
 
@@ -487,7 +499,9 @@ def empty_family_vs_naive_stats() -> dict[str, dict[str, float | bool | int | No
         "ci_lo": None,
         "ci_hi": None,
         "p_one_sided": None,
+        "p_one_sided_worse": None,
         "significant": False,
+        "significant_worse": False,
     }
     return {m: dict(empty) for m in VIEW_METRICS}
 
