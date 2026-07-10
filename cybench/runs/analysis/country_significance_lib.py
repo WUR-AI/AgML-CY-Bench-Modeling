@@ -483,10 +483,8 @@ def build_family_vs_naive_significance(
 
 
 FAMILY_VS_NAIVE_SIG_NOTE = (
-    "* Family significantly better than naive (one-sided country bootstrap, B=10,000; "
-    "5th percentile of bootstrap medians > 0). "
-    "† Significantly worse (95th percentile < 0). "
-    "Hover: per-country Δ and table-median gap. Bold = best family for that metric."
+    "* better vs naive · † worse vs naive (country bootstrap, B=10,000). "
+    "Bold = best. Hover for per-country Δ and CI."
 )
 
 

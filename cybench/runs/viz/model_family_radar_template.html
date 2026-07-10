@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CY-Bench Model Families</title>
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
   <style>
     :root {
       --bg: #f6f8fa;
@@ -125,6 +126,18 @@
     th:nth-child(2), td:nth-child(2) { text-align: left; }
     th { background: #f9fafb; font-weight: 600; }
     td.metric-best { font-weight: 700; }
+    #metrics-table td.metric-cell { white-space: nowrap; }
+    .sig-mark {
+      font-size: 0.68em;
+      line-height: 0;
+      vertical-align: super;
+      margin-left: 0.03em;
+      font-weight: 600;
+    }
+    #metrics-table-note {
+      font-size: 0.82rem;
+      line-height: 1.35;
+    }
     tr:last-child td { border-bottom: none; }
     .back { margin-bottom: 0.75rem; }
     .back a { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
@@ -254,7 +267,7 @@
 
     <div class="card">
       <h2>Median across countries (family representatives)</h2>
-      <p class="muted" id="metrics-table-note">Per country: median across crops when all crops are selected. Summary: median [IQR] across countries — same point estimate as insights; IQR shows geographic spread.</p>
+      <p class="muted" id="metrics-table-note">Median [IQR] across countries.</p>
       <div class="table-scroll">
         <table id="metrics-table">
           <thead></thead>
@@ -866,15 +879,20 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       return text;
     }
 
+    function formatMetricSigMarkup(marker) {
+      if (!marker) return "";
+      return `<sup class="sig-mark">${marker}</sup>`;
+    }
+
     function formatMetricWithIqr(fam, metric) {
       const raw = fam.raw[metric];
       if (raw == null) return "—";
-      const star = metricSigStar(fam, metric);
+      const mark = formatMetricSigMarkup(metricSigStar(fam, metric));
       const band = (fam.iqr || {})[metric];
       if (!band || band.q25 == null || band.q75 == null) {
-        return `${Number(raw).toFixed(3)}${star}`;
+        return `${Number(raw).toFixed(3)}${mark}`;
       }
-      return `${Number(raw).toFixed(3)}${star} [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
+      return `${Number(raw).toFixed(3)}${mark} [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
     }
 
     function escapeLatex(text) {
@@ -905,6 +923,7 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       } else {
         cell = `${med}${star} [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
       }
+      cell = `\\mbox{${cell}}`;
       return isBest ? `\\textbf{${cell}}` : cell;
     }
 
@@ -1140,8 +1159,8 @@ ${bodyRows}
       if (metricsTableNote) {
         const sigNote = DATA.family_vs_naive_sig_note || "";
         metricsTableNote.textContent = sigNote
-          ? `Per country: median across crops when all crops are selected. Summary: median [IQR] across countries. ${sigNote}`
-          : "Per country: median across crops when all crops are selected. Summary: median [IQR] across countries — same point estimate as insights; IQR shows geographic spread.";
+          ? `Median [IQR] across countries. ${sigNote}`
+          : "Median [IQR] across countries (per-country crop median when all crops selected).";
       }
       const viewHeaders = cols.map(v => {
         const metric = v.display || v.metric;
@@ -1158,8 +1177,8 @@ ${bodyRows}
           const isBest = bestByMetric[metric] === fam.family;
           const content = formatMetricWithIqr(fam, metric);
           const title = metricVsNaiveTooltip(fam, metric);
-          const cls = isBest ? ' class="metric-best"' : "";
-          return `<td${cls} title="${escapeHtml(title)}">${content}</td>`;
+          const cls = isBest ? "metric-cell metric-best" : "metric-cell";
+          return `<td class="${cls}" title="${escapeHtml(title)}">${content}</td>`;
         });
         return `<tr>
           <td>${escapeHtml(fam.family)}</td>
@@ -1173,22 +1192,86 @@ ${bodyRows}
     const MAP_HEIGHT = 694;
     const MAP_MARGIN = 8;
     const MAP_EXPORT_SCALE = 4;
-    const MAP_EXPORT_PAD_B = 42;
+    const MAP_EXPORT_PAD_B = 50;
     const MAP_EXPORT_LEGEND_FS = 8;
     const MAP_EXPORT_LEGEND_BAR_W = 200;
     const MAP_EXPORT_LEGEND_BAR_H = 8;
-    const MAP_EXPORT_FONT = "DejaVu Sans, Arial, Helvetica, sans-serif";
-    const MAP_EXPORT_LABEL_GAP = 6;
+    const MAP_EXPORT_FONT = "DejaVu Sans";
+    const MAP_EXPORT_LABEL_GAP = 10;
+    let exportMeasureSvg = null;
 
-    function exportLegendTextX(text, anchor, refX, barW) {
-      const estW = String(text).length * MAP_EXPORT_LEGEND_FS * 0.58;
-      if (anchor === "middle") return refX - estW / 2;
-      if (anchor === "end") return refX - estW;
-      return refX;
+    function exportMeasureLayer() {
+      if (exportMeasureSvg) return exportMeasureSvg;
+      const ns = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(ns, "svg");
+      svg.setAttribute("width", "0");
+      svg.setAttribute("height", "0");
+      svg.style.cssText = "position:fixed;left:-10000px;top:0;visibility:hidden;pointer-events:none";
+      document.body.appendChild(svg);
+      exportMeasureSvg = svg;
+      return svg;
     }
 
-    function exportLegendText(x, y, text) {
-      return `<text x="${x}" y="${y}" dominant-baseline="hanging" font-size="${MAP_EXPORT_LEGEND_FS}" font-family="${MAP_EXPORT_FONT}" fill="#656d76">${escapeXml(text)}</text>`;
+    function measureExportTextWidth(text) {
+      const ns = "http://www.w3.org/2000/svg";
+      const svg = exportMeasureLayer();
+      const t = document.createElementNS(ns, "text");
+      t.setAttribute("font-size", String(MAP_EXPORT_LEGEND_FS));
+      t.setAttribute("font-family", MAP_EXPORT_FONT);
+      t.textContent = String(text);
+      svg.appendChild(t);
+      const w = t.getBBox().width;
+      svg.removeChild(t);
+      return w;
+    }
+
+    function exportLegendBaselineY(yBase) {
+      return yBase + MAP_EXPORT_LEGEND_BAR_H + MAP_EXPORT_LABEL_GAP + MAP_EXPORT_LEGEND_FS;
+    }
+
+    function exportLegendLabel(refX, yBaseline, text, anchor) {
+      const w = measureExportTextWidth(text);
+      let textX = 0;
+      if (anchor === "middle") textX = -w / 2;
+      else if (anchor === "end") textX = -w;
+      return `<g transform="translate(${refX} ${yBaseline})"><text x="${textX}" y="0" font-size="${MAP_EXPORT_LEGEND_FS}" font-family="${MAP_EXPORT_FONT}" fill="#656d76">${escapeXml(text)}</text></g>`;
+    }
+
+    function exportLegendMarkup(refX, yBaseline, text, anchor) {
+      if (exportFont) {
+        const fontSize = MAP_EXPORT_LEGEND_FS;
+        let x = refX;
+        const w = exportFont.getAdvanceWidth(text, fontSize);
+        if (anchor === "middle") x = refX - w / 2;
+        else if (anchor === "end") x = refX - w;
+        const d = exportFont.getPath(text, x, yBaseline, fontSize).toPathData(2);
+        return `<path d="${d}" fill="#656d76"/>`;
+      }
+      return exportLegendLabel(refX, yBaseline, text, anchor);
+    }
+
+    let exportFont = null;
+    let exportFontLoading = null;
+
+    function ensureExportFont() {
+      if (exportFont !== null) return Promise.resolve(exportFont || null);
+      if (!exportFontLoading) {
+        if (typeof opentype === "undefined") {
+          exportFont = false;
+          return Promise.resolve(null);
+        }
+        exportFontLoading = fetch("https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf")
+          .then(r => r.arrayBuffer())
+          .then(buf => {
+            exportFont = opentype.parse(buf);
+            return exportFont;
+          })
+          .catch(() => {
+            exportFont = false;
+            return null;
+          });
+      }
+      return exportFontLoading;
     }
     const mapSvg = d3.select("#winner-map-wrap").html("").append("svg")
       .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
@@ -1416,7 +1499,7 @@ ${bodyRows}
         const color = swatch ? (swatch.style.background || "#999") : "#999";
         const text = span.textContent.trim();
         out += `<rect x="${x}" y="${yBase}" width="${sw}" height="${sw}" fill="${color}" rx="1.5"/>`;
-        out += `<text x="${x + sw + 4}" y="${yBase + 1}" dominant-baseline="hanging" font-size="${fs}" font-family="${MAP_EXPORT_FONT}" fill="#656d76">${escapeXml(text)}</text>`;
+        out += `<g transform="translate(${x + sw + 4} ${yBase + 1})"><text y="0" font-size="${fs}" font-family="${MAP_EXPORT_FONT}" fill="#656d76">${escapeXml(text)}</text></g>`;
         x += Math.min(160, Math.max(56, text.length * (fs * 0.52) + sw + 10));
       });
       return out;
@@ -1429,7 +1512,7 @@ ${bodyRows}
       const barX = 24;
       const barW = MAP_EXPORT_LEGEND_BAR_W;
       const barH = MAP_EXPORT_LEGEND_BAR_H;
-      const labelY = yBase + barH + MAP_EXPORT_LABEL_GAP;
+      const labelY = exportLegendBaselineY(yBase);
       const left = `-${extent}%`;
       const mid = "0%";
       const right = `+${extent}%`;
@@ -1444,9 +1527,12 @@ ${bodyRows}
           </linearGradient>
         </defs>
         <rect x="${barX}" y="${yBase}" width="${barW}" height="${barH}" fill="url(#export-benefit-grad)" stroke="#c8d0d8" stroke-width="0.5"/>
-        ${exportLegendText(exportLegendTextX(left, "start", barX, barW), labelY, left)}
-        ${exportLegendText(exportLegendTextX(mid, "middle", barX + barW / 2, barW), labelY, mid)}
-        ${exportLegendText(exportLegendTextX(right, "end", barX + barW, barW), labelY, right)}`;
+        <line x1="${barX}" y1="${yBase + barH}" x2="${barX}" y2="${yBase + barH + 3}" stroke="#656d76" stroke-width="0.5"/>
+        <line x1="${barX + barW / 2}" y1="${yBase + barH}" x2="${barX + barW / 2}" y2="${yBase + barH + 3}" stroke="#656d76" stroke-width="0.5"/>
+        <line x1="${barX + barW}" y1="${yBase + barH}" x2="${barX + barW}" y2="${yBase + barH + 3}" stroke="#656d76" stroke-width="0.5"/>
+        ${exportLegendMarkup(barX, labelY, left, "start")}
+        ${exportLegendMarkup(barX + barW / 2, labelY, mid, "middle")}
+        ${exportLegendMarkup(barX + barW, labelY, right, "end")}`;
     }
 
     function buildMapExportSvgString(exportScale = MAP_EXPORT_SCALE) {
@@ -1484,12 +1570,14 @@ ${bodyRows}
     }
 
     function downloadMapSvg() {
-      const svg = buildMapExportSvgString();
-      if (!svg) return;
-      triggerBlobDownload(
-        new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
-        mapExportFilename("svg"),
-      );
+      ensureExportFont().then(() => {
+        const svg = buildMapExportSvgString();
+        if (!svg) return;
+        triggerBlobDownload(
+          new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
+          mapExportFilename("svg"),
+        );
+      });
     }
 
     function downloadMapPng() {
@@ -1565,6 +1653,7 @@ ${bodyRows}
     initWinnerAspectToolbar();
     populateCropOptions();
     loadWinnerMapGeometry();
+    ensureExportFont();
     render();
   </script>
 </body>
