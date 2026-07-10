@@ -1052,9 +1052,9 @@ def build_radar_payload(
         "countries": sorted(df["country"].unique()) if "country" in df.columns else [],
         "benchmark_map_isos": benchmark_map_isos,
         "map_coverage_note": (
-            "Only CY-Bench countries are colored; all other land is neutral gray. "
-            "ISO country polygons are used as-is (e.g. the United States outline includes Alaska). "
-            "France is metropolitan only (French Guiana is not colored)."
+            "Only CY-Bench countries are colored (blue-grey base); other land is neutral grey. "
+            "US and France show metropolitan extent only (Alaska and overseas departments are grey). "
+            "Hover for values."
         ),
         "crops": crops,
         "horizon_labels": {hz: HORIZON_DISPLAY_LABELS.get(hz, hz) for hz in horizons_in_data(df)},

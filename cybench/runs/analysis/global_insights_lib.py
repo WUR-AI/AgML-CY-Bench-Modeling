@@ -38,9 +38,9 @@ METRIC_MAP_SCALES: dict[str, dict[str, Any]] = {
 }
 
 MAP_COVERAGE_NOTE = (
-    "Only CY-Bench countries are colored; all other land is neutral gray. "
-    "ISO country polygons are used as-is (e.g. the United States outline includes Alaska). "
-    "France is metropolitan only (French Guiana is not colored)."
+    "CY-Bench countries use a blue-grey base; other land is neutral grey. "
+    "The United States and France are metropolitan only (Alaska, French Guiana, "
+    "and other overseas territories are not colored)."
 )
 
 

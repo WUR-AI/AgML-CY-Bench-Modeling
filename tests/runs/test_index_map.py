@@ -104,6 +104,27 @@ def test_export_world_geojson_includes_france(tmp_path: Path):
     assert any(row.geometry.centroid.x < -30 for _, row in overseas.iterrows())
 
 
+def test_export_world_geojson_excludes_alaska_from_us(tmp_path: Path):
+    try:
+        world_shape_path("110")
+    except FileNotFoundError:
+        return
+    dest = tmp_path / "world_countries.geojson"
+    export_world_geojson(dest, simplify=0.2)
+    import geopandas as gpd
+
+    world = gpd.read_file(dest)
+    us = world[world["ISO_A2"] == "US"]
+    assert not us.empty
+    for _, row in us.iterrows():
+        c = row.geometry.centroid
+        assert c.y < 55, f"US polygon should be CONUS, got lat={c.y}"
+        assert c.x > -130, f"US polygon should not be in Alaska, got lon={c.x}"
+    overseas = world[world["ISO_A2"] == "XX"]
+    assert not overseas.empty
+    assert any(row.geometry.centroid.y > 55 for _, row in overseas.iterrows())
+
+
 def test_build_index_map_payload(tmp_path: Path):
     (tmp_path / "insights.html").write_text("<html></html>", encoding="utf-8")
     (tmp_path / "model_families.html").write_text("<html></html>", encoding="utf-8")

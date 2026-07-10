@@ -65,6 +65,11 @@ def _normalize_world_iso(world: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     ].copy()
 
 
+def explode_metropolitan_map_units(frame: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Explode multipolygons; re-tag overseas parts (e.g. Alaska, French Guiana) as XX."""
+    return _explode_metropolitan_map_units(frame)
+
+
 def _explode_metropolitan_map_units(frame: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Explode multipolygons; re-tag overseas parts so they are not included in borders."""
     if frame.empty:

@@ -188,7 +188,7 @@
       height: 12px;
       border-radius: 4px;
       border: 1px solid var(--border);
-      background: linear-gradient(to right, #d95f02, #fdb863, #f7f7f7, #92c5de, #2166ac);
+      background: linear-gradient(to right, #d95f02, #c4a574, #9eb4c8, #6baed6, #2166ac);
     }
     .export-toolbar {
       display: flex;
@@ -367,12 +367,12 @@
     let currentBootstrapRows = [];
     let currentTableFamilies = [];
 
-    const MAP_FILL_OUTSIDE = "#e8eaed";
-    const MAP_FILL_NO_DATA = "#f5f5f5";
+    const MAP_FILL_OUTSIDE = "#e2e6eb";
+    const MAP_FILL_BENCHMARK = "#9eb4c8";
     const benchmarkIsos = new Set(DATA.benchmark_map_isos || []);
     if (mapCoverageNote) {
       mapCoverageNote.textContent = DATA.map_coverage_note || (
-        "Only CY-Bench countries are colored; other land is neutral gray."
+        "CY-Bench countries use a blue-grey base; other land is neutral grey."
       );
     }
 
@@ -380,8 +380,18 @@
       return benchmarkIsos.has(iso);
     }
 
+    function isColoredBenchmarkIso(iso) {
+      return isBenchmarkIso(iso) && iso !== "XX";
+    }
+
     function mapBaseFill(iso) {
-      return isBenchmarkIso(iso) ? MAP_FILL_NO_DATA : MAP_FILL_OUTSIDE;
+      return isColoredBenchmarkIso(iso) ? MAP_FILL_BENCHMARK : MAP_FILL_OUTSIDE;
+    }
+
+    function mapCountryStroke(iso) {
+      return isColoredBenchmarkIso(iso)
+        ? { color: "#6d7d8f", width: 0.55 }
+        : { color: "#c8d0d8", width: 0.22 };
     }
 
     let radarMode = "relative";
@@ -1186,18 +1196,18 @@ ${bodyRows}
       return Math.min(MAX, Math.max(MIN, rounded));
     }
 
-    // Blue–orange diverging (colorblind-safe; distinct grey levels in grayscale print).
+    // Blue–orange diverging; zero sits on blue-grey benchmark base (not near-white).
     const BENEFIT_COLOR_TRAD = "#d95f02";
-    const BENEFIT_COLOR_NEUTRAL = "#f7f7f7";
+    const BENEFIT_COLOR_ZERO = "#9eb4c8";
     const BENEFIT_COLOR_AI = "#2166ac";
 
     function benefitColor(pct, extent) {
       const clamped = Math.max(-extent, Math.min(extent, pct));
       const t = (clamped + extent) / (2 * extent);
       if (t <= 0.5) {
-        return d3.interpolateRgb(BENEFIT_COLOR_TRAD, BENEFIT_COLOR_NEUTRAL)(t * 2);
+        return d3.interpolateRgb(BENEFIT_COLOR_TRAD, BENEFIT_COLOR_ZERO)(t * 2);
       }
-      return d3.interpolateRgb(BENEFIT_COLOR_NEUTRAL, BENEFIT_COLOR_AI)((t - 0.5) * 2);
+      return d3.interpolateRgb(BENEFIT_COLOR_ZERO, BENEFIT_COLOR_AI)((t - 0.5) * 2);
     }
 
     function benefitOffScale(pct, extent) {
@@ -1227,20 +1237,20 @@ ${bodyRows}
         .attr("d", mapPath)
         .attr("fill", d => {
           const iso = d.properties.ISO_A2;
-          if (!isBenchmarkIso(iso)) return MAP_FILL_OUTSIDE;
+          if (!isColoredBenchmarkIso(iso)) return MAP_FILL_OUTSIDE;
           const rec = winners.get(iso);
-          if (!rec) return MAP_FILL_NO_DATA;
+          if (!rec) return MAP_FILL_BENCHMARK;
           return colors[rec.winner_family] || "#999";
         })
-        .attr("stroke", d => isBenchmarkIso(d.properties.ISO_A2) ? "#fff" : "#d0d7de")
-        .attr("stroke-width", d => isBenchmarkIso(d.properties.ISO_A2) ? 0.5 : 0.25);
+        .attr("stroke", d => mapCountryStroke(d.properties.ISO_A2).color)
+        .attr("stroke-width", d => mapCountryStroke(d.properties.ISO_A2).width);
 
       countriesSel.selectAll("title")
         .data(d => [d])
         .join("title")
         .text(d => {
           const iso = d.properties.ISO_A2;
-          if (!isBenchmarkIso(iso)) {
+          if (!isColoredBenchmarkIso(iso)) {
             return `${d.properties.NAME || iso}: not in CY-Bench`;
           }
           const rec = winners.get(iso);
@@ -1274,20 +1284,20 @@ ${bodyRows}
         .attr("d", mapPath)
         .attr("fill", d => {
           const iso = d.properties.ISO_A2;
-          if (!isBenchmarkIso(iso)) return MAP_FILL_OUTSIDE;
+          if (!isColoredBenchmarkIso(iso)) return MAP_FILL_OUTSIDE;
           const rec = byCountry.get(iso);
-          if (!rec || rec.benefit_pct == null) return MAP_FILL_NO_DATA;
+          if (!rec || rec.benefit_pct == null) return MAP_FILL_BENCHMARK;
           return benefitColor(rec.benefit_pct, extent);
         })
-        .attr("stroke", d => isBenchmarkIso(d.properties.ISO_A2) ? "#fff" : "#d0d7de")
-        .attr("stroke-width", d => isBenchmarkIso(d.properties.ISO_A2) ? 0.5 : 0.25);
+        .attr("stroke", d => mapCountryStroke(d.properties.ISO_A2).color)
+        .attr("stroke-width", d => mapCountryStroke(d.properties.ISO_A2).width);
 
       countriesSel.selectAll("title")
         .data(d => [d])
         .join("title")
         .text(d => {
           const iso = d.properties.ISO_A2;
-          if (!isBenchmarkIso(iso)) {
+          if (!isColoredBenchmarkIso(iso)) {
             return `${d.properties.NAME || iso}: not in CY-Bench`;
           }
           const rec = byCountry.get(iso);
@@ -1370,8 +1380,8 @@ ${bodyRows}
         <defs>
           <linearGradient id="export-benefit-grad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stop-color="#d95f02"/>
-            <stop offset="25%" stop-color="#fdb863"/>
-            <stop offset="50%" stop-color="#f7f7f7"/>
+            <stop offset="25%" stop-color="#c4a574"/>
+            <stop offset="50%" stop-color="#9eb4c8"/>
             <stop offset="75%" stop-color="#92c5de"/>
             <stop offset="100%" stop-color="#2166ac"/>
           </linearGradient>
