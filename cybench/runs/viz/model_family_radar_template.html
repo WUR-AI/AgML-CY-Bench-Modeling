@@ -122,7 +122,9 @@
       text-align: right;
     }
     th:first-child, td:first-child { text-align: left; }
+    th:nth-child(2), td:nth-child(2) { text-align: left; }
     th { background: #f9fafb; font-weight: 600; }
+    td.metric-best { font-weight: 700; }
     tr:last-child td { border-bottom: none; }
     .back { margin-bottom: 0.75rem; }
     .back a { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
@@ -254,7 +256,7 @@
 
     <div class="card">
       <h2>Median across countries (family representatives)</h2>
-      <p class="muted">Per country: median across crops when all crops are selected. Summary: median [IQR] across countries — same point estimate as insights; IQR shows geographic spread.</p>
+      <p class="muted" id="metrics-table-note">Per country: median across crops when all crops are selected. Summary: median [IQR] across countries — same point estimate as insights; IQR shows geographic spread.</p>
       <div class="table-scroll">
         <table id="metrics-table">
           <thead></thead>
@@ -338,6 +340,7 @@
     const legendEl = document.getElementById("legend");
     const viewList = document.getElementById("view-list");
     const metricsTable = document.getElementById("metrics-table");
+    const metricsTableNote = document.getElementById("metrics-table-note");
     const scatterPanel = document.getElementById("scatter-panel");
     const scatterNote = document.getElementById("scatter-note");
     const radarModeToolbar = document.getElementById("radar-mode-toolbar");
@@ -762,12 +765,80 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       scatterPanel.innerHTML = `${svg}<div class="scatter-legend">${legend}</div>`;
     }
 
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function metricLowerIsBetter(metric) {
+      return metric === "nrmse";
+    }
+
+    function metricIsBetterValue(metric, candidate, incumbent) {
+      if (candidate == null || Number.isNaN(candidate)) return false;
+      if (incumbent == null || Number.isNaN(incumbent)) return true;
+      return metricLowerIsBetter(metric) ? candidate < incumbent : candidate > incumbent;
+    }
+
+    function bestFamiliesPerMetric(families, cols) {
+      const best = {};
+      for (const col of cols) {
+        const metric = col.metric;
+        let bestFamily = null;
+        let bestVal = null;
+        for (const fam of families) {
+          const v = fam.raw[metric];
+          if (v == null || Number.isNaN(v)) continue;
+          if (metricIsBetterValue(metric, v, bestVal)) {
+            bestVal = v;
+            bestFamily = fam.family;
+          }
+        }
+        if (bestFamily) best[metric] = bestFamily;
+      }
+      return best;
+    }
+
+    function metricSigStar(fam, metric) {
+      if (fam.is_naive || fam.family === "Naive baselines") return "";
+      const stats = (fam.vs_naive || {})[metric];
+      const sig = stats && stats.significant;
+      return sig || (fam.vs_naive_sig || {})[metric] ? "*" : "";
+    }
+
+    function metricVsNaiveTooltip(fam, metric) {
+      if (fam.is_naive || fam.family === "Naive baselines") {
+        return "Naive baseline reference (no comparison).";
+      }
+      const stats = (fam.vs_naive || {})[metric];
+      if (!stats || stats.median_delta == null) {
+        return "No paired country data vs naive baseline.";
+      }
+      const n = stats.n_countries != null ? stats.n_countries : "?";
+      let text = `vs naive: median Δ = ${Number(stats.median_delta).toFixed(3)}`;
+      if (stats.ci_lo != null && stats.ci_hi != null) {
+        text += `, 95% bootstrap CI [${Number(stats.ci_lo).toFixed(3)}, ${Number(stats.ci_hi).toFixed(3)}]`;
+      }
+      if (stats.p_one_sided != null) {
+        text += `, one-sided p = ${Number(stats.p_one_sided).toFixed(3)}`;
+      }
+      if (stats.significant) text += " *";
+      text += ` (${n} countries; positive Δ = family better)`;
+      return text;
+    }
+
     function formatMetricWithIqr(fam, metric) {
       const raw = fam.raw[metric];
       if (raw == null) return "—";
+      const star = metricSigStar(fam, metric);
       const band = (fam.iqr || {})[metric];
-      if (!band || band.q25 == null || band.q75 == null) return Number(raw).toFixed(3);
-      return `${Number(raw).toFixed(3)} [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
+      if (!band || band.q25 == null || band.q75 == null) {
+        return `${Number(raw).toFixed(3)}${star}`;
+      }
+      return `${Number(raw).toFixed(3)}${star} [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
     }
 
     function escapeLatex(text) {
@@ -785,13 +856,19 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       return `${view.label} (${metric})`;
     }
 
-    function formatMetricLatex(fam, metric) {
+    function formatMetricLatex(fam, metric, isBest) {
       const raw = fam.raw[metric];
       if (raw == null) return "---";
+      const star = metricSigStar(fam, metric) ? "^{*}" : "";
       const band = (fam.iqr || {})[metric];
       const med = Number(raw).toFixed(3);
-      if (!band || band.q25 == null || band.q75 == null) return med;
-      return `${med} [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
+      let cell = med;
+      if (!band || band.q25 == null || band.q75 == null) {
+        cell = `${med}${star}`;
+      } else {
+        cell = `${med}${star} [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
+      }
+      return isBest ? `\\textbf{${cell}}` : cell;
     }
 
     function tableExportMeta() {
@@ -814,11 +891,18 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
       const headers = ["Family", "Representative", ...cols.map(v => v.latex || v.header || v.label)];
       const colSpec = `ll${"r".repeat(cols.length)}`;
       const headerRow = headers.map(escapeLatex).join(" & ");
+      const sigNote = DATA.family_vs_naive_sig_note
+        || "* One-sided country bootstrap vs naive representative.";
+      const bestByMetric = bestFamiliesPerMetric(families, cols);
       const bodyRows = families.map(fam => {
         const cells = [
           escapeLatex(fam.family),
           escapeLatex(fam.display_name),
-          ...cols.map(v => formatMetricLatex(fam, v.metric)),
+          ...cols.map(v => formatMetricLatex(
+            fam,
+            v.metric,
+            bestByMetric[v.metric] === fam.family,
+          )),
         ];
         return `    ${cells.join(" & ")} \\\\`;
       }).join("\n");
@@ -835,6 +919,8 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
 ${bodyRows}
     \\bottomrule
   \\end{tabular}
+  \\\\[0.35em]
+  {\\footnotesize ${escapeLatex(sigNote)}}
 \\end{table}
 `;
     }
@@ -1013,6 +1099,13 @@ ${bodyRows}
     function renderTable(families) {
       currentTableFamilies = families;
       const cols = tableColumns();
+      const bestByMetric = bestFamiliesPerMetric(families, cols);
+      if (metricsTableNote) {
+        const sigNote = DATA.family_vs_naive_sig_note || "";
+        metricsTableNote.textContent = sigNote
+          ? `Per country: median across crops when all crops are selected. Summary: median [IQR] across countries. ${sigNote}`
+          : "Per country: median across crops when all crops are selected. Summary: median [IQR] across countries — same point estimate as insights; IQR shows geographic spread.";
+      }
       const viewHeaders = cols.map(v => {
         const metric = v.display || v.metric;
         if (v.header) return `${v.header}`;
@@ -1023,11 +1116,18 @@ ${bodyRows}
         `<tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
 
       metricsTable.querySelector("tbody").innerHTML = families.map(fam => {
-        const cells = cols.map(v => formatMetricWithIqr(fam, v.metric));
+        const cells = cols.map(v => {
+          const metric = v.metric;
+          const isBest = bestByMetric[metric] === fam.family;
+          const content = formatMetricWithIqr(fam, metric);
+          const title = metricVsNaiveTooltip(fam, metric);
+          const cls = isBest ? ' class="metric-best"' : "";
+          return `<td${cls} title="${escapeHtml(title)}">${content}</td>`;
+        });
         return `<tr>
-          <td>${fam.family}</td>
-          <td>${fam.display_name}</td>
-          ${cells.map(c => `<td>${c}</td>`).join("")}
+          <td>${escapeHtml(fam.family)}</td>
+          <td>${escapeHtml(fam.display_name)}</td>
+          ${cells.join("")}
         </tr>`;
       }).join("");
     }

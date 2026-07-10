@@ -9,7 +9,11 @@ import pytest
 from cybench.runs.analysis.country_significance_lib import (
     analyze_country_ai_benefit,
     bootstrap_country_ai_metrics,
+    bootstrap_family_vs_naive_stats,
+    bootstrap_one_sided_significant,
+    build_family_vs_naive_significance,
     country_ai_benefit_frame,
+    family_vs_naive_country_deltas,
 )
 
 
@@ -72,6 +76,63 @@ def test_bootstrap_joint_metrics_ci():
     assert boot["win_rate"] == pytest.approx(4 / 6)
     assert boot["delta_pct_ci_lo"] <= boot["median_delta_pct"] <= boot["delta_pct_ci_hi"]
     assert boot["win_rate_ci_lo"] <= boot["win_rate"] <= boot["win_rate_ci_hi"]
+
+
+def test_bootstrap_family_vs_naive_stats_includes_p_value():
+    deltas = np.array([0.01, 0.02, 0.03, 0.04, 0.05])
+    stats = bootstrap_family_vs_naive_stats(deltas, n_bootstrap=2000, seed=1)
+    assert stats["significant"] is True
+    assert stats["median_delta"] == pytest.approx(0.03)
+    assert stats["p_one_sided"] is not None
+    assert stats["p_one_sided"] < 0.05
+    assert stats["ci_lo"] <= stats["median_delta"] <= stats["ci_hi"]
+
+
+def test_bootstrap_one_sided_not_significant_when_mixed():
+    deltas = np.array([0.05, 0.04, -0.03, -0.02, 0.01])
+    assert bootstrap_one_sided_significant(deltas, n_bootstrap=2000, seed=2) is False
+
+
+def test_family_vs_naive_country_deltas_nrmse_direction():
+    df = pd.DataFrame(
+        [
+            {**_row("trend", "DE", 0.20), "nrmse": 0.20},
+            {**_row("lightgbm", "DE", 0.14), "nrmse": 0.14},
+            {**_row("trend", "FR", 0.22), "nrmse": 0.22},
+            {**_row("lightgbm", "FR", 0.18), "nrmse": 0.18},
+        ]
+    )
+    deltas = family_vs_naive_country_deltas(
+        df,
+        family_model="lightgbm",
+        naive_model="trend",
+        metric="nrmse",
+        higher_is_better=False,
+    )
+    assert deltas.tolist() == pytest.approx([0.06, 0.04])
+
+
+def test_build_family_vs_naive_significance_marks_improvement():
+    df = pd.DataFrame(
+        [
+            {**_row("trend", "DE", 0.20), "nrmse": 0.20, "r2": 0.40},
+            {**_row("lightgbm", "DE", 0.14), "nrmse": 0.14, "r2": 0.55},
+            {**_row("trend", "FR", 0.22), "nrmse": 0.22, "r2": 0.38},
+            {**_row("lightgbm", "FR", 0.18), "nrmse": 0.18, "r2": 0.52},
+            {**_row("trend", "NL", 0.21), "nrmse": 0.21, "r2": 0.39},
+            {**_row("lightgbm", "NL", 0.17), "nrmse": 0.17, "r2": 0.51},
+        ]
+    )
+    reps = {
+        "Naive baselines": "trend",
+        "Feature-Engineered ML": "lightgbm",
+    }
+    sig = build_family_vs_naive_significance(
+        df, reps, metrics=("nrmse", "r2"), n_bootstrap=3000, seed=0
+    )
+    assert sig["Feature-Engineered ML"]["nrmse"]["significant"] is True
+    assert sig["Feature-Engineered ML"]["r2"]["significant"] is True
+    assert sig["Feature-Engineered ML"]["nrmse"]["p_one_sided"] is not None
 
 
 def test_analyze_country_ai_benefit_returns_bootstrap_fields():

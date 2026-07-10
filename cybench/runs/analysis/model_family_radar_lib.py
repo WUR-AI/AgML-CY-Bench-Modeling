@@ -583,6 +583,27 @@ def build_radar_slice(
     families = _family_records(
         medians, reps, rel_all=rel_all, abs_all=abs_all, q25_all=q25_all, q75_all=q75_all
     )
+    from cybench.runs.analysis.country_significance_lib import build_family_vs_naive_significance
+
+    vs_naive = build_family_vs_naive_significance(work, reps)
+    empty_vs_naive = {m: {"significant": False} for m in VIEW_METRICS}
+    families = [
+        {
+            **fam,
+            "vs_naive": (
+                empty_vs_naive
+                if fam.get("is_naive")
+                else vs_naive.get(fam["family"], empty_vs_naive)
+            ),
+            "vs_naive_sig": {
+                m: bool(vs_naive.get(fam["family"], {}).get(m, {}).get("significant"))
+                if not fam.get("is_naive")
+                else False
+                for m in VIEW_METRICS
+            },
+        }
+        for fam in families
+    ]
     return {
         "batch_horizon": batch_horizon,
         "crop": crop or "all",
@@ -1013,7 +1034,10 @@ def build_radar_payload(
         by_horizon[hz] = by_crop
 
     crops = sorted({str(c) for c in df["crop"].dropna().unique()}) if "crop" in df.columns else []
-    from cybench.runs.analysis.country_significance_lib import build_country_bootstrap_payload
+    from cybench.runs.analysis.country_significance_lib import (
+        FAMILY_VS_NAIVE_SIG_NOTE,
+        build_country_bootstrap_payload,
+    )
 
     benchmark_map_isos = (
         sorted({map_iso_for_cybencH(str(c)) for c in df["country"].dropna().unique()})
@@ -1049,6 +1073,7 @@ def build_radar_payload(
         "country_bootstrap": build_country_bootstrap_payload(
             df, representatives=representatives
         ),
+        "family_vs_naive_sig_note": FAMILY_VS_NAIVE_SIG_NOTE,
         "radar_scales": radar_scales_payload(),
         "relative_note": RADAR_NORMALIZATION_NOTE,
         "absolute_note": RADAR_ABSOLUTE_NOTE,

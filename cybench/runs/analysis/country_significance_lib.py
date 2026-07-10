@@ -273,6 +273,162 @@ def bootstrap_stats_json(result: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in result.items() if k != "countries"}
 
 
+def _country_metric_median(
+    model_grp: pd.DataFrame,
+    country: str,
+    metric: str,
+) -> float | None:
+    from cybench.runs.analysis.global_insights_lib import _median_in_group
+
+    if model_grp.empty or "country" not in model_grp.columns or metric not in model_grp.columns:
+        return None
+    sub = model_grp[model_grp["country"].astype(str) == str(country)]
+    return _median_in_group(sub, metric)
+
+
+def family_vs_naive_country_deltas(
+    work: pd.DataFrame,
+    *,
+    family_model: str,
+    naive_model: str,
+    metric: str,
+    higher_is_better: bool,
+) -> np.ndarray:
+    """Per-country paired improvement; positive => family better than naive."""
+    if work.empty or "country" not in work.columns or metric not in work.columns:
+        return np.array([], dtype=float)
+    fam_grp = work[work["model"].astype(str) == str(family_model)]
+    naive_grp = work[work["model"].astype(str) == str(naive_model)]
+    countries = sorted(
+        set(fam_grp["country"].dropna().astype(str))
+        & set(naive_grp["country"].dropna().astype(str))
+    )
+    deltas: list[float] = []
+    for country in countries:
+        fam_val = _country_metric_median(fam_grp, country, metric)
+        naive_val = _country_metric_median(naive_grp, country, metric)
+        if fam_val is None or naive_val is None:
+            continue
+        deltas.append((fam_val - naive_val) if higher_is_better else (naive_val - fam_val))
+    return np.asarray(deltas, dtype=float)
+
+
+def bootstrap_family_vs_naive_stats(
+    deltas: np.ndarray,
+    *,
+    n_bootstrap: int = DEFAULT_N_BOOTSTRAP,
+    seed: int = 0,
+    alpha: float = 0.05,
+) -> dict[str, float | bool | int | None]:
+    """Bootstrap country medians; one-sided p = share of bootstrap draws with median <= 0."""
+    arr = np.asarray(deltas, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    n = arr.size
+    if n < 2:
+        return {
+            "n_countries": int(n),
+            "median_delta": None,
+            "ci_lo": None,
+            "ci_hi": None,
+            "p_one_sided": None,
+            "significant": False,
+        }
+    median_obs = float(np.median(arr))
+    rng = np.random.default_rng(seed)
+    boots = np.empty(n_bootstrap, dtype=float)
+    for i in range(n_bootstrap):
+        boots[i] = float(np.median(arr[rng.integers(0, n, size=n)]))
+    ci_lo, ci_hi = _percentile_ci(boots, ci=0.95)
+    # One-sided bootstrap p-value (family better than naive).
+    p_one_sided = float((np.sum(boots <= 0.0) + 1) / (n_bootstrap + 1))
+    significant = float(np.quantile(boots, alpha)) > 0.0
+    return {
+        "n_countries": int(n),
+        "median_delta": round(median_obs, 4),
+        "ci_lo": round(ci_lo, 4),
+        "ci_hi": round(ci_hi, 4),
+        "p_one_sided": round(p_one_sided, 4),
+        "significant": significant,
+    }
+
+
+def bootstrap_one_sided_significant(
+    deltas: np.ndarray,
+    *,
+    n_bootstrap: int = DEFAULT_N_BOOTSTRAP,
+    seed: int = 0,
+    alpha: float = 0.05,
+) -> bool:
+    """True when one-sided 95% rule holds: 5th percentile of bootstrap medians > 0."""
+    return bool(
+        bootstrap_family_vs_naive_stats(
+            deltas,
+            n_bootstrap=n_bootstrap,
+            seed=seed,
+            alpha=alpha,
+        )["significant"]
+    )
+
+
+def build_family_vs_naive_significance(
+    work: pd.DataFrame,
+    representatives: dict[str, str],
+    *,
+    metrics: tuple[str, ...] | list[str] | None = None,
+    n_bootstrap: int = DEFAULT_N_BOOTSTRAP,
+    seed: int = 0,
+) -> dict[str, dict[str, dict[str, float | bool | int | None]]]:
+    """One-sided country bootstrap: family representative vs naive representative."""
+    from cybench.runs.analysis.model_family_radar_lib import (
+        FAMILY_ORDER,
+        VIEW_METRICS,
+        _metric_higher_is_better,
+    )
+
+    metric_list = tuple(metrics or VIEW_METRICS)
+    naive_model = representatives.get("Naive baselines")
+    if not naive_model or work.empty:
+        return {}
+    out: dict[str, dict[str, dict[str, float | bool | int | None]]] = {}
+    for fi, family in enumerate(FAMILY_ORDER):
+        if family == "Naive baselines" or family not in representatives:
+            continue
+        family_model = representatives[family]
+        stats_by_metric: dict[str, dict[str, float | bool | int | None]] = {}
+        for mi, metric in enumerate(metric_list):
+            if metric not in work.columns:
+                stats_by_metric[metric] = {
+                    "n_countries": 0,
+                    "median_delta": None,
+                    "ci_lo": None,
+                    "ci_hi": None,
+                    "p_one_sided": None,
+                    "significant": False,
+                }
+                continue
+            deltas = family_vs_naive_country_deltas(
+                work,
+                family_model=family_model,
+                naive_model=naive_model,
+                metric=metric,
+                higher_is_better=_metric_higher_is_better(metric),
+            )
+            stats_by_metric[metric] = bootstrap_family_vs_naive_stats(
+                deltas,
+                n_bootstrap=n_bootstrap,
+                seed=seed + fi * 100 + mi,
+            )
+        out[family] = stats_by_metric
+    return out
+
+
+FAMILY_VS_NAIVE_SIG_NOTE = (
+    "* One-sided country bootstrap vs naive family representative (B=10,000): "
+    "median improvement with lower 95% bootstrap bound > 0 (p = one-sided bootstrap p). "
+    "Bold = best family for that metric. Hover cells for Δ, CI, and p."
+)
+
+
 COUNTRY_BOOTSTRAP_NOTE = (
     "Per country: best traditional NRMSE = min(Average, Trend, LPJmL); best data-driven NRMSE = "
     "min(feature-engineered, sequence, foundation). NRMSE columns are medians of those "

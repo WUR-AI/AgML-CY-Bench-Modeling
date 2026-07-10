@@ -291,6 +291,15 @@ def test_build_radar_payload_structure(tmp_path: Path):
     assert "absolute" in families["Naive baselines"]
     assert len(eos_all["dataset_rows"]) == 5
     assert eos_all["dataset_rows"][0]["metrics"]["nrmse"] is not None
+    ml_fam = next(f for f in eos_all["families"] if f["family"] == "Feature-Engineered ML")
+    assert "vs_naive_sig" in ml_fam
+    assert "vs_naive" in ml_fam
+    assert isinstance(ml_fam["vs_naive_sig"]["nrmse"], bool)
+    assert "median_delta" in ml_fam["vs_naive"]["nrmse"]
+    assert "p_one_sided" in ml_fam["vs_naive"]["nrmse"]
+    naive_fam = next(f for f in eos_all["families"] if f["family"] == "Naive baselines")
+    assert naive_fam["vs_naive_sig"]["nrmse"] is False
+    assert payload["family_vs_naive_sig_note"]
     assert RADAR_NORMALIZATION_NOTE in payload["relative_note"]
     assert RADAR_ABSOLUTE_NOTE in payload["absolute_note"]
     assert payload["radar_scales"]["absolute"]["Overall"]["lo"] == 0.1
