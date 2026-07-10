@@ -933,10 +933,23 @@
     let worldFeatures = null;
     let mapProjection = d3.geoNaturalEarth1();
     let mapPath = d3.geoPath(mapProjection);
-    const MAP_EXPORT_PAD_B = 34;
+    const MAP_EXPORT_PAD_B = 42;
     const MAP_EXPORT_LEGEND_FS = 8;
     const MAP_EXPORT_LEGEND_BAR_W = 200;
     const MAP_EXPORT_LEGEND_BAR_H = 8;
+    const MAP_EXPORT_FONT = "DejaVu Sans, Arial, Helvetica, sans-serif";
+    const MAP_EXPORT_LABEL_GAP = 6;
+
+    function exportLegendTextX(text, anchor, refX, barW) {
+      const estW = String(text).length * MAP_EXPORT_LEGEND_FS * 0.58;
+      if (anchor === "middle") return refX - estW / 2;
+      if (anchor === "end") return refX - estW;
+      return refX;
+    }
+
+    function exportLegendText(x, y, text) {
+      return `<text x="${x}" y="${y}" dominant-baseline="hanging" font-size="${MAP_EXPORT_LEGEND_FS}" font-family="${MAP_EXPORT_FONT}" fill="#656d76">${escapeXml(text)}</text>`;
+    }
     const mapSvg = d3.select("#metric-map-wrap").html("").append("svg")
       .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
       .attr("role", "img")
@@ -1174,13 +1187,13 @@
       const barX = 24;
       const barW = MAP_EXPORT_LEGEND_BAR_W;
       const barH = MAP_EXPORT_LEGEND_BAR_H;
-      const fs = MAP_EXPORT_LEGEND_FS;
-      const tickY = yBase + barH + fs + 3;
+      const labelY = yBase + barH + MAP_EXPORT_LABEL_GAP;
       const spec = mapMetricSpec();
       const scale = spec.scale || METRIC_MAP_SCALES[spec.metricId] || { lo: 0, hi: 1 };
-      const fmt = v => (Number.isFinite(v) ? v.toFixed(2) : "—");
+      const fmt = v => (Number.isFinite(v) ? v.toFixed(2) : "-");
       const lo = fmt(scale.lo);
       const hi = fmt(scale.hi);
+      const mid = spec.label;
       return `
         <defs>
           <linearGradient id="export-metric-grad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -1190,9 +1203,9 @@
           </linearGradient>
         </defs>
         <rect x="${barX}" y="${yBase}" width="${barW}" height="${barH}" fill="url(#export-metric-grad)" stroke="#c8d0d8" stroke-width="0.5"/>
-        <text x="${barX}" y="${tickY}" font-size="${fs}" text-anchor="start" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(lo)}</text>
-        <text x="${barX + barW / 2}" y="${tickY}" font-size="${fs}" text-anchor="middle" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(spec.label)}</text>
-        <text x="${barX + barW}" y="${tickY}" font-size="${fs}" text-anchor="end" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(hi)}</text>`;
+        ${exportLegendText(exportLegendTextX(lo, "start", barX, barW), labelY, lo)}
+        ${exportLegendText(exportLegendTextX(mid, "middle", barX + barW / 2, barW), labelY, mid)}
+        ${exportLegendText(exportLegendTextX(hi, "end", barX + barW, barW), labelY, hi)}`;
     }
 
     function buildMapExportSvgString(exportScale = MAP_EXPORT_SCALE) {
@@ -1206,7 +1219,7 @@
       const exportW = MAP_WIDTH * exportScale;
       const exportH = totalH * exportScale;
       return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${totalH}" width="${exportW}" height="${exportH}">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${totalH}" width="${exportW}" height="${exportH}" font-family="${MAP_EXPORT_FONT}">
   <rect width="100%" height="100%" fill="#ffffff"/>
   <svg x="0" y="${padT}" width="${MAP_WIDTH}" height="${MAP_HEIGHT}" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}">
     ${mapNode.innerHTML}
