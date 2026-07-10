@@ -934,12 +934,13 @@
     let worldFeatures = null;
     let mapProjection = d3.geoNaturalEarth1();
     let mapPath = d3.geoPath(mapProjection);
-    const MAP_EXPORT_PAD_B = 50;
-    const MAP_EXPORT_LEGEND_FS = 8;
-    const MAP_EXPORT_LEGEND_BAR_W = 200;
-    const MAP_EXPORT_LEGEND_BAR_H = 8;
+    const MAP_EXPORT_PAD_B = 68;
+    const MAP_EXPORT_LEGEND_FS = 12;
+    const MAP_EXPORT_LEGEND_BAR_W = 300;
+    const MAP_EXPORT_LEGEND_BAR_H = 12;
     const MAP_EXPORT_FONT = "DejaVu Sans";
-    const MAP_EXPORT_LABEL_GAP = 10;
+    const MAP_EXPORT_LABEL_GAP = 12;
+    const MAP_EXPORT_LEGEND_TICK = 4;
     let exportMeasureSvg = null;
 
     function exportMeasureLayer() {
@@ -1267,10 +1268,10 @@
             <stop offset="100%" stop-color="#1a9850"/>
           </linearGradient>
         </defs>
-        <rect x="${barX}" y="${yBase}" width="${barW}" height="${barH}" fill="url(#export-metric-grad)" stroke="#c8d0d8" stroke-width="0.5"/>
-        <line x1="${barX}" y1="${yBase + barH}" x2="${barX}" y2="${yBase + barH + 3}" stroke="#656d76" stroke-width="0.5"/>
-        <line x1="${barX + barW / 2}" y1="${yBase + barH}" x2="${barX + barW / 2}" y2="${yBase + barH + 3}" stroke="#656d76" stroke-width="0.5"/>
-        <line x1="${barX + barW}" y1="${yBase + barH}" x2="${barX + barW}" y2="${yBase + barH + 3}" stroke="#656d76" stroke-width="0.5"/>
+        <rect x="${barX}" y="${yBase}" width="${barW}" height="${barH}" fill="url(#export-metric-grad)" stroke="#c8d0d8" stroke-width="0.75"/>
+        <line x1="${barX}" y1="${yBase + barH}" x2="${barX}" y2="${yBase + barH + MAP_EXPORT_LEGEND_TICK}" stroke="#656d76" stroke-width="0.75"/>
+        <line x1="${barX + barW / 2}" y1="${yBase + barH}" x2="${barX + barW / 2}" y2="${yBase + barH + MAP_EXPORT_LEGEND_TICK}" stroke="#656d76" stroke-width="0.75"/>
+        <line x1="${barX + barW}" y1="${yBase + barH}" x2="${barX + barW}" y2="${yBase + barH + MAP_EXPORT_LEGEND_TICK}" stroke="#656d76" stroke-width="0.75"/>
         ${exportLegendMarkup(barX, labelY, lo, "start")}
         ${exportLegendMarkup(barX + barW / 2, labelY, mid, "middle")}
         ${exportLegendMarkup(barX + barW, labelY, hi, "end")}`;
