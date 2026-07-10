@@ -32,15 +32,28 @@ def _seed_averaged_country_metrics(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df.copy()
     work = df.copy()
-    for col in ("nrmse", "r2"):
-        if col in work.columns:
-            work[col] = pd.to_numeric(work[col], errors="coerce")
+    metric_cols = [
+        c
+        for c in (
+            "nrmse",
+            "r2",
+            "r_spatial",
+            "r_temporal",
+            "r_res",
+            "r_spatial_agg",
+            "r_temporal_agg",
+            "r2_res",
+            "r2_anomaly",
+        )
+        if c in work.columns
+    ]
+    for col in metric_cols:
+        work[col] = pd.to_numeric(work[col], errors="coerce")
     key_cols = [c for c in ("crop", "country", "model", "batch_horizon") if c in work.columns]
     if "seed" in work.columns or "repetition" in work.columns:
         seed_col = "seed" if "seed" in work.columns else "repetition"
-        agg_cols = [c for c in ("nrmse", "r2") if c in work.columns]
-        grouped = work.groupby(key_cols, as_index=False)[agg_cols].mean()
-        meta_cols = [c for c in work.columns if c not in {*key_cols, *agg_cols, seed_col}]
+        grouped = work.groupby(key_cols, as_index=False)[metric_cols].mean()
+        meta_cols = [c for c in work.columns if c not in {*key_cols, *metric_cols, seed_col}]
         if meta_cols:
             first = work.groupby(key_cols, as_index=False)[meta_cols].first()
             grouped = grouped.merge(first, on=key_cols, how="left")
@@ -273,6 +286,26 @@ def bootstrap_stats_json(result: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in result.items() if k != "countries"}
 
 
+def _resolve_metric_column(work: pd.DataFrame, metric: str) -> str | None:
+    """Map dashboard metric id to a column present in *work*."""
+    if metric in work.columns:
+        return metric
+    fallbacks: dict[str, tuple[str, ...]] = {
+        "r_spatial": ("r_spatial_agg",),
+        "r_temporal": ("r_temporal_agg",),
+        "r_res": ("r2_res", "r_anomaly"),
+    }
+    for alt in fallbacks.get(metric, ()):
+        if alt in work.columns:
+            return alt
+    return None
+
+
+def prepare_work_for_family_vs_naive(work: pd.DataFrame) -> pd.DataFrame:
+    """Seed-average and keep rows even when only non-NRMSE metrics are present."""
+    return _seed_averaged_country_metrics(work)
+
+
 def _country_metric_median(
     model_grp: pd.DataFrame,
     country: str,
@@ -295,7 +328,8 @@ def family_vs_naive_country_deltas(
     higher_is_better: bool,
 ) -> np.ndarray:
     """Per-country paired improvement; positive => family better than naive."""
-    if work.empty or "country" not in work.columns or metric not in work.columns:
+    column = _resolve_metric_column(work, metric)
+    if work.empty or "country" not in work.columns or column is None:
         return np.array([], dtype=float)
     fam_grp = work[work["model"].astype(str) == str(family_model)]
     naive_grp = work[work["model"].astype(str) == str(naive_model)]
@@ -305,8 +339,8 @@ def family_vs_naive_country_deltas(
     )
     deltas: list[float] = []
     for country in countries:
-        fam_val = _country_metric_median(fam_grp, country, metric)
-        naive_val = _country_metric_median(naive_grp, country, metric)
+        fam_val = _country_metric_median(fam_grp, country, column)
+        naive_val = _country_metric_median(naive_grp, country, column)
         if fam_val is None or naive_val is None:
             continue
         deltas.append((fam_val - naive_val) if higher_is_better else (naive_val - fam_val))
@@ -324,9 +358,9 @@ def bootstrap_family_vs_naive_stats(
     arr = np.asarray(deltas, dtype=float)
     arr = arr[np.isfinite(arr)]
     n = arr.size
-    if n < 2:
+    if n == 0:
         return {
-            "n_countries": int(n),
+            "n_countries": 0,
             "median_delta": None,
             "ci_lo": None,
             "ci_hi": None,
@@ -334,6 +368,15 @@ def bootstrap_family_vs_naive_stats(
             "significant": False,
         }
     median_obs = float(np.median(arr))
+    if n < 2:
+        return {
+            "n_countries": int(n),
+            "median_delta": round(median_obs, 4),
+            "ci_lo": None,
+            "ci_hi": None,
+            "p_one_sided": None,
+            "significant": False,
+        }
     rng = np.random.default_rng(seed)
     boots = np.empty(n_bootstrap, dtype=float)
     for i in range(n_bootstrap):
@@ -396,7 +439,8 @@ def build_family_vs_naive_significance(
         family_model = representatives[family]
         stats_by_metric: dict[str, dict[str, float | bool | int | None]] = {}
         for mi, metric in enumerate(metric_list):
-            if metric not in work.columns:
+            column = _resolve_metric_column(work, metric)
+            if column is None:
                 stats_by_metric[metric] = {
                     "n_countries": 0,
                     "median_delta": None,
@@ -427,6 +471,20 @@ FAMILY_VS_NAIVE_SIG_NOTE = (
     "median improvement with lower 95% bootstrap bound > 0 (p = one-sided bootstrap p). "
     "Bold = best family for that metric. Hover cells for Δ, CI, and p."
 )
+
+
+def empty_family_vs_naive_stats() -> dict[str, dict[str, float | bool | int | None]]:
+    from cybench.runs.analysis.model_family_radar_lib import VIEW_METRICS
+
+    empty = {
+        "n_countries": 0,
+        "median_delta": None,
+        "ci_lo": None,
+        "ci_hi": None,
+        "p_one_sided": None,
+        "significant": False,
+    }
+    return {m: dict(empty) for m in VIEW_METRICS}
 
 
 COUNTRY_BOOTSTRAP_NOTE = (

@@ -14,6 +14,7 @@ from cybench.runs.analysis.country_significance_lib import (
     build_family_vs_naive_significance,
     country_ai_benefit_frame,
     family_vs_naive_country_deltas,
+    prepare_work_for_family_vs_naive,
 )
 
 
@@ -133,6 +134,59 @@ def test_build_family_vs_naive_significance_marks_improvement():
     assert sig["Feature-Engineered ML"]["nrmse"]["significant"] is True
     assert sig["Feature-Engineered ML"]["r2"]["significant"] is True
     assert sig["Feature-Engineered ML"]["nrmse"]["p_one_sided"] is not None
+
+
+def test_bootstrap_family_vs_naive_stats_single_country_returns_median():
+    deltas = np.array([0.04])
+    stats = bootstrap_family_vs_naive_stats(deltas, n_bootstrap=2000, seed=1)
+    assert stats["n_countries"] == 1
+    assert stats["median_delta"] == pytest.approx(0.04)
+    assert stats["ci_lo"] is None
+    assert stats["significant"] is False
+
+
+def test_family_vs_naive_uses_spatial_agg_fallback():
+    df = pd.DataFrame(
+        [
+            {**_row("trend", "DE", 0.20), "r_spatial_agg": 0.40},
+            {**_row("lightgbm", "DE", 0.14), "r_spatial_agg": 0.55},
+            {**_row("trend", "FR", 0.22), "r_spatial_agg": 0.38},
+            {**_row("lightgbm", "FR", 0.18), "r_spatial_agg": 0.52},
+        ]
+    )
+    deltas = family_vs_naive_country_deltas(
+        df,
+        family_model="lightgbm",
+        naive_model="trend",
+        metric="r_spatial",
+        higher_is_better=True,
+    )
+    assert deltas.tolist() == pytest.approx([0.15, 0.14])
+
+
+def test_build_family_vs_naive_significance_without_nrmse_filter():
+    df = pd.DataFrame(
+        [
+            {**_row("trend", "DE", 0.20), "nrmse": np.nan, "r_spatial": 0.40},
+            {**_row("lightgbm", "DE", 0.14), "nrmse": np.nan, "r_spatial": 0.55},
+            {**_row("trend", "FR", 0.22), "nrmse": np.nan, "r_spatial": 0.38},
+            {**_row("lightgbm", "FR", 0.18), "nrmse": np.nan, "r_spatial": 0.52},
+        ]
+    )
+    from cybench.runs.analysis.global_insights_lib import _filter_summary_work
+    from cybench.runs.analysis.model_family_radar_lib import build_radar_slice
+
+    work_sig = prepare_work_for_family_vs_naive(
+        _filter_summary_work(df, batch_horizon="eos", require_valid_nrmse=False)
+    )
+    reps = {"Naive baselines": "trend", "Feature-Engineered ML": "lightgbm"}
+    sig = build_family_vs_naive_significance(work_sig, reps, metrics=("r_spatial",))
+    assert sig["Feature-Engineered ML"]["r_spatial"]["n_countries"] == 2
+    assert sig["Feature-Engineered ML"]["r_spatial"]["median_delta"] is not None
+
+    # NRMSE-filtered work would drop these rows entirely.
+    filtered = _filter_summary_work(df, batch_horizon="eos", require_valid_nrmse=True)
+    assert filtered.empty
 
 
 def test_analyze_country_ai_benefit_returns_bootstrap_fields():

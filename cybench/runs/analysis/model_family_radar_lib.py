@@ -572,6 +572,20 @@ def build_radar_slice(
     representatives: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     work = _filter_summary_work(df, batch_horizon=batch_horizon, crop=crop)
+    from cybench.runs.analysis.country_significance_lib import (
+        build_family_vs_naive_significance,
+        empty_family_vs_naive_stats,
+        prepare_work_for_family_vs_naive,
+    )
+
+    work_sig = prepare_work_for_family_vs_naive(
+        _filter_summary_work(
+            df,
+            batch_horizon=batch_horizon,
+            crop=crop,
+            require_valid_nrmse=False,
+        )
+    )
     reps = pick_representatives(work, overrides=representatives)
     rep_models = list(reps.values())
     medians = median_model_metrics_across_countries(work, VIEW_METRICS, models=rep_models)
@@ -583,10 +597,9 @@ def build_radar_slice(
     families = _family_records(
         medians, reps, rel_all=rel_all, abs_all=abs_all, q25_all=q25_all, q75_all=q75_all
     )
-    from cybench.runs.analysis.country_significance_lib import build_family_vs_naive_significance
 
-    vs_naive = build_family_vs_naive_significance(work, reps)
-    empty_vs_naive = {m: {"significant": False} for m in VIEW_METRICS}
+    vs_naive = build_family_vs_naive_significance(work_sig, reps)
+    empty_vs_naive = empty_family_vs_naive_stats()
     families = [
         {
             **fam,

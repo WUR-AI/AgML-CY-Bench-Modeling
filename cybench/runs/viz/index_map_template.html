@@ -214,8 +214,8 @@
       return byMapIso.get(mapIso) || null;
     }
 
-    const width = 960;
-    const height = 520;
+    const width = 1280;
+    const height = 694;
     const margin = 8;
     const svg = d3.select("#map-wrap").html("").append("svg")
       .attr("viewBox", `0 0 ${width} ${height}`)
@@ -244,6 +244,7 @@
       g.selectAll("path")
         .data(features)
         .join("path")
+        .attr("shape-rendering", "geometricPrecision")
         .attr("class", d => {
           const c = isoToCountry(d.properties.ISO_A2);
           return c && hasHorizon(c, horizon) ? "country available" : "country";

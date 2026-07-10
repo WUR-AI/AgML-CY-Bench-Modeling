@@ -104,6 +104,18 @@ def test_export_world_geojson_includes_france(tmp_path: Path):
     assert any(row.geometry.centroid.x < -30 for _, row in overseas.iterrows())
 
 
+def test_export_world_geojson_uses_high_resolution_when_available(tmp_path: Path):
+    try:
+        from cybench.util.geo import world_shape_path
+
+        world_shape_path("50")
+    except FileNotFoundError:
+        return
+    dest = tmp_path / "world_countries.geojson"
+    export_world_geojson(dest)
+    assert dest.stat().st_size > 1_000_000
+
+
 def test_export_world_geojson_excludes_alaska_from_us(tmp_path: Path):
     try:
         world_shape_path("110")

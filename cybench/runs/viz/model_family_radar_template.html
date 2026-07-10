@@ -157,8 +157,6 @@
     .world-map-wrap { width: 100%; overflow: hidden; }
     .world-map-wrap svg { display: block; width: 100%; height: auto; }
     .country {
-      stroke: #fff;
-      stroke-width: 0.5px;
       transition: fill 0.15s;
     }
     .winner-legend {
@@ -824,13 +822,21 @@ Train=${p.n_train.toLocaleString()}, rel NRMSE=${p[metricKey]}
         return "Naive baseline reference (no comparison).";
       }
       const stats = (fam.vs_naive || {})[metric];
-      if (!stats || stats.median_delta == null) {
+      if (!stats) {
         return "No paired country data vs naive baseline.";
       }
-      const n = stats.n_countries != null ? stats.n_countries : "?";
+      const n = stats.n_countries != null ? stats.n_countries : 0;
+      if (n === 0) {
+        return "No paired country data vs naive baseline for this metric.";
+      }
+      if (stats.median_delta == null) {
+        return `Only ${n} countr${n === 1 ? "y" : "ies"} with paired data (bootstrap needs ≥2).`;
+      }
       let text = `vs naive: median Δ = ${Number(stats.median_delta).toFixed(3)}`;
       if (stats.ci_lo != null && stats.ci_hi != null) {
         text += `, 95% bootstrap CI [${Number(stats.ci_lo).toFixed(3)}, ${Number(stats.ci_hi).toFixed(3)}]`;
+      } else if (n < 2) {
+        text += " (bootstrap CI needs ≥2 countries)";
       }
       if (stats.p_one_sided != null) {
         text += `, one-sided p = ${Number(stats.p_one_sided).toFixed(3)}`;
@@ -1142,10 +1148,14 @@ ${bodyRows}
       }).join("");
     }
 
-    const MAP_WIDTH = 960;
-    const MAP_HEIGHT = 520;
+    const MAP_WIDTH = 1280;
+    const MAP_HEIGHT = 694;
     const MAP_MARGIN = 8;
-    const MAP_EXPORT_SCALE = 3;
+    const MAP_EXPORT_SCALE = 4;
+    const MAP_EXPORT_PAD_B = 34;
+    const MAP_EXPORT_LEGEND_FS = 8;
+    const MAP_EXPORT_LEGEND_BAR_W = 200;
+    const MAP_EXPORT_LEGEND_BAR_H = 8;
     const mapSvg = d3.select("#winner-map-wrap").html("").append("svg")
       .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
       .attr("role", "img")
@@ -1234,6 +1244,7 @@ ${bodyRows}
         .data(worldFeatures)
         .join("path")
         .attr("class", "country")
+        .attr("shape-rendering", "geometricPrecision")
         .attr("d", mapPath)
         .attr("fill", d => {
           const iso = d.properties.ISO_A2;
@@ -1281,6 +1292,7 @@ ${bodyRows}
         .data(worldFeatures)
         .join("path")
         .attr("class", "country")
+        .attr("shape-rendering", "geometricPrecision")
         .attr("d", mapPath)
         .attr("fill", d => {
           const iso = d.properties.ISO_A2;
@@ -1361,21 +1373,30 @@ ${bodyRows}
     function buildWinnerLegendSvg(yBase) {
       const items = winnerLegend.querySelectorAll("span");
       if (!items.length) return "";
+      const fs = MAP_EXPORT_LEGEND_FS;
+      const sw = 8;
       let x = 24;
       let out = "";
       items.forEach(span => {
         const swatch = span.querySelector(".swatch");
         const color = swatch ? (swatch.style.background || "#999") : "#999";
         const text = span.textContent.trim();
-        out += `<rect x="${x}" y="${yBase}" width="12" height="12" fill="${color}" rx="2"/>`;
-        out += `<text x="${x + 16}" y="${yBase + 10}" font-size="12" font-family="system-ui,sans-serif" fill="#1f2328">${escapeXml(text)}</text>`;
-        x += Math.min(220, Math.max(72, text.length * 6.5 + 28));
+        out += `<rect x="${x}" y="${yBase}" width="${sw}" height="${sw}" fill="${color}" rx="1.5"/>`;
+        out += `<text x="${x + sw + 4}" y="${yBase + sw - 1}" font-size="${fs}" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(text)}</text>`;
+        x += Math.min(160, Math.max(56, text.length * (fs * 0.52) + sw + 10));
       });
       return out;
     }
 
     function buildBenefitLegendSvg(yBase) {
-      const label = benefitLegendLabel ? benefitLegendLabel.textContent : "";
+      const slice = currentBenefitSlice();
+      const vals = (slice.countries || []).map(r => r.benefit_pct).filter(v => v != null);
+      const extent = benefitExtent(vals);
+      const barX = 24;
+      const barW = MAP_EXPORT_LEGEND_BAR_W;
+      const barH = MAP_EXPORT_LEGEND_BAR_H;
+      const fs = MAP_EXPORT_LEGEND_FS;
+      const tickY = yBase + barH + fs + 3;
       return `
         <defs>
           <linearGradient id="export-benefit-grad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -1386,18 +1407,19 @@ ${bodyRows}
             <stop offset="100%" stop-color="#2166ac"/>
           </linearGradient>
         </defs>
-        <rect x="24" y="${yBase}" width="200" height="14" fill="url(#export-benefit-grad)" stroke="#d8dee4"/>
-        <text x="232" y="${yBase + 11}" font-size="12" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(label)}</text>
-        <text x="24" y="${yBase + 30}" font-size="11" font-family="system-ui,sans-serif" fill="#656d76">orange = traditional better · blue = AI better</text>`;
+        <rect x="${barX}" y="${yBase}" width="${barW}" height="${barH}" fill="url(#export-benefit-grad)" stroke="#c8d0d8" stroke-width="0.5"/>
+        <text x="${barX}" y="${tickY}" font-size="${fs}" text-anchor="start" font-family="system-ui,sans-serif" fill="#656d76">−${extent}%</text>
+        <text x="${barX + barW / 2}" y="${tickY}" font-size="${fs}" text-anchor="middle" font-family="system-ui,sans-serif" fill="#656d76">0%</text>
+        <text x="${barX + barW}" y="${tickY}" font-size="${fs}" text-anchor="end" font-family="system-ui,sans-serif" fill="#656d76">+${extent}%</text>`;
     }
 
     function buildMapExportSvgString(exportScale = MAP_EXPORT_SCALE) {
       const mapNode = winnerMapWrap.querySelector("svg");
       if (!mapNode || !worldFeatures) return null;
       const padT = 12;
-      const padB = 72;
+      const padB = MAP_EXPORT_PAD_B;
       const totalH = MAP_HEIGHT + padT + padB;
-      const legendY = padT + MAP_HEIGHT + 16;
+      const legendY = padT + MAP_HEIGHT + 6;
       const legendSvg = mapMode === "benefit"
         ? buildBenefitLegendSvg(legendY)
         : buildWinnerLegendSvg(legendY);
@@ -1441,7 +1463,7 @@ ${bodyRows}
       const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
       const img = new Image();
       const padT = 12;
-      const padB = 72;
+      const padB = MAP_EXPORT_PAD_B;
       const totalH = MAP_HEIGHT + padT + padB;
       img.onload = () => {
         const canvas = document.createElement("canvas");

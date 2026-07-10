@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     import geopandas as gpd
 
 _BUNDLED_GEOJSON = (
-    Path(__file__).resolve().parent.parent / "viz" / "data" / "world_countries_110m.geojson"
+    Path(__file__).resolve().parent.parent / "viz" / "data" / "world_countries_50m.geojson"
 )
 _SLUG_RE = re.compile(
     r"^([a-z]{2})_walk_forward_(eos|early|early_season|mid|mid_season|qtr|quarter_season)(?:_v\d+)?$", re.IGNORECASE
@@ -111,13 +111,23 @@ def build_index_map_payload(
     }
 
 
-def export_world_geojson(dest: Path, *, simplify: float = 0.08) -> Path:
-    """Write simplified admin-0 countries GeoJSON for the index map."""
+def export_world_geojson(
+    dest: Path,
+    *,
+    scale: str | None = None,
+    simplify: float | None = None,
+) -> Path:
+    """Write admin-0 countries GeoJSON for dashboard world maps."""
     import geopandas as gpd
 
-    from cybench.util.geo import world_shape_path
+    from cybench.util.geo import explode_metropolitan_map_units, world_shape_path
 
-    shp = world_shape_path("110")
+    shp = world_shape_path(scale)
+    resolved_scale = scale or _scale_from_shape_path(shp)
+    if simplify is None:
+        # 50m/10m are already generalised; extra simplify blurs coastlines.
+        simplify = 0.0 if resolved_scale in {"10", "50"} else 0.05
+
     world = gpd.read_file(shp).to_crs(4326)
     iso_col = next(
         (c for c in ("ISO_A2", "iso_a2") if c in world.columns),
@@ -150,13 +160,19 @@ def export_world_geojson(dest: Path, *, simplify: float = 0.08) -> Path:
     keep["ISO_A2"] = iso
     keep = keep[keep["ISO_A2"].notna() & (keep["ISO_A2"] != "-99") & (keep["ISO_A2"] != "nan")]
     keep = keep[~keep["ISO_A2"].isin(_EXCLUDED_MAP_ISOS)]
-    keep["geometry"] = keep.geometry.simplify(simplify, preserve_topology=True)
-    from cybench.util.geo import explode_metropolitan_map_units
-
+    if simplify > 0:
+        keep["geometry"] = keep.geometry.simplify(simplify, preserve_topology=True)
     keep = explode_metropolitan_map_units(keep)
     dest.parent.mkdir(parents=True, exist_ok=True)
     keep.to_file(dest, driver="GeoJSON")
     return dest
+
+
+def _scale_from_shape_path(shp: str) -> str:
+    for token in ("10", "50", "110"):
+        if f"ne_{token}m_" in shp:
+            return token
+    return "110"
 
 
 def ensure_world_geojson(publish_root: Path) -> str:

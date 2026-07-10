@@ -407,6 +407,7 @@ def _filter_summary_work(
     batch_horizon: str | None = None,
     crop: str | None = None,
     skilled_only: bool = False,
+    require_valid_nrmse: bool = True,
 ) -> pd.DataFrame:
     work = attach_baseline_metrics(df)
     if batch_horizon is not None:
@@ -415,7 +416,9 @@ def _filter_summary_work(
         work = work[work["crop"] == crop]
     if skilled_only:
         work = work[work["skilled"]]
-    return work[work["nrmse"].notna()].copy()
+    if require_valid_nrmse and "nrmse" in work.columns:
+        work = work[work["nrmse"].notna()]
+    return work.copy()
 
 
 def _model_median_by_country(work: pd.DataFrame) -> dict[str, dict[str, Any]]:

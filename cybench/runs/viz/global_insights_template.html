@@ -182,8 +182,6 @@
     .world-map-wrap { width: 100%; overflow: hidden; }
     .world-map-wrap svg { display: block; width: 100%; height: auto; }
     .world-map-wrap .country {
-      stroke: #fff;
-      stroke-width: 0.5px;
       transition: fill 0.15s;
     }
     .metric-map-legend {
@@ -928,13 +926,17 @@
     const MAP_FILL_OUTSIDE = "#e2e6eb";
     const MAP_FILL_BENCHMARK = "#9eb4c8";
     const benchmarkIsos = new Set(DATA.benchmark_map_isos || []);
-    const MAP_WIDTH = 960;
-    const MAP_HEIGHT = 520;
+    const MAP_WIDTH = 1280;
+    const MAP_HEIGHT = 694;
     const MAP_MARGIN = 8;
-    const MAP_EXPORT_SCALE = 3;
+    const MAP_EXPORT_SCALE = 4;
     let worldFeatures = null;
     let mapProjection = d3.geoNaturalEarth1();
     let mapPath = d3.geoPath(mapProjection);
+    const MAP_EXPORT_PAD_B = 34;
+    const MAP_EXPORT_LEGEND_FS = 8;
+    const MAP_EXPORT_LEGEND_BAR_W = 200;
+    const MAP_EXPORT_LEGEND_BAR_H = 8;
     const mapSvg = d3.select("#metric-map-wrap").html("").append("svg")
       .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
       .attr("role", "img")
@@ -1110,6 +1112,7 @@
         .data(worldFeatures)
         .join("path")
         .attr("class", "country")
+        .attr("shape-rendering", "geometricPrecision")
         .attr("d", mapPath)
         .attr("fill", d => {
           const iso = d.properties.ISO_A2;
@@ -1167,15 +1170,18 @@
       return `cybench-metric-map_${mapHorizon}_${mapCrop}_${mapModel}_${mapAxis}_${spec.metricId}${skilled}.${ext}`;
     }
 
-    function buildMapExportSvgString(exportScale = MAP_EXPORT_SCALE) {
-      const mapNode = metricMapWrap.querySelector("svg");
-      if (!mapNode || !worldFeatures) return null;
-      const padT = 12;
-      const padB = 48;
-      const totalH = MAP_HEIGHT + padT + padB;
-      const legendY = padT + MAP_HEIGHT + 16;
-      const legendText = metricMapLegendLabel ? metricMapLegendLabel.textContent : "";
-      const legendSvg = `
+    function buildMetricLegendSvg(yBase) {
+      const barX = 24;
+      const barW = MAP_EXPORT_LEGEND_BAR_W;
+      const barH = MAP_EXPORT_LEGEND_BAR_H;
+      const fs = MAP_EXPORT_LEGEND_FS;
+      const tickY = yBase + barH + fs + 3;
+      const spec = mapMetricSpec();
+      const scale = spec.scale || METRIC_MAP_SCALES[spec.metricId] || { lo: 0, hi: 1 };
+      const fmt = v => (Number.isFinite(v) ? v.toFixed(2) : "—");
+      const lo = fmt(scale.lo);
+      const hi = fmt(scale.hi);
+      return `
         <defs>
           <linearGradient id="export-metric-grad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stop-color="#d73027"/>
@@ -1183,8 +1189,20 @@
             <stop offset="100%" stop-color="#1a9850"/>
           </linearGradient>
         </defs>
-        <rect x="24" y="${legendY}" width="200" height="14" fill="url(#export-metric-grad)" stroke="#d8dee4"/>
-        <text x="232" y="${legendY + 11}" font-size="12" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(legendText)}</text>`;
+        <rect x="${barX}" y="${yBase}" width="${barW}" height="${barH}" fill="url(#export-metric-grad)" stroke="#c8d0d8" stroke-width="0.5"/>
+        <text x="${barX}" y="${tickY}" font-size="${fs}" text-anchor="start" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(lo)}</text>
+        <text x="${barX + barW / 2}" y="${tickY}" font-size="${fs}" text-anchor="middle" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(spec.label)}</text>
+        <text x="${barX + barW}" y="${tickY}" font-size="${fs}" text-anchor="end" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(hi)}</text>`;
+    }
+
+    function buildMapExportSvgString(exportScale = MAP_EXPORT_SCALE) {
+      const mapNode = metricMapWrap.querySelector("svg");
+      if (!mapNode || !worldFeatures) return null;
+      const padT = 12;
+      const padB = MAP_EXPORT_PAD_B;
+      const totalH = MAP_HEIGHT + padT + padB;
+      const legendY = padT + MAP_HEIGHT + 6;
+      const legendSvg = buildMetricLegendSvg(legendY);
       const exportW = MAP_WIDTH * exportScale;
       const exportH = totalH * exportScale;
       return `<?xml version="1.0" encoding="UTF-8"?>
@@ -1224,7 +1242,7 @@
       const img = new Image();
       const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
       const padT = 12;
-      const padB = 48;
+      const padB = MAP_EXPORT_PAD_B;
       const totalH = MAP_HEIGHT + padT + padB;
       img.onload = () => {
         const canvas = document.createElement("canvas");
