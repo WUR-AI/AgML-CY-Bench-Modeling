@@ -931,6 +931,7 @@
     const MAP_WIDTH = 960;
     const MAP_HEIGHT = 520;
     const MAP_MARGIN = 8;
+    const MAP_EXPORT_SCALE = 3;
     let worldFeatures = null;
     let mapProjection = d3.geoNaturalEarth1();
     let mapPath = d3.geoPath(mapProjection);
@@ -1156,7 +1157,7 @@
       return `cybench-metric-map_${mapHorizon}_${mapCrop}_${mapModel}_${mapAxis}_${spec.metricId}${skilled}.${ext}`;
     }
 
-    function buildMapExportSvgString() {
+    function buildMapExportSvgString(exportScale = MAP_EXPORT_SCALE) {
       const mapNode = metricMapWrap.querySelector("svg");
       if (!mapNode || !worldFeatures) return null;
       const padT = 12;
@@ -1174,8 +1175,10 @@
         </defs>
         <rect x="24" y="${legendY}" width="200" height="14" fill="url(#export-metric-grad)" stroke="#d8dee4"/>
         <text x="232" y="${legendY + 11}" font-size="12" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(legendText)}</text>`;
+      const exportW = MAP_WIDTH * exportScale;
+      const exportH = totalH * exportScale;
       return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${totalH}" width="${MAP_WIDTH}" height="${totalH}">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${totalH}" width="${exportW}" height="${exportH}">
   <rect width="100%" height="100%" fill="#ffffff"/>
   <svg x="0" y="${padT}" width="${MAP_WIDTH}" height="${MAP_HEIGHT}" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}">
     ${mapNode.innerHTML}
@@ -1205,18 +1208,23 @@
     }
 
     function downloadMetricMapPng() {
-      const svg = buildMapExportSvgString();
+      const scale = MAP_EXPORT_SCALE;
+      const svg = buildMapExportSvgString(scale);
       if (!svg) return;
       const img = new Image();
       const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+      const padT = 12;
+      const padB = 48;
+      const totalH = MAP_HEIGHT + padT + padB;
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        canvas.width = MAP_WIDTH;
-        canvas.height = MAP_HEIGHT + 60;
+        canvas.width = MAP_WIDTH * scale;
+        canvas.height = totalH * scale;
         const ctx = canvas.getContext("2d");
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         URL.revokeObjectURL(url);
         canvas.toBlob(blob => {
           if (blob) triggerBlobDownload(blob, mapExportFilename("png"));

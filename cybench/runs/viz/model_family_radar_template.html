@@ -182,11 +182,11 @@
       color: var(--muted);
     }
     .benefit-gradient {
-      width: 180px;
+      width: 200px;
       height: 12px;
       border-radius: 4px;
       border: 1px solid var(--border);
-      background: linear-gradient(to right, #d73027, #fee08b, #1a9850);
+      background: linear-gradient(to right, #d95f02, #fdb863, #f7f7f7, #92c5de, #2166ac);
     }
     .export-toolbar {
       display: flex;
@@ -296,7 +296,7 @@
       <div class="benefit-legend" id="benefit-legend" style="display:none;">
         <span class="benefit-gradient" aria-hidden="true"></span>
         <span id="benefit-legend-label">−40% · 0% · +40%</span>
-        <span class="muted">red = traditional better · yellow = little gain · green = AI better · hover for exact %</span>
+        <span class="muted">orange = traditional better · blue = AI better (colorblind-safe; exact % on hover)</span>
       </div>
       <p class="muted winner-summary" id="winner-summary"></p>
     </div>
@@ -1035,6 +1035,7 @@ ${bodyRows}
     const MAP_WIDTH = 960;
     const MAP_HEIGHT = 520;
     const MAP_MARGIN = 8;
+    const MAP_EXPORT_SCALE = 3;
     const mapSvg = d3.select("#winner-map-wrap").html("").append("svg")
       .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
       .attr("role", "img")
@@ -1085,10 +1086,18 @@ ${bodyRows}
       return Math.min(MAX, Math.max(MIN, rounded));
     }
 
+    // Blue–orange diverging (colorblind-safe; distinct grey levels in grayscale print).
+    const BENEFIT_COLOR_TRAD = "#d95f02";
+    const BENEFIT_COLOR_NEUTRAL = "#f7f7f7";
+    const BENEFIT_COLOR_AI = "#2166ac";
+
     function benefitColor(pct, extent) {
       const clamped = Math.max(-extent, Math.min(extent, pct));
       const t = (clamped + extent) / (2 * extent);
-      return d3.interpolateRdYlGn(t);
+      if (t <= 0.5) {
+        return d3.interpolateRgb(BENEFIT_COLOR_TRAD, BENEFIT_COLOR_NEUTRAL)(t * 2);
+      }
+      return d3.interpolateRgb(BENEFIT_COLOR_NEUTRAL, BENEFIT_COLOR_AI)((t - 0.5) * 2);
     }
 
     function benefitOffScale(pct, extent) {
@@ -1260,17 +1269,19 @@ ${bodyRows}
       return `
         <defs>
           <linearGradient id="export-benefit-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="#d73027"/>
-            <stop offset="50%" stop-color="#fee08b"/>
-            <stop offset="100%" stop-color="#1a9850"/>
+            <stop offset="0%" stop-color="#d95f02"/>
+            <stop offset="25%" stop-color="#fdb863"/>
+            <stop offset="50%" stop-color="#f7f7f7"/>
+            <stop offset="75%" stop-color="#92c5de"/>
+            <stop offset="100%" stop-color="#2166ac"/>
           </linearGradient>
         </defs>
         <rect x="24" y="${yBase}" width="200" height="14" fill="url(#export-benefit-grad)" stroke="#d8dee4"/>
         <text x="232" y="${yBase + 11}" font-size="12" font-family="system-ui,sans-serif" fill="#656d76">${escapeXml(label)}</text>
-        <text x="24" y="${yBase + 30}" font-size="11" font-family="system-ui,sans-serif" fill="#656d76">red = traditional better · green = AI better</text>`;
+        <text x="24" y="${yBase + 30}" font-size="11" font-family="system-ui,sans-serif" fill="#656d76">orange = traditional better · blue = AI better</text>`;
     }
 
-    function buildMapExportSvgString() {
+    function buildMapExportSvgString(exportScale = MAP_EXPORT_SCALE) {
       const mapNode = winnerMapWrap.querySelector("svg");
       if (!mapNode || !worldFeatures) return null;
       const padT = 12;
@@ -1281,8 +1292,10 @@ ${bodyRows}
         ? buildBenefitLegendSvg(legendY)
         : buildWinnerLegendSvg(legendY);
       const mapContent = mapNode.innerHTML;
+      const exportW = MAP_WIDTH * exportScale;
+      const exportH = totalH * exportScale;
       return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${totalH}" width="${MAP_WIDTH}" height="${totalH}">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${totalH}" width="${exportW}" height="${exportH}">
   <rect width="100%" height="100%" fill="#ffffff"/>
   <svg x="0" y="${padT}" width="${MAP_WIDTH}" height="${MAP_HEIGHT}" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}">
     ${mapContent}
@@ -1312,14 +1325,14 @@ ${bodyRows}
     }
 
     function downloadMapPng() {
-      const svg = buildMapExportSvgString();
+      const scale = MAP_EXPORT_SCALE;
+      const svg = buildMapExportSvgString(scale);
       if (!svg) return;
       const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
       const img = new Image();
       const padT = 12;
       const padB = 72;
       const totalH = MAP_HEIGHT + padT + padB;
-      const scale = 2;
       img.onload = () => {
         const canvas = document.createElement("canvas");
         canvas.width = MAP_WIDTH * scale;
@@ -1327,6 +1340,7 @@ ${bodyRows}
         const ctx = canvas.getContext("2d");
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         canvas.toBlob(blob => {
           URL.revokeObjectURL(url);
