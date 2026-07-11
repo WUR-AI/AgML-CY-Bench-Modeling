@@ -200,6 +200,9 @@
       height: 14px;
       border-radius: 3px;
       border: 1px solid var(--border);
+      background: linear-gradient(to right, #dbe4ed, #1a4f7a);
+    }
+    .metric-map-gradient.semantic {
       background: linear-gradient(to right, #d73027, #fee08b, #1a9850);
     }
     .export-toolbar {
@@ -286,7 +289,7 @@
         </label>
       </div>
       <p class="muted" style="margin-top:0;" id="matrix-metric-note">
-        Median column = median across countries per model (click column headers to sort). Green = better.
+        Median column = median across countries per model (click column headers to sort).
         Pattern axes (spatial, temporal, anomaly) show Pearson r; overall shows R²/NRMSE.
         Country cells link to the matching country dashboard with that model pre-selected.
       </p>
@@ -297,7 +300,7 @@
       <h2>World map — evaluation metrics</h2>
       <p class="muted">
         Choropleth of per-country metrics for the selected model (same values as the model×country heatmap above).
-        Green = better; red = worse. Hover for exact values.
+        Darker blue = better by default; optional semantic red–green palette for exploration.
       </p>
       <div class="controls">
         <span class="muted">Horizon</span>
@@ -327,6 +330,11 @@
             <option value="r2">R²</option>
           </select>
         </label>
+        <span class="muted">Palette</span>
+        <div class="toolbar" id="metric-map-palette-toolbar">
+          <button type="button" data-palette="intensity" class="active">Intensity</button>
+          <button type="button" data-palette="semantic">Semantic</button>
+        </div>
       </div>
       <p class="muted" id="metric-map-note"></p>
       <p class="muted" id="metric-map-coverage-note"></p>
@@ -451,13 +459,33 @@
       return `${(100 * v).toFixed(1)}%`;
     }
 
+    const METRIC_INTENSITY_LO = "#dbe4ed";
+    const METRIC_INTENSITY_HI = "#1a4f7a";
+    let metricDisplayPalette = "intensity";
+
+    function metricPerformanceT(value, min, max, higherBetter) {
+      if (value === null || value === undefined || Number.isNaN(value)) return null;
+      if (min === null || max === null || min === max) return null;
+      const raw = higherBetter ? (value - min) / (max - min) : (max - value) / (max - min);
+      return Math.max(0, Math.min(1, raw));
+    }
+
+    function metricIntensityColor(t) {
+      return d3.interpolateRgb(METRIC_INTENSITY_LO, METRIC_INTENSITY_HI)(t);
+    }
+
+    function metricSemanticColor(t) {
+      return d3.interpolateRdYlGn(t);
+    }
+
+    function metricDisplayColor(value, min, max, higherBetter, palette = metricDisplayPalette) {
+      const t = metricPerformanceT(value, min, max, higherBetter);
+      if (t == null) return null;
+      return palette === "semantic" ? metricSemanticColor(t) : metricIntensityColor(t);
+    }
+
     function heatColor(value, min, max, higherBetter) {
-      if (value === null || min === null || max === null || min === max) return null;
-      const t = higherBetter ? (value - min) / (max - min) : (max - value) / (max - min);
-      const clamped = Math.max(0, Math.min(1, t));
-      const hue = Math.round(clamped * 120);
-      const alpha = 0.12 + clamped * 0.28;
-      return `hsla(${hue}, 55%, 42%, ${alpha.toFixed(2)})`;
+      return metricDisplayColor(value, min, max, higherBetter);
     }
 
     function fixedNrmseBg(v) {
@@ -654,6 +682,9 @@
       const higherBetter = metric?.higher_better !== false;
       const label = metric?.label || metricId.toUpperCase();
       const bg = metricId === "nrmse" ? fixedNrmseBg : (metricId === "r2" ? fixedR2Bg : fixedRBg);
+      const paletteHint = metricDisplayPalette === "semantic"
+        ? `Green = ${higherBetter ? "higher" : "lower"} ${label}.`
+        : `Darker blue = better ${label}.`;
       return {
         axisId: axis.id,
         axisLabel: axis.label,
@@ -661,7 +692,7 @@
         label,
         higherBetter,
         bg,
-        note: `${axis.note || axis.label} Median column = median across countries per model. Green = ${higherBetter ? "higher" : "lower"} ${label}.`,
+        note: `${axis.note || axis.label} Median column = median across countries per model. ${paletteHint}`,
         cellValue(cell) {
           if (!cell) return null;
           const axes = cell.axes || {};
@@ -916,6 +947,7 @@
     const metricMapWrap = document.getElementById("metric-map-wrap");
     const metricMapLegendLabel = document.getElementById("metric-map-legend-label");
     const metricMapSummary = document.getElementById("metric-map-summary");
+    const metricMapPaletteToolbar = document.getElementById("metric-map-palette-toolbar");
     const metricMapExportSvgBtn = document.getElementById("metric-map-export-svg");
     const metricMapExportPngBtn = document.getElementById("metric-map-export-png");
     const COUNTRY_MAP_CC = DATA.country_map_cc || {};
@@ -934,13 +966,13 @@
     let worldFeatures = null;
     let mapProjection = d3.geoNaturalEarth1();
     let mapPath = d3.geoPath(mapProjection);
-    const MAP_EXPORT_PAD_B = 68;
-    const MAP_EXPORT_LEGEND_FS = 12;
-    const MAP_EXPORT_LEGEND_BAR_W = 300;
-    const MAP_EXPORT_LEGEND_BAR_H = 12;
+    const MAP_EXPORT_PAD_B = 80;
+    const MAP_EXPORT_LEGEND_FS = 15;
+    const MAP_EXPORT_LEGEND_BAR_W = 360;
+    const MAP_EXPORT_LEGEND_BAR_H = 14;
     const MAP_EXPORT_FONT = "DejaVu Sans";
-    const MAP_EXPORT_LABEL_GAP = 12;
-    const MAP_EXPORT_LEGEND_TICK = 4;
+    const MAP_EXPORT_LABEL_GAP = 14;
+    const MAP_EXPORT_LEGEND_TICK = 5;
     let exportMeasureSvg = null;
 
     function exportMeasureLayer() {
@@ -1147,16 +1179,34 @@
       return { spec, rows };
     }
 
-    function metricMapColor(value, spec) {
+    function metricMapColor(value, spec, palette = metricDisplayPalette) {
       const scale = spec.scale || METRIC_MAP_SCALES[spec.metricId] || { lo: 0, hi: 1, higher_better: true };
       const lo = scale.lo ?? 0;
       const hi = scale.hi ?? 1;
       const higherBetter = scale.higher_better !== false && spec.higherBetter !== false;
-      if (hi === lo) return d3.interpolateYlGn(0.5);
-      const t = higherBetter
-        ? (value - lo) / (hi - lo)
-        : (hi - value) / (hi - lo);
-      return d3.interpolateRdYlGn(Math.max(0, Math.min(1, t)));
+      return metricDisplayColor(value, lo, hi, higherBetter, palette) || MAP_FILL_BENCHMARK;
+    }
+
+    function metricMapPathsSvg(palette = "intensity") {
+      const { spec, rows } = currentMapCountryRows();
+      const byCountry = new Map(rows.map(r => [r.map_cc, r]));
+      return worldFeatures.map(feature => {
+        const iso = feature.properties.ISO_A2;
+        const stroke = mapCountryStroke(iso);
+        let fill = MAP_FILL_OUTSIDE;
+        if (isColoredBenchmarkIso(iso)) {
+          const rec = byCountry.get(iso);
+          fill = rec ? metricMapColor(rec.value, spec, palette) : MAP_FILL_BENCHMARK;
+        }
+        const d = mapPath(feature);
+        return `<path class="country" shape-rendering="geometricPrecision" d="${d}" fill="${fill}" stroke="${stroke.color}" stroke-width="${stroke.width}"/>`;
+      }).join("");
+    }
+
+    function updateMetricMapLegendStyle() {
+      const el = document.querySelector(".metric-map-gradient");
+      if (!el) return;
+      el.classList.toggle("semantic", metricDisplayPalette === "semantic");
     }
 
     function mapFeaturesWithoutAntarctica(features) {
@@ -1185,7 +1235,10 @@
       const hi = scale.hi ?? 1;
       const scaleLabel = scale.label || spec.label;
       const betterWord = spec.higherBetter ? "higher" : "lower";
-      metricMapLegendLabel.textContent = `${scaleLabel}: ${fmt(lo)} (worse) → ${fmt(hi)} (better); green = ${betterWord} is better`;
+      updateMetricMapLegendStyle();
+      metricMapLegendLabel.textContent = metricDisplayPalette === "semantic"
+        ? `${scaleLabel}: ${fmt(lo)} (worse) → ${fmt(hi)} (better); green = ${betterWord} is better`
+        : `${scaleLabel}: ${fmt(lo)} (worse) → ${fmt(hi)} (better); darker blue = better`;
 
       mapSvg.selectAll("path.country")
         .data(worldFeatures)
@@ -1249,7 +1302,7 @@
       return `cybench-metric-map_${mapHorizon}_${mapCrop}_${mapModel}_${mapAxis}_${spec.metricId}${skilled}.${ext}`;
     }
 
-    function buildMetricLegendSvg(yBase) {
+    function buildMetricLegendSvg(yBase, palette = "intensity") {
       const barX = 24;
       const barW = MAP_EXPORT_LEGEND_BAR_W;
       const barH = MAP_EXPORT_LEGEND_BAR_H;
@@ -1260,12 +1313,16 @@
       const lo = fmt(scale.lo);
       const hi = fmt(scale.hi);
       const mid = spec.label;
+      const gradStops = palette === "semantic"
+        ? `<stop offset="0%" stop-color="#d73027"/>
+            <stop offset="50%" stop-color="#fee08b"/>
+            <stop offset="100%" stop-color="#1a9850"/>`
+        : `<stop offset="0%" stop-color="${METRIC_INTENSITY_LO}"/>
+            <stop offset="100%" stop-color="${METRIC_INTENSITY_HI}"/>`;
       return `
         <defs>
           <linearGradient id="export-metric-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="#d73027"/>
-            <stop offset="50%" stop-color="#fee08b"/>
-            <stop offset="100%" stop-color="#1a9850"/>
+            ${gradStops}
           </linearGradient>
         </defs>
         <rect x="${barX}" y="${yBase}" width="${barW}" height="${barH}" fill="url(#export-metric-grad)" stroke="#c8d0d8" stroke-width="0.75"/>
@@ -1278,20 +1335,20 @@
     }
 
     function buildMapExportSvgString(exportScale = MAP_EXPORT_SCALE) {
-      const mapNode = metricMapWrap.querySelector("svg");
-      if (!mapNode || !worldFeatures) return null;
+      if (!worldFeatures) return null;
       const padT = 12;
       const padB = MAP_EXPORT_PAD_B;
       const totalH = MAP_HEIGHT + padT + padB;
       const legendY = padT + MAP_HEIGHT + 6;
-      const legendSvg = buildMetricLegendSvg(legendY);
+      const legendSvg = buildMetricLegendSvg(legendY, "intensity");
+      const mapContent = metricMapPathsSvg("intensity");
       const exportW = MAP_WIDTH * exportScale;
       const exportH = totalH * exportScale;
       return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${totalH}" width="${exportW}" height="${exportH}" font-family="${MAP_EXPORT_FONT}">
   <rect width="100%" height="100%" fill="#ffffff"/>
   <svg x="0" y="${padT}" width="${MAP_WIDTH}" height="${MAP_HEIGHT}" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}">
-    ${mapNode.innerHTML}
+    ${mapContent}
   </svg>
   ${legendSvg}
 </svg>`;
@@ -1398,6 +1455,17 @@
       mapMetric = metricMapMetricSelect.value || "nrmse";
       renderMetricMap();
     });
+    if (metricMapPaletteToolbar) {
+      metricMapPaletteToolbar.querySelectorAll("button").forEach(btn => {
+        btn.addEventListener("click", () => {
+          metricMapPaletteToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          metricDisplayPalette = btn.dataset.palette || "intensity";
+          renderModelCountryHeatmap();
+          renderMetricMap();
+        });
+      });
+    }
     if (metricMapExportSvgBtn) metricMapExportSvgBtn.addEventListener("click", downloadMetricMapSvg);
     if (metricMapExportPngBtn) metricMapExportPngBtn.addEventListener("click", downloadMetricMapPng);
     loadMetricMapGeometry();
