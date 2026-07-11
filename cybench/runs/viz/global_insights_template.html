@@ -191,13 +191,13 @@
       align-items: center;
       gap: 0.75rem 1rem;
       margin-top: 0.65rem;
-      font-size: 0.85rem;
+      font-size: 1rem;
       color: var(--muted);
     }
     .metric-map-gradient {
       display: inline-block;
-      width: 200px;
-      height: 14px;
+      width: 260px;
+      height: 16px;
       border-radius: 3px;
       border: 1px solid var(--border);
       background: linear-gradient(to right, #dbe4ed, #1a4f7a);
@@ -966,13 +966,13 @@
     let worldFeatures = null;
     let mapProjection = d3.geoNaturalEarth1();
     let mapPath = d3.geoPath(mapProjection);
-    const MAP_EXPORT_PAD_B = 80;
-    const MAP_EXPORT_LEGEND_FS = 15;
-    const MAP_EXPORT_LEGEND_BAR_W = 360;
-    const MAP_EXPORT_LEGEND_BAR_H = 14;
+    const MAP_EXPORT_PAD_B = 115;
+    const MAP_EXPORT_LEGEND_FS = 22;
+    const MAP_EXPORT_LEGEND_BAR_W = 520;
+    const MAP_EXPORT_LEGEND_BAR_H = 20;
     const MAP_EXPORT_FONT = "DejaVu Sans";
-    const MAP_EXPORT_LABEL_GAP = 14;
-    const MAP_EXPORT_LEGEND_TICK = 5;
+    const MAP_EXPORT_LABEL_GAP = 20;
+    const MAP_EXPORT_LEGEND_TICK = 7;
     let exportMeasureSvg = null;
 
     function exportMeasureLayer() {
