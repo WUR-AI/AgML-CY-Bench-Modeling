@@ -22,12 +22,13 @@ from cybench.models.sklearn_models import RandomForest
 from cybench.util.config_utils import (
     adjust_model_cfg_to_dataset,
     apply_force_cpu_to_frozen_model_cfg,
+    is_cybench_force_cpu,
     reload_config_with_overrides,
     remove_search_keys,
     set_seed,
-    walk_forward_force_cpu,
 )
 from cybench.util.feature_selection import apply_mrmr_at_origin
+from cybench.util.store_and_cache import _dataset_indices
 from cybench.util.prediction_horizon import prediction_horizon_tag
 from cybench.util.screening_artifacts import load_frozen_screening_artifacts
 from cybench.util.validation import (
@@ -204,9 +205,7 @@ def _prepare_model_cfg(
     model_cfg = remove_search_keys(
         cast(DictConfig, OmegaConf.create(OmegaConf.to_container(frozen_model_cfg)))
     )
-    if spec.force_cpu or walk_forward_force_cpu(
-        OmegaConf.create({"model": model_cfg, "experiment": {"device": "cpu"}})
-    ):
+    if spec.force_cpu or is_cybench_force_cpu():
         model_cfg = apply_force_cpu_to_frozen_model_cfg(model_cfg)
     if framework == "torch":
         assert isinstance(dataset, TorchDataset)
@@ -261,14 +260,36 @@ def verify_predictions(
     test_year: int,
     seed: int,
     new_preds: npt.NDArray[Any],
+    test_dataset: BaseDataset | None = None,
 ) -> dict[str, float | None]:
     pred_path = walk_forward_run_dir / str(test_year) / str(seed) / "test_preds.csv"
     if not pred_path.exists():
         return {"corr_saved_preds": None, "max_abs_pred_diff": None}
-    saved = pd.read_csv(pred_path)["preds"].to_numpy(dtype=float)
+    saved_df = pd.read_csv(pred_path)
     new_preds = np.asarray(new_preds, dtype=float)
-    if len(saved) != len(new_preds):
+    if len(saved_df) != len(new_preds):
         return {"corr_saved_preds": None, "max_abs_pred_diff": None}
+
+    # Align on adm_id/year: TorchDataset row order is not stable across builds.
+    if test_dataset is not None:
+        indices_df = _dataset_indices(test_dataset).reset_index(drop=True)
+        new_df = pd.concat(
+            [indices_df, pd.DataFrame({"preds": new_preds})],
+            axis=1,
+        )
+        key_cols = [c for c in ("adm_id", "year") if c in saved_df.columns and c in new_df.columns]
+        if key_cols:
+            merged = saved_df.merge(new_df, on=key_cols, suffixes=("_saved", "_new"))
+            if len(merged) == len(saved_df):
+                saved = merged["preds_saved"].to_numpy(dtype=float)
+                new_preds = merged["preds_new"].to_numpy(dtype=float)
+            else:
+                saved = saved_df["preds"].to_numpy(dtype=float)
+        else:
+            saved = saved_df["preds"].to_numpy(dtype=float)
+    else:
+        saved = saved_df["preds"].to_numpy(dtype=float)
+
     corr = float(np.corrcoef(saved, new_preds)[0, 1]) if len(saved) > 1 else 1.0
     return {
         "corr_saved_preds": corr,
@@ -503,6 +524,7 @@ def reproduce_walk_forward_origin(
             test_year=int(test_years[0]),
             seed=spec.seed,
             new_preds=preds,
+            test_dataset=test_dataset,
         )
         if walk_forward_run_dir is not None
         else {"corr_saved_preds": None, "max_abs_pred_diff": None}
@@ -560,6 +582,7 @@ def run_origin_shap(
             test_year=int(test_years[0]),
             seed=spec.seed,
             new_preds=preds,
+            test_dataset=test_dataset,
         )
         if walk_forward_run_dir is not None
         else {"corr_saved_preds": None, "max_abs_pred_diff": None}
