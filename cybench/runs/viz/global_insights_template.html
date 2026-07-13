@@ -230,6 +230,75 @@
       border-radius: 2px;
       flex-shrink: 0;
     }
+    .model-picker {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 0.75rem;
+      margin: 0.5rem 0 0.75rem;
+      background: #f9fafb;
+    }
+    .model-picker-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 0.75rem;
+      align-items: center;
+      margin-bottom: 0.55rem;
+    }
+    .model-picker-toolbar button {
+      padding: 0.28rem 0.55rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      font: inherit;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    .model-picker-toolbar button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .model-picker-toolbar input[type="search"] {
+      padding: 0.28rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font: inherit;
+      min-width: 10rem;
+    }
+    .model-picker-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 0.35rem 0.75rem;
+      max-height: 220px;
+      overflow: auto;
+      font-size: 0.84rem;
+    }
+    .model-picker-family {
+      grid-column: 1 / -1;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-top: 0.35rem;
+    }
+    .model-picker-family:first-child { margin-top: 0; }
+    .model-picker-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      cursor: pointer;
+      user-select: none;
+    }
+    .model-picker-item input { margin: 0; }
+    .model-picker-item .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .model-picker-item.representative {
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -401,8 +470,22 @@
             <option value="skill_vs_trend">Skill vs trend</option>
           </select>
         </label>
-        <label>Model <input type="search" id="horizon-models-filter" placeholder="Filter…" /></label>
+        <label>Model <input type="search" id="horizon-models-filter" placeholder="Filter table…" /></label>
       </div>
+      <p class="muted" id="horizon-models-plot-note"></p>
+      <div class="model-picker" id="horizon-models-picker-wrap">
+        <div class="model-picker-toolbar">
+          <span class="muted">Plot</span>
+          <button type="button" id="horizon-models-select-reps">Family reps</button>
+          <button type="button" id="horizon-models-select-all">All</button>
+          <button type="button" id="horizon-models-select-none">None</button>
+          <input type="search" id="horizon-models-picker-filter" placeholder="Filter checkboxes…" />
+        </div>
+        <div class="model-picker-grid" id="horizon-models-picker"></div>
+      </div>
+      <p class="muted" id="horizon-models-plot-meta"></p>
+      <div class="curve-chart-wrap" id="horizon-models-chart"></div>
+      <div class="curve-legend" id="horizon-models-legend"></div>
       <p class="muted" id="horizon-models-meta"></p>
       <div class="table-scroll" id="horizon-models-table-wrap"></div>
       <p class="muted note" id="horizon-models-metric-note"></p>
@@ -1472,6 +1555,105 @@
     ensureExportFont();
 
     // Horizon skill curves
+    function modelPlotColor(entry) {
+      const raw = entry.color || "#666666";
+      if (typeof d3 === "undefined") return raw;
+      const base = d3.color(raw);
+      if (!base) return raw;
+      const idx = entry.family_index || 0;
+      if (idx <= 0) return base.formatHex();
+      return base.brighter(Math.min(1.2, idx * 0.28)).formatHex();
+    }
+
+    function buildHorizonCurvesSvg({
+      series,
+      horizons,
+      metricId,
+      metricValueFn,
+      metricIqrFn,
+      metricLabel,
+      colorFn,
+      labelFn,
+      width = 720,
+      height = 360,
+    }) {
+      const pad = { l: 56, r: 24, t: 20, b: 56 };
+      const innerW = width - pad.l - pad.r;
+      const innerH = height - pad.t - pad.b;
+      const nX = horizons.length;
+      const xAt = (i) => pad.l + (nX <= 1 ? innerW / 2 : (i / (nX - 1)) * innerW);
+
+      const allVals = [];
+      for (const item of series) {
+        for (const pt of item.points || []) {
+          const v = metricValueFn(pt, metricId);
+          if (v !== null && v !== undefined && !Number.isNaN(v)) allVals.push(v);
+          const iqr = metricIqrFn(pt, metricId);
+          if (iqr.low !== null) allVals.push(iqr.low);
+          if (iqr.high !== null) allVals.push(iqr.high);
+        }
+      }
+      if (!allVals.length) return null;
+
+      const yMinRaw = Math.min(...allVals);
+      const yMaxRaw = Math.max(...allVals);
+      const yPad = Math.max(0.02, (yMaxRaw - yMinRaw) * 0.12);
+      const yMin = metricId === "nrmse" ? Math.max(0, yMinRaw - yPad) : yMinRaw - yPad;
+      const yMax = yMaxRaw + yPad;
+      const yAt = (v) => pad.t + innerH - ((v - yMin) / (yMax - yMin || 1)) * innerH;
+      const yLabel = `${metricLabel || metricId} (median)`;
+
+      let svg = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Horizon skill curves">`;
+      svg += `<rect x="0" y="0" width="${width}" height="${height}" fill="#fff"/>`;
+      for (let t = 0; t <= 4; t++) {
+        const frac = t / 4;
+        const yv = yMin + frac * (yMax - yMin);
+        const y = yAt(yv);
+        svg += `<line x1="${pad.l}" y1="${y}" x2="${width - pad.r}" y2="${y}" stroke="#e8eaed"/>`;
+        svg += `<text x="${pad.l - 8}" y="${y + 4}" text-anchor="end" font-size="10" fill="#656d76">${yv.toFixed(2)}</text>`;
+      }
+      horizons.forEach((hz, i) => {
+        const x = xAt(i);
+        svg += `<line x1="${x}" y1="${pad.t}" x2="${x}" y2="${height - pad.b}" stroke="#f0f1f3"/>`;
+        svg += `<text x="${x}" y="${height - 28}" text-anchor="middle" font-size="11" fill="#1f2328">${hz.label || hz.id}</text>`;
+      });
+      svg += `<text x="${pad.l + innerW / 2}" y="${height - 6}" text-anchor="middle" font-size="11" fill="#1f2328">Season progress (more of season observed →)</text>`;
+      svg += `<text x="14" y="${pad.t + innerH / 2}" text-anchor="middle" font-size="11" fill="#1f2328" transform="rotate(-90 14 ${pad.t + innerH / 2})">${yLabel}</text>`;
+
+      for (const item of series) {
+        const color = colorFn(item);
+        const pts = (item.points || []).map((pt, i) => {
+          const hzIdx = horizons.findIndex(h => h.id === pt.horizon);
+          const idx = hzIdx >= 0 ? hzIdx : i;
+          const val = metricValueFn(pt, metricId);
+          return { x: xAt(idx), y: val === null ? null : yAt(val), raw: pt, idx };
+        }).filter(p => p.y !== null);
+
+        for (const p of pts) {
+          const iqr = metricIqrFn(p.raw, metricId);
+          if (iqr.low !== null && iqr.high !== null) {
+            const y1 = yAt(iqr.high);
+            const y2 = yAt(iqr.low);
+            svg += `<line x1="${p.x}" y1="${y1}" x2="${p.x}" y2="${y2}" stroke="${color}" stroke-width="2" opacity="0.35"/>`;
+            svg += `<line x1="${p.x - 5}" y1="${y1}" x2="${p.x + 5}" y2="${y1}" stroke="${color}" stroke-width="2" opacity="0.35"/>`;
+            svg += `<line x1="${p.x - 5}" y1="${y2}" x2="${p.x + 5}" y2="${y2}" stroke="${color}" stroke-width="2" opacity="0.35"/>`;
+          }
+        }
+        if (pts.length >= 2) {
+          const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+          svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2.5"/>`;
+        }
+        for (const p of pts) {
+          svg += `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="${color}" stroke="#fff" stroke-width="1.5"/>`;
+        }
+      }
+      svg += "</svg>";
+      const legend = series.map(item =>
+        `<span><span class="swatch" style="background:${colorFn(item)}"></span>${labelFn(item)}</span>`
+      ).join("");
+      return { svg, legend };
+    }
+
     const HSC = DATA.horizon_skill_curves || {};
     const hscNote = document.getElementById("horizon-curves-note");
     const hscMeta = document.getElementById("horizon-curves-meta");
@@ -1656,92 +1838,27 @@
         return;
       }
 
-      const width = 720;
-      const height = 360;
-      const pad = { l: 56, r: 24, t: 20, b: 56 };
-      const innerW = width - pad.l - pad.r;
-      const innerH = height - pad.t - pad.b;
-      const nX = horizons.length;
-      const xAt = (i) => pad.l + (nX <= 1 ? innerW / 2 : (i / (nX - 1)) * innerW);
-
       if (!plotFamilies.length) {
         hscChart.innerHTML = `<p class="muted">No multi-horizon families to plot for this crop.</p>`;
         hscLegend.innerHTML = "";
       } else {
-      const allVals = [];
-      for (const fam of plotFamilies) {
-        for (const pt of fam.points || []) {
-          const v = hscMetricValue(pt, hscMetric);
-          if (v !== null && v !== undefined && !Number.isNaN(v)) allVals.push(v);
-          const iqr = hscMetricIqr(pt, hscMetric);
-          if (iqr.low !== null) allVals.push(iqr.low);
-          if (iqr.high !== null) allVals.push(iqr.high);
+        const chart = buildHorizonCurvesSvg({
+          series: plotFamilies,
+          horizons,
+          metricId: hscMetric,
+          metricValueFn: hscMetricValue,
+          metricIqrFn: hscMetricIqr,
+          metricLabel: metricDef.label || hscMetric,
+          colorFn: (fam) => fam.color || "#457b9d",
+          labelFn: (fam) => `${fam.family} (${fam.display})`,
+        });
+        if (!chart) {
+          hscChart.innerHTML = `<p class="muted">No metric values for this selection.</p>`;
+          hscLegend.innerHTML = "";
+        } else {
+          hscChart.innerHTML = chart.svg;
+          hscLegend.innerHTML = chart.legend;
         }
-      }
-      if (!allVals.length) {
-        hscChart.innerHTML = `<p class="muted">No metric values for this selection.</p>`;
-        hscLegend.innerHTML = "";
-      } else {
-
-      const yMinRaw = Math.min(...allVals);
-      const yMaxRaw = Math.max(...allVals);
-      const yPad = Math.max(0.02, (yMaxRaw - yMinRaw) * 0.12);
-      const yMin = hscMetric === "nrmse" ? Math.max(0, yMinRaw - yPad) : yMinRaw - yPad;
-      const yMax = yMaxRaw + yPad;
-      const yAt = (v) => pad.t + innerH - ((v - yMin) / (yMax - yMin || 1)) * innerH;
-
-      const yLabel = `${metricDef.label || hscMetric} (median)`;
-      let svg = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Horizon skill curves">`;
-      svg += `<rect x="0" y="0" width="${width}" height="${height}" fill="#fff"/>`;
-      for (let t = 0; t <= 4; t++) {
-        const frac = t / 4;
-        const yv = yMin + frac * (yMax - yMin);
-        const y = yAt(yv);
-        svg += `<line x1="${pad.l}" y1="${y}" x2="${width - pad.r}" y2="${y}" stroke="#e8eaed"/>`;
-        svg += `<text x="${pad.l - 8}" y="${y + 4}" text-anchor="end" font-size="10" fill="#656d76">${yv.toFixed(2)}</text>`;
-      }
-      horizons.forEach((hz, i) => {
-        const x = xAt(i);
-        svg += `<line x1="${x}" y1="${pad.t}" x2="${x}" y2="${height - pad.b}" stroke="#f0f1f3"/>`;
-        svg += `<text x="${x}" y="${height - 28}" text-anchor="middle" font-size="11" fill="#1f2328">${hz.label || hz.id}</text>`;
-      });
-      svg += `<text x="${pad.l + innerW / 2}" y="${height - 6}" text-anchor="middle" font-size="11" fill="#1f2328">Season progress (more of season observed →)</text>`;
-      svg += `<text x="14" y="${pad.t + innerH / 2}" text-anchor="middle" font-size="11" fill="#1f2328" transform="rotate(-90 14 ${pad.t + innerH / 2})">${yLabel}</text>`;
-
-      for (const fam of plotFamilies) {
-        const color = fam.color || "#457b9d";
-        const pts = (fam.points || []).map((pt, i) => {
-          const hzIdx = horizons.findIndex(h => h.id === pt.horizon);
-          const idx = hzIdx >= 0 ? hzIdx : i;
-          const val = hscMetricValue(pt, hscMetric);
-          return { x: xAt(idx), y: val === null ? null : yAt(val), raw: pt, idx };
-        }).filter(p => p.y !== null);
-
-        for (const p of pts) {
-          const iqr = hscMetricIqr(p.raw, hscMetric);
-          if (iqr.low !== null && iqr.high !== null) {
-            const y1 = yAt(iqr.high);
-            const y2 = yAt(iqr.low);
-            svg += `<line x1="${p.x}" y1="${y1}" x2="${p.x}" y2="${y2}" stroke="${color}" stroke-width="2" opacity="0.35"/>`;
-            svg += `<line x1="${p.x - 5}" y1="${y1}" x2="${p.x + 5}" y2="${y1}" stroke="${color}" stroke-width="2" opacity="0.35"/>`;
-            svg += `<line x1="${p.x - 5}" y1="${y2}" x2="${p.x + 5}" y2="${y2}" stroke="${color}" stroke-width="2" opacity="0.35"/>`;
-          }
-        }
-        if (pts.length >= 2) {
-          const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
-          svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2.5"/>`;
-        }
-        for (const p of pts) {
-          svg += `<circle cx="${p.x}" cy="${p.y}" r="4.5" fill="${color}" stroke="#fff" stroke-width="1.5"/>`;
-        }
-      }
-      svg += "</svg>";
-      hscChart.innerHTML = svg;
-
-      hscLegend.innerHTML = plotFamilies.map(fam =>
-        `<span><span class="swatch" style="background:${fam.color}"></span>${fam.family} (${fam.display})</span>`
-      ).join("");
-      }
       }
 
       renderHorizonPointsTable({
@@ -1790,9 +1907,18 @@
     syncHscMetricControl();
     renderHorizonSkillCurves();
 
-    // All models horizon table
+    // All models horizon plot + table
     const hmNote = document.getElementById("horizon-models-note");
+    const hmPlotNote = document.getElementById("horizon-models-plot-note");
+    const hmPlotMeta = document.getElementById("horizon-models-plot-meta");
     const hmMeta = document.getElementById("horizon-models-meta");
+    const hmChart = document.getElementById("horizon-models-chart");
+    const hmLegend = document.getElementById("horizon-models-legend");
+    const hmPicker = document.getElementById("horizon-models-picker");
+    const hmPickerFilter = document.getElementById("horizon-models-picker-filter");
+    const hmSelectReps = document.getElementById("horizon-models-select-reps");
+    const hmSelectAll = document.getElementById("horizon-models-select-all");
+    const hmSelectNone = document.getElementById("horizon-models-select-none");
     const hmTableWrap = document.getElementById("horizon-models-table-wrap");
     const hmMetricNote = document.getElementById("horizon-models-metric-note");
     const hmCropSelect = document.getElementById("horizon-models-crop");
@@ -1805,9 +1931,14 @@
     let hmMetric = "nrmse";
     let hmTableSort = "model";
     let hmTableDir = "asc";
+    const hmSelectedByCrop = {};
+    let hmPickerFilterText = "";
 
     hmNote.textContent = HSC.models_table_note || (
       "Median per metric across countries at each forecast horizon."
+    );
+    hmPlotNote.textContent = HSC.models_plot_note || (
+      "Select models below to compare horizon curves. Default: EOS family representatives."
     );
 
     if (hscCropKeys.length) {
@@ -1833,6 +1964,169 @@
       return stats?.median ?? null;
     }
 
+    function hmMetricSpec() {
+      const axis = hscAxisDef(hmAxis);
+      const metrics = axis.metrics || [];
+      return metrics.find(m => m.id === hmMetric) || metrics[0] || { id: "nrmse", has_iqr: true };
+    }
+
+    function hmMetricIqr(point, metricId) {
+      const spec = hmMetricSpec();
+      if (spec.has_iqr === false) return { low: null, high: null };
+      const col = hmMetricColumn(metricId);
+      const stats = (point.metrics || {})[col];
+      if (!stats) return { low: null, high: null };
+      return { low: stats.q25 ?? null, high: stats.q75 ?? null };
+    }
+
+    function hmSelectedSet(cropKey, allModels) {
+      if (!hmSelectedByCrop[cropKey]) {
+        const reps = new Set(
+          (allModels || []).filter(m => m.is_representative).map(m => m.model)
+        );
+        if (!reps.size) {
+          (allModels || []).filter(m => m.plot !== false).forEach(m => reps.add(m.model));
+        }
+        hmSelectedByCrop[cropKey] = reps;
+      }
+      return hmSelectedByCrop[cropKey];
+    }
+
+    function renderHorizonModelsPicker(allModels) {
+      const selected = hmSelectedSet(hmCrop, allModels);
+      const fq = hmPickerFilterText.trim().toLowerCase();
+      const byFamily = new Map();
+      for (const m of allModels || []) {
+        const fam = m.family || "Other";
+        if (!byFamily.has(fam)) byFamily.set(fam, []);
+        byFamily.get(fam).push(m);
+      }
+      const parts = [];
+      for (const [family, models] of byFamily) {
+        const visible = models.filter(m => {
+          if (!fq) return true;
+          const label = `${m.display || m.model} ${m.model} ${family}`.toLowerCase();
+          return label.includes(fq);
+        });
+        if (!visible.length) continue;
+        parts.push(`<div class="model-picker-family">${family}</div>`);
+        for (const m of visible) {
+          const checked = selected.has(m.model) ? "checked" : "";
+          const repCls = m.is_representative ? " representative" : "";
+          const color = modelPlotColor(m);
+          const label = m.is_representative ? `${m.display || m.model} *` : (m.display || m.model);
+          parts.push(
+            `<label class="model-picker-item${repCls}">` +
+            `<input type="checkbox" data-model="${m.model}" ${checked} />` +
+            `<span class="swatch" style="background:${color}"></span>` +
+            `<span>${label}</span></label>`
+          );
+        }
+      }
+      hmPicker.innerHTML = parts.length
+        ? parts.join("")
+        : `<p class="muted">No models match filter.</p>`;
+      hmPicker.querySelectorAll("input[type=checkbox]").forEach(cb => {
+        cb.addEventListener("change", () => {
+          const set = hmSelectedSet(hmCrop, allModels);
+          if (cb.checked) set.add(cb.dataset.model);
+          else set.delete(cb.dataset.model);
+          renderHorizonModelsView();
+        });
+      });
+    }
+
+    function renderHorizonModelsView() {
+      const slice = (HSC.by_crop || {})[hmCrop] || { models: [], n_countries: 0, countries: [] };
+      const horizons = HSC.horizons || [];
+      const metricCol = hmMetricColumn(hmMetric);
+      const metricNotes = HSC.metric_notes || {};
+      const axisDef = hscAxisDef(hmAxis);
+      const metricDef = hscMetricSpec();
+      const allModels = slice.models || [];
+      const selected = hmSelectedSet(hmCrop, allModels);
+      renderHorizonModelsPicker(allModels);
+
+      let models = allModels;
+      const mq = hmModelFilter.value.trim().toLowerCase();
+      if (mq) {
+        models = models.filter(m =>
+          m.model.toLowerCase().includes(mq) || String(m.display || "").toLowerCase().includes(mq)
+        );
+      }
+
+      let metricNote = metricNotes[metricCol] || metricNotes[hmMetric] || axisDef.note || "";
+      if (HSC.plot_excluded_note && allModels.some(m => m.eos_only)) {
+        metricNote = metricNote ? `${metricNote} ${HSC.plot_excluded_note}` : HSC.plot_excluded_note;
+      }
+      hmMetricNote.textContent = metricNote;
+
+      const plotModels = allModels.filter(m => selected.has(m.model));
+      hmPlotMeta.textContent = horizons.length < 2
+        ? "Need at least two horizons to plot curves."
+        : `${plotModels.length} model${plotModels.length === 1 ? "" : "s"} selected · * = EOS family representative`;
+
+      if (horizons.length < 2) {
+        hmChart.innerHTML = `<p class="muted">Not enough horizon data to plot.</p>`;
+        hmLegend.innerHTML = "";
+      } else if (!plotModels.length) {
+        hmChart.innerHTML = `<p class="muted">Select one or more models to plot.</p>`;
+        hmLegend.innerHTML = "";
+      } else {
+        const chart = buildHorizonCurvesSvg({
+          series: plotModels,
+          horizons,
+          metricId: hmMetric,
+          metricValueFn: hmMetricValue,
+          metricIqrFn: hmMetricIqr,
+          metricLabel: metricDef.label || hmMetric,
+          colorFn: modelPlotColor,
+          labelFn: (m) => m.display || m.model,
+        });
+        if (!chart) {
+          hmChart.innerHTML = `<p class="muted">No metric values for selected models.</p>`;
+          hmLegend.innerHTML = "";
+        } else {
+          hmChart.innerHTML = chart.svg;
+          hmLegend.innerHTML = chart.legend;
+        }
+      }
+
+      let meta = `${allModels.length} model${allModels.length === 1 ? "" : "s"} in table`;
+      if (mq) meta += ` · ${models.length} after table filter`;
+      hmMeta.textContent = meta;
+
+      if (!models.length || horizons.length < 2) {
+        hmTableWrap.innerHTML = `<p class="muted">No horizon model table for this crop.</p>`;
+        return;
+      }
+
+      renderHorizonPointsTable({
+        container: hmTableWrap,
+        horizons,
+        entries: models,
+        leadingCols: [
+          { key: "family", label: "Family", value: entry => entry.family || "—" },
+          { key: "model", label: "Model", value: entry => entry.display || entry.model },
+        ],
+        sortKey: hmTableSort,
+        sortDir: hmTableDir,
+        onSort: (key) => {
+          if (hmTableSort === key) {
+            hmTableDir = hmTableDir === "asc" ? "desc" : "asc";
+          } else {
+            hmTableSort = key;
+            hmTableDir = key === "model" || key === "family" ? "asc" : "desc";
+          }
+          renderHorizonModelsView();
+        },
+        metricId: hmMetric,
+        metricCol,
+        metricValueFn: hmMetricValue,
+        cellBgFn: hscCellBg,
+      });
+    }
+
     function syncHmMetricControl() {
       const axis = hscAxisDef(hmAxis);
       const metrics = axis.metrics || [];
@@ -1849,64 +2143,27 @@
       hmMetricSelect.value = hmMetric;
     }
 
-    function renderHorizonModelsTable() {
-      const slice = (HSC.by_crop || {})[hmCrop] || { models: [], n_countries: 0, countries: [] };
-      const horizons = HSC.horizons || [];
-      const metricCol = hmMetricColumn(hmMetric);
-      const metricNotes = HSC.metric_notes || {};
-      const axisDef = hscAxisDef(hmAxis);
-      let models = slice.models || [];
-      const mq = hmModelFilter.value.trim().toLowerCase();
-      if (mq) {
-        models = models.filter(m =>
-          m.model.toLowerCase().includes(mq) || String(m.display || "").toLowerCase().includes(mq)
-        );
-      }
-
-      let metricNote = metricNotes[metricCol] || metricNotes[hmMetric] || axisDef.note || "";
-      if (HSC.plot_excluded_note && (slice.models || []).some(m => m.eos_only)) {
-        metricNote = metricNote ? `${metricNote} ${HSC.plot_excluded_note}` : HSC.plot_excluded_note;
-      }
-      hmMetricNote.textContent = metricNote;
-
-      const excluded = slice.excluded_countries || [];
-      let meta = `${slice.n_countries || 0} countries with all ${horizons.length} horizons`;
-      if (models.length) meta += ` · ${models.length} model${models.length === 1 ? "" : "s"} shown`;
-      if (excluded.length) {
-        meta += ` · Excluded (incomplete horizons): ${excluded.slice(0, 8).join(", ")}`;
-        if (excluded.length > 8) meta += ` +${excluded.length - 8} more`;
-      }
-      hmMeta.textContent = meta;
-
-      if (!models.length || horizons.length < 2) {
-        hmTableWrap.innerHTML = `<p class="muted">No horizon model table for this crop.</p>`;
-        return;
-      }
-
-      renderHorizonPointsTable({
-        container: hmTableWrap,
-        horizons,
-        entries: models,
-        leadingCols: [
-          { key: "model", label: "Model", value: entry => entry.display || entry.model },
-        ],
-        sortKey: hmTableSort,
-        sortDir: hmTableDir,
-        onSort: (key) => {
-          if (hmTableSort === key) {
-            hmTableDir = hmTableDir === "asc" ? "desc" : "asc";
-          } else {
-            hmTableSort = key;
-            hmTableDir = key === "model" ? "asc" : "desc";
-          }
-          renderHorizonModelsTable();
-        },
-        metricId: hmMetric,
-        metricCol,
-        metricValueFn: hmMetricValue,
-        cellBgFn: hscCellBg,
-      });
-    }
+    hmSelectReps.addEventListener("click", () => {
+      const slice = (HSC.by_crop || {})[hmCrop] || { models: [] };
+      const set = new Set();
+      (slice.models || []).filter(m => m.is_representative).forEach(m => set.add(m.model));
+      hmSelectedByCrop[hmCrop] = set;
+      renderHorizonModelsView();
+    });
+    hmSelectAll.addEventListener("click", () => {
+      const slice = (HSC.by_crop || {})[hmCrop] || { models: [] };
+      hmSelectedByCrop[hmCrop] = new Set((slice.models || []).map(m => m.model));
+      renderHorizonModelsView();
+    });
+    hmSelectNone.addEventListener("click", () => {
+      hmSelectedByCrop[hmCrop] = new Set();
+      renderHorizonModelsView();
+    });
+    hmPickerFilter.addEventListener("input", () => {
+      hmPickerFilterText = hmPickerFilter.value || "";
+      const slice = (HSC.by_crop || {})[hmCrop] || { models: [] };
+      renderHorizonModelsPicker(slice.models || []);
+    });
 
     hmAxisToolbar.querySelectorAll("button").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -1914,20 +2171,20 @@
         btn.classList.add("active");
         hmAxis = btn.dataset.axis || "overall";
         syncHmMetricControl();
-        renderHorizonModelsTable();
+        renderHorizonModelsView();
       });
     });
     hmCropSelect.addEventListener("change", () => {
       hmCrop = hmCropSelect.value || "all";
-      renderHorizonModelsTable();
+      renderHorizonModelsView();
     });
     hmMetricSelect.addEventListener("change", () => {
       hmMetric = hmMetricSelect.value || "nrmse";
-      renderHorizonModelsTable();
+      renderHorizonModelsView();
     });
-    hmModelFilter.addEventListener("input", renderHorizonModelsTable);
+    hmModelFilter.addEventListener("input", renderHorizonModelsView);
     syncHmMetricControl();
-    renderHorizonModelsTable();
+    renderHorizonModelsView();
 
     // Crop pair comparison (RQ3)
     let rq3Horizon = AVAILABLE_HORIZONS.includes("eos") ? "eos" : (AVAILABLE_HORIZONS[0] || "eos");

@@ -878,6 +878,73 @@ def _family_curve_points(
     )
 
 
+def _horizon_points_per_model_independent(
+    work: pd.DataFrame,
+    *,
+    model: str,
+    trend_model: str,
+    horizons: tuple[str, ...],
+    value_columns: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    """Per-horizon country medians (no inner join across horizons)."""
+    points: list[dict[str, Any]] = []
+    for hz in horizons:
+        hz_work = work[
+            (work["model"] == model) & (work["batch_horizon"] == hz) & work["nrmse"].notna()
+        ]
+        if hz_work.empty:
+            continue
+
+        trend_hz = work[
+            (work["model"] == trend_model)
+            & (work["batch_horizon"] == hz)
+            & work["nrmse"].notna()
+        ]
+        trend_by_country: dict[str, float] = {}
+        if not trend_hz.empty and "country" in trend_hz.columns:
+            for country, grp in trend_hz.groupby("country"):
+                med = grp["nrmse"].median()
+                if pd.notna(med) and float(med) > 0:
+                    trend_by_country[str(country)] = float(med)
+
+        metrics: dict[str, Any] = {}
+        n_countries = 0
+        cols = [c for c in value_columns if c in hz_work.columns]
+        if "country" in hz_work.columns:
+            for col_base in cols:
+                vals: list[float] = []
+                for country, grp in hz_work.groupby("country"):
+                    med = grp[col_base].median()
+                    if pd.notna(med):
+                        vals.append(float(med))
+                if col_base == "nrmse":
+                    n_countries = len(vals)
+                metrics[col_base] = _median_iqr_stats(vals)
+        else:
+            for col_base in cols:
+                med = hz_work[col_base].median()
+                if pd.notna(med):
+                    metrics[col_base] = _median_iqr_stats([float(med)])
+                    if col_base == "nrmse":
+                        n_countries = 1
+
+        skill_vals: list[float] = []
+        if "country" in hz_work.columns and "nrmse" in hz_work.columns:
+            for country, grp in hz_work.groupby("country"):
+                med = grp["nrmse"].median()
+                if pd.isna(med):
+                    continue
+                nrmse = float(med)
+                trend_val = trend_by_country.get(str(country))
+                if trend_val and trend_val > 0:
+                    skill_vals.append(1.0 - nrmse / trend_val)
+        skill_stats = _median_iqr_stats(skill_vals)
+        metrics["skill_vs_trend"] = {"median": skill_stats["median"]}
+
+        points.append({"horizon": hz, "metrics": metrics, "n_countries": n_countries})
+    return points
+
+
 def _eos_only_family_points(
     work: pd.DataFrame,
     *,
@@ -886,57 +953,13 @@ def _eos_only_family_points(
     value_columns: tuple[str, ...],
 ) -> list[dict[str, Any]]:
     """Median EOS metrics for models not run at earlier forecast horizons."""
-    eos = work[
-        (work["model"] == model) & (work["batch_horizon"] == "eos") & work["nrmse"].notna()
-    ]
-    if eos.empty:
-        return []
-
-    trend_eos = work[
-        (work["model"] == trend_model) & (work["batch_horizon"] == "eos") & work["nrmse"].notna()
-    ]
-    trend_by_country: dict[str, float] = {}
-    if not trend_eos.empty and "country" in trend_eos.columns:
-        for country, grp in trend_eos.groupby("country"):
-            med = grp["nrmse"].median()
-            if pd.notna(med) and float(med) > 0:
-                trend_by_country[str(country)] = float(med)
-
-    metrics: dict[str, Any] = {}
-    n_countries = 0
-    cols = [c for c in value_columns if c in eos.columns]
-    if "country" in eos.columns:
-        for col_base in cols:
-            vals: list[float] = []
-            for country, grp in eos.groupby("country"):
-                med = grp[col_base].median()
-                if pd.notna(med):
-                    vals.append(float(med))
-            if col_base == "nrmse":
-                n_countries = len(vals)
-            metrics[col_base] = _median_iqr_stats(vals)
-    else:
-        for col_base in cols:
-            med = eos[col_base].median()
-            if pd.notna(med):
-                metrics[col_base] = _median_iqr_stats([float(med)])
-                if col_base == "nrmse":
-                    n_countries = 1
-
-    skill_vals: list[float] = []
-    if "country" in eos.columns and "nrmse" in eos.columns:
-        for country, grp in eos.groupby("country"):
-            med = grp["nrmse"].median()
-            if pd.isna(med):
-                continue
-            nrmse = float(med)
-            trend_val = trend_by_country.get(str(country))
-            if trend_val and trend_val > 0:
-                skill_vals.append(1.0 - nrmse / trend_val)
-    skill_stats = _median_iqr_stats(skill_vals)
-    metrics["skill_vs_trend"] = {"median": skill_stats["median"]}
-
-    return [{"horizon": "eos", "metrics": metrics, "n_countries": n_countries}]
+    return _horizon_points_per_model_independent(
+        work,
+        model=model,
+        trend_model=trend_model,
+        horizons=("eos",),
+        value_columns=value_columns,
+    )
 
 
 def _build_model_horizon_entry(
@@ -977,30 +1000,80 @@ def _build_model_horizon_entry(
     }
 
 
+def _model_family_lookup() -> dict[str, str]:
+    from cybench.runs.analysis.model_family_radar_lib import MODEL_FAMILIES
+
+    out: dict[str, str] = {}
+    for family, models in MODEL_FAMILIES.items():
+        for slug in models:
+            out[slug] = family
+    return out
+
+
+def _build_model_horizon_entry_independent(
+    work: pd.DataFrame,
+    *,
+    model: str,
+    trend_model: str,
+    horizons: tuple[str, ...],
+    value_columns: tuple[str, ...],
+) -> dict[str, Any] | None:
+    eos_only = model in EOS_ONLY_HORIZON_CURVE_MODELS
+    plot_horizons = tuple(hz for hz in horizons if hz == "eos") if eos_only else horizons
+    points = _horizon_points_per_model_independent(
+        work,
+        model=model,
+        trend_model=trend_model,
+        horizons=plot_horizons,
+        value_columns=value_columns,
+    )
+    if not points:
+        return None
+    n_horizons_with_data = sum(
+        1 for p in points if (p.get("metrics") or {}).get("nrmse", {}).get("median") is not None
+    )
+    return {
+        "model": model,
+        "points": points,
+        "eos_only": eos_only,
+        "plot": (not eos_only) and n_horizons_with_data >= 2,
+    }
+
+
 def _build_all_model_horizon_entries(
     work: pd.DataFrame,
-    wide: pd.DataFrame,
     *,
     trend_model: str,
     horizons: tuple[str, ...],
     value_columns: tuple[str, ...],
     model_display_names: dict[str, str],
+    representatives: dict[str, str],
+    family_colors: dict[str, str],
 ) -> list[dict[str, Any]]:
     if work.empty or "model" not in work.columns:
         return []
+    model_to_family = _model_family_lookup()
+    rep_models = set(representatives.values())
+    family_counts: dict[str, int] = {}
     entries: list[dict[str, Any]] = []
     for model in sorted(work["model"].astype(str).unique()):
-        entry = _build_model_horizon_entry(
+        entry = _build_model_horizon_entry_independent(
+            work,
             model=model,
-            wide=wide,
-            work=work,
             trend_model=trend_model,
             horizons=horizons,
             value_columns=value_columns,
         )
         if entry is None:
             continue
+        family = model_to_family.get(model, "Other")
+        family_idx = family_counts.get(family, 0)
+        family_counts[family] = family_idx + 1
         entry["display"] = model_display_names.get(model, model)
+        entry["family"] = family
+        entry["color"] = family_colors.get(family, "#666666")
+        entry["family_index"] = family_idx
+        entry["is_representative"] = model in rep_models
         entries.append(entry)
     return entries
 
@@ -1052,11 +1125,12 @@ def build_horizon_skill_curves_payload(
 
         models = _build_all_model_horizon_entries(
             crop_work,
-            wide_all,
             trend_model=trend_model,
             horizons=horizons,
             value_columns=value_columns,
             model_display_names=MODEL_DISPLAY_NAMES,
+            representatives=reps,
+            family_colors=FAMILY_COLORS,
         )
 
         work = crop_work[crop_work["model"].isin(rep_models)]
@@ -1125,9 +1199,13 @@ def build_horizon_skill_curves_payload(
             "their end-of-season median."
         ),
         "models_table_note": (
-            "Median per metric across countries. Multi-horizon models use only countries with "
-            "data at every collected horizon (inner join). EOS-only baselines show end-of-season "
-            "values only."
+            "Median per metric across countries at each horizon (horizons scored independently, "
+            "so incomplete early-season runs still appear). EOS-only baselines show end-of-season "
+            "values only. Use the checkboxes to choose which models to plot."
+        ),
+        "models_plot_note": (
+            "Curves use the same per-horizon country medians as the table below. "
+            "Default selection: EOS family representatives."
         ),
         "axes": _horizon_skill_axes(),
         "metric_notes": {
@@ -1143,6 +1221,108 @@ def build_horizon_skill_curves_payload(
             "r_res": "Median anomaly r (pooled demeaned residuals; higher is better).",
         },
     }
+
+
+def _model_country_count(work: pd.DataFrame, model: str) -> int:
+    sub = work[work["model"] == model]
+    if sub.empty or "country" not in sub.columns:
+        return 0
+    return int(sub["country"].nunique())
+
+
+def build_family_models_horizon_table(
+    df: pd.DataFrame,
+    *,
+    crop: str | None = None,
+    horizons: tuple[str, ...] | None = None,
+    metrics: tuple[str, ...] = ("nrmse", "r2", "r_spatial", "r_temporal", "r_res"),
+    representatives: dict[str, str] | None = None,
+) -> pd.DataFrame:
+    """One row per model (grouped by family) with per-horizon country medians.
+
+    Unlike the dashboard family-representative curve table, this lists every model
+    in each family. Horizons are scored independently (no inner join), so incomplete
+    early-season runs appear as NaN with ``n_countries_<hz>`` below the full set.
+  """
+    from cybench.runs.analysis.model_family_radar_lib import (
+        FAMILY_ORDER,
+        MODEL_DISPLAY_NAMES,
+        MODEL_FAMILIES,
+        pick_representatives,
+    )
+
+    horizons = horizons or horizons_in_data(df)
+    if not horizons or df.empty or "model" not in df.columns:
+        return pd.DataFrame()
+
+    rep_source_hz = "eos" if "eos" in horizons else horizons[-1]
+    rep_work = _filter_summary_work(df, batch_horizon=rep_source_hz, crop=crop)
+    reps = pick_representatives(rep_work, overrides=representatives)
+
+    present_metrics = tuple(m for m in metrics if m in df.columns)
+    if not present_metrics:
+        return pd.DataFrame()
+
+    models_in_data = {str(m) for m in df["model"].astype(str).unique()}
+    rows: list[dict[str, Any]] = []
+    for family in FAMILY_ORDER:
+        family_models = [m for m in MODEL_FAMILIES.get(family, []) if m in models_in_data]
+        if not family_models:
+            continue
+        rep_model = reps.get(family)
+        for model in family_models:
+            row: dict[str, Any] = {
+                "family": family,
+                "model": model,
+                "display_name": MODEL_DISPLAY_NAMES.get(model, model),
+                "crop": crop or "all",
+                "is_representative": model == rep_model,
+            }
+            for hz in horizons:
+                hz_work = _filter_summary_work(df, batch_horizon=hz, crop=crop)
+                row[f"n_countries_{hz}"] = _model_country_count(hz_work, model)
+                if model not in hz_work["model"].values:
+                    for metric in present_metrics:
+                        row[f"{hz}_{metric}_median"] = float("nan")
+                        row[f"{hz}_{metric}_q25"] = float("nan")
+                        row[f"{hz}_{metric}_q75"] = float("nan")
+                    continue
+                medians = median_model_metrics_across_countries(
+                    hz_work, present_metrics, models=[model]
+                )
+                q25_df, q75_df = quantile_model_metrics_across_countries(
+                    hz_work, present_metrics, models=[model]
+                )
+                for metric in present_metrics:
+                    if model in medians.index and metric in medians.columns:
+                        med_val = medians.loc[model, metric]
+                        q25 = (
+                            q25_df.loc[model, metric]
+                            if model in q25_df.index and metric in q25_df.columns
+                            else float("nan")
+                        )
+                        q75 = (
+                            q75_df.loc[model, metric]
+                            if model in q75_df.index and metric in q75_df.columns
+                            else float("nan")
+                        )
+                    else:
+                        med_val = q25 = q75 = float("nan")
+                    row[f"{hz}_{metric}_median"] = med_val
+                    row[f"{hz}_{metric}_q25"] = q25
+                    row[f"{hz}_{metric}_q75"] = q75
+            rows.append(row)
+
+    if not rows:
+        return pd.DataFrame()
+    family_ord = {family: idx for idx, family in enumerate(FAMILY_ORDER)}
+    out = pd.DataFrame(rows)
+    out["_family_ord"] = out["family"].map(family_ord)
+    return (
+        out.sort_values(["_family_ord", "model"])
+        .drop(columns=["_family_ord"])
+        .reset_index(drop=True)
+    )
 
 
 def report_model_horizon_pairs(

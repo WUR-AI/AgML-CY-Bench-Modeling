@@ -7,10 +7,12 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from cybench.runs.analysis.export_family_models_horizon_table import build_markdown_table
 from cybench.runs.analysis.global_insights_lib import (
     aggregate_model_leaderboard,
     attach_baseline_metrics,
     build_dashboard_hrefs,
+    build_family_models_horizon_table,
     build_horizon_skill_curves_payload,
     build_insights_payload,
     build_crop_comparison_payload,
@@ -540,7 +542,11 @@ def test_horizon_skill_curves_inner_join_countries():
         assert "ridge" in model_slugs
         assert "xgboost" in model_slugs
         assert "trend" in model_slugs
+        xgb_all = next(m for m in maize["models"] if m["model"] == "xgboost")
+        assert xgb_all["family"] == "Feature-Engineered ML"
+        assert xgb_all["is_representative"] is True
         assert "models_table_note" in payload
+        assert "models_plot_note" in payload
 
 
 def test_horizon_skill_curves_eos_only_lpjml_in_table_not_plot(tmp_path: Path):
@@ -571,7 +577,76 @@ def test_horizon_skill_curves_eos_only_lpjml_in_table_not_plot(tmp_path: Path):
     assert "lpjml_bc" not in plot_models
     lpj_all = next(m for m in maize["models"] if m["model"] == "lpjml_bc")
     assert lpj_all["eos_only"] is True
+    assert lpj_all["family"] == "Process-Based"
     assert "plot_excluded_note" in payload
+
+
+def test_horizon_models_include_partial_early_coverage():
+    df = pd.DataFrame(
+        [
+            {
+                "crop": "maize",
+                "country": "DE",
+                "model": "tabpfn",
+                "batch_horizon": "eos",
+                "nrmse": 0.12,
+                "r2": 0.8,
+                "n_samples": 40,
+            },
+            {
+                "crop": "maize",
+                "country": "DE",
+                "model": "tabpfn",
+                "batch_horizon": "early",
+                "nrmse": 0.20,
+                "r2": 0.5,
+                "n_samples": 40,
+            },
+            {
+                "crop": "maize",
+                "country": "DE",
+                "model": "xgboost",
+                "batch_horizon": "early",
+                "nrmse": 0.18,
+                "r2": 0.55,
+                "n_samples": 40,
+            },
+            {
+                "crop": "maize",
+                "country": "DE",
+                "model": "xgboost",
+                "batch_horizon": "eos",
+                "nrmse": 0.11,
+                "r2": 0.82,
+                "n_samples": 40,
+            },
+            {
+                "crop": "maize",
+                "country": "FR",
+                "model": "xgboost",
+                "batch_horizon": "early",
+                "nrmse": 0.19,
+                "r2": 0.52,
+                "n_samples": 40,
+            },
+            {
+                "crop": "maize",
+                "country": "FR",
+                "model": "xgboost",
+                "batch_horizon": "eos",
+                "nrmse": 0.13,
+                "r2": 0.78,
+                "n_samples": 40,
+            },
+        ]
+    )
+    payload = build_horizon_skill_curves_payload(df)
+    models = payload["by_crop"]["maize"]["models"]
+    tabpfn = next(m for m in models if m["model"] == "tabpfn")
+    assert any(p["horizon"] == "early" for p in tabpfn["points"])
+    assert any(p["horizon"] == "eos" for p in tabpfn["points"])
+    early_pt = next(p for p in tabpfn["points"] if p["horizon"] == "early")
+    assert early_pt["n_countries"] == 1
 
 
 def test_build_insights_payload_includes_qtr_and_curves(tmp_path: Path):
@@ -685,3 +760,102 @@ def test_quantile_model_metrics_across_countries():
     assert medians.loc["m", "nrmse"] == pytest.approx(0.20)
     assert q25.loc["m", "nrmse"] == pytest.approx(float(country_vals.quantile(0.25)))
     assert q75.loc["m", "nrmse"] == pytest.approx(float(country_vals.quantile(0.75)))
+
+
+def test_build_family_models_horizon_table_lists_all_models_per_family():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        df = _three_horizon_fixture(Path(tmp))
+        table = build_family_models_horizon_table(df, metrics=("nrmse", "r2"))
+        assert not table.empty
+        ml = table[table["family"] == "Feature-Engineered ML"]
+        assert set(ml["model"]) == {"ridge", "xgboost"}
+        deep = table[table["family"] == "Sequence / Deep TS"]
+        assert list(deep["model"]) == ["lstm_lf"]
+        assert "early_nrmse_median" not in table.columns
+        assert "mid_nrmse_median" in table.columns
+        xgb = ml[ml["model"] == "xgboost"].iloc[0]
+        assert xgb["mid_nrmse_median"] > xgb["eos_nrmse_median"]
+
+
+def test_build_family_models_horizon_table_allows_incomplete_early():
+    df = pd.DataFrame(
+        [
+            {
+                "crop": "maize",
+                "country": "DE",
+                "model": "tabpfn",
+                "batch_horizon": "eos",
+                "nrmse": 0.12,
+                "r2": 0.8,
+                "n_samples": 40,
+            },
+            {
+                "crop": "maize",
+                "country": "FR",
+                "model": "tabpfn",
+                "batch_horizon": "eos",
+                "nrmse": 0.14,
+                "r2": 0.75,
+                "n_samples": 40,
+            },
+            {
+                "crop": "maize",
+                "country": "DE",
+                "model": "tabpfn",
+                "batch_horizon": "early",
+                "nrmse": 0.20,
+                "r2": 0.5,
+                "n_samples": 40,
+            },
+            {
+                "crop": "maize",
+                "country": "DE",
+                "model": "xgboost",
+                "batch_horizon": "early",
+                "nrmse": 0.18,
+                "r2": 0.55,
+                "n_samples": 40,
+            },
+            {
+                "crop": "maize",
+                "country": "FR",
+                "model": "xgboost",
+                "batch_horizon": "early",
+                "nrmse": 0.19,
+                "r2": 0.52,
+                "n_samples": 40,
+            },
+            {
+                "crop": "maize",
+                "country": "DE",
+                "model": "xgboost",
+                "batch_horizon": "eos",
+                "nrmse": 0.11,
+                "r2": 0.82,
+                "n_samples": 40,
+            },
+            {
+                "crop": "maize",
+                "country": "FR",
+                "model": "xgboost",
+                "batch_horizon": "eos",
+                "nrmse": 0.13,
+                "r2": 0.78,
+                "n_samples": 40,
+            },
+        ]
+    )
+    table = build_family_models_horizon_table(df, metrics=("nrmse",))
+    tabpfn = table[table["model"] == "tabpfn"].iloc[0]
+    xgb = table[table["model"] == "xgboost"].iloc[0]
+    assert tabpfn["n_countries_early"] == 1
+    assert pd.isna(tabpfn["early_nrmse_median"]) is False
+    assert tabpfn["early_nrmse_median"] == pytest.approx(0.20)
+    assert xgb["n_countries_early"] == 2
+    md = build_markdown_table(
+        table, metric="nrmse", horizons=("early", "eos"), crop_label="all crops"
+    )
+    assert "## Tabular Foundation" in md
+    assert "TabPFN" in md
