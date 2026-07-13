@@ -37,6 +37,13 @@ METRIC_MAP_SCALES: dict[str, dict[str, Any]] = {
     "r": {"lo": -1.0, "hi": 1.0, "higher_better": True, "label": "r"},
 }
 
+# Symmetric scales for horizon-pair improvement maps (positive = better at later horizon).
+HORIZON_DELTA_SCALES: dict[str, dict[str, Any]] = {
+    "nrmse": {"lo": -0.15, "hi": 0.15, "higher_better": True, "label": "Δ NRMSE"},
+    "r2": {"lo": -0.15, "hi": 0.15, "higher_better": True, "label": "Δ R²"},
+    "r": {"lo": -0.2, "hi": 0.2, "higher_better": True, "label": "Δ r"},
+}
+
 MAP_COVERAGE_NOTE = (
     "CY-Bench countries use a blue-grey base; other land is neutral grey. "
     "The United States and France are metropolitan only (Alaska, French Guiana, "
@@ -1521,6 +1528,7 @@ def build_insights_payload(output_root: Path, *, version: int = 2) -> dict[str, 
         "benchmark_map_isos": benchmark_map_isos,
         "map_coverage_note": MAP_COVERAGE_NOTE,
         "metric_map_scales": METRIC_MAP_SCALES,
+        "horizon_delta_scales": HORIZON_DELTA_SCALES,
     }
 
 

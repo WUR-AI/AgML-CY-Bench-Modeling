@@ -420,6 +420,61 @@
     </div>
 
     <div class="card">
+      <h2>World map — horizon improvement</h2>
+      <p class="muted">
+        Choropleth of per-country metric change from an earlier forecast horizon to a later one
+        (same model and crop as the evaluation map). Positive values mean better performance at the
+        later horizon (e.g. lower NRMSE or higher R²). Green = improved by default; optional
+        intensity palette for exploration.
+      </p>
+      <div class="controls">
+        <label>From horizon
+          <select id="delta-map-from-horizon"></select>
+        </label>
+        <label>To horizon
+          <select id="delta-map-to-horizon"></select>
+        </label>
+        <label>Crop
+          <select id="delta-map-crop-filter">
+            <option value="all">All crops</option>
+          </select>
+        </label>
+        <label>
+          <input type="checkbox" id="delta-map-skilled-only" />
+          Skilful datasets only
+        </label>
+        <label>Model
+          <select id="delta-map-model"></select>
+        </label>
+        <span class="muted">Axis</span>
+        <div class="toolbar" id="delta-map-axis-toolbar">
+          <button type="button" data-axis="overall" class="active">Overall</button>
+          <button type="button" data-axis="spatial">Spatial</button>
+          <button type="button" data-axis="temporal">Temporal</button>
+          <button type="button" data-axis="anomaly">Anomaly</button>
+        </div>
+        <label id="delta-map-metric-wrap">Metric
+          <select id="delta-map-metric">
+            <option value="nrmse" selected>NRMSE</option>
+            <option value="r2">R²</option>
+          </select>
+        </label>
+        <span class="muted">Palette</span>
+        <div class="toolbar" id="delta-map-palette-toolbar">
+          <button type="button" data-palette="semantic" class="active">Semantic</button>
+          <button type="button" data-palette="intensity">Intensity</button>
+        </div>
+      </div>
+      <p class="muted" id="delta-map-note"></p>
+      <div class="world-map-wrap" id="delta-map-wrap"><p class="muted">Loading map…</p></div>
+      <div class="metric-map-legend" id="delta-map-legend">
+        <span class="metric-map-gradient semantic" aria-hidden="true"></span>
+        <span id="delta-map-legend-label">—</span>
+      </div>
+      <p class="muted" id="delta-map-summary"></p>
+    </div>
+
+    <div class="card">
       <h2>Forecast horizon vs performance</h2>
       <p class="muted" id="horizon-curves-note"></p>
       <div class="controls">
@@ -1553,6 +1608,318 @@
     if (metricMapExportPngBtn) metricMapExportPngBtn.addEventListener("click", downloadMetricMapPng);
     loadMetricMapGeometry();
     ensureExportFont();
+
+    // World map — horizon improvement (pairwise delta between forecast horizons)
+    let deltaMapFromHz = AVAILABLE_HORIZONS.includes("mid") ? "mid" : (AVAILABLE_HORIZONS[0] || "eos");
+    let deltaMapToHz = AVAILABLE_HORIZONS.includes("eos") ? "eos" : (AVAILABLE_HORIZONS[AVAILABLE_HORIZONS.length - 1] || "eos");
+    let deltaMapCrop = "all";
+    let deltaMapSkilledOnly = false;
+    let deltaMapAxis = "overall";
+    let deltaMapMetric = "nrmse";
+    let deltaMapModel = "";
+    let deltaMapPalette = "semantic";
+    const deltaMapFromSelect = document.getElementById("delta-map-from-horizon");
+    const deltaMapToSelect = document.getElementById("delta-map-to-horizon");
+    const deltaMapCropFilter = document.getElementById("delta-map-crop-filter");
+    const deltaMapSkilledCheckbox = document.getElementById("delta-map-skilled-only");
+    const deltaMapModelSelect = document.getElementById("delta-map-model");
+    const deltaMapAxisToolbar = document.getElementById("delta-map-axis-toolbar");
+    const deltaMapMetricWrap = document.getElementById("delta-map-metric-wrap");
+    const deltaMapMetricSelect = document.getElementById("delta-map-metric");
+    const deltaMapNote = document.getElementById("delta-map-note");
+    const deltaMapWrap = document.getElementById("delta-map-wrap");
+    const deltaMapLegendLabel = document.getElementById("delta-map-legend-label");
+    const deltaMapSummary = document.getElementById("delta-map-summary");
+    const deltaMapPaletteToolbar = document.getElementById("delta-map-palette-toolbar");
+    const HORIZON_DELTA_SCALES = DATA.horizon_delta_scales || {
+      nrmse: { lo: -0.15, hi: 0.15, higher_better: true, label: "Δ NRMSE" },
+      r2: { lo: -0.15, hi: 0.15, higher_better: true, label: "Δ R²" },
+      r: { lo: -0.2, hi: 0.2, higher_better: true, label: "Δ r" },
+    };
+    const deltaMapSvg = d3.select("#delta-map-wrap").html("").append("svg")
+      .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
+      .attr("role", "img")
+      .attr("aria-label", "World map of horizon improvement by country");
+
+    function populateDeltaHorizonSelects() {
+      const horizons = AVAILABLE_HORIZONS.length ? AVAILABLE_HORIZONS : ["eos"];
+      const options = horizons.map(hz => {
+        const label = HORIZON_LABELS[hz] || hz;
+        return `<option value="${hz}">${label}</option>`;
+      }).join("");
+      deltaMapFromSelect.innerHTML = options;
+      deltaMapToSelect.innerHTML = options;
+      if (!horizons.includes(deltaMapFromHz)) deltaMapFromHz = horizons[0];
+      if (!horizons.includes(deltaMapToHz)) deltaMapToHz = horizons[horizons.length - 1];
+      deltaMapFromSelect.value = deltaMapFromHz;
+      deltaMapToSelect.value = deltaMapToHz;
+    }
+
+    for (const crop of DATA.crops || []) {
+      const opt = document.createElement("option");
+      opt.value = crop;
+      opt.textContent = crop.charAt(0).toUpperCase() + crop.slice(1);
+      deltaMapCropFilter.appendChild(opt);
+    }
+
+    function deltaMatrixSource(horizon) {
+      const root = deltaMapSkilledOnly ? DATA.model_country_skilled : DATA.model_country;
+      const byHorizon = root && root[horizon];
+      if (!byHorizon) return { models: [], countries: [], cells: [], model_totals: {} };
+      return byHorizon[deltaMapCrop] || byHorizon.all || { models: [], countries: [], cells: [], model_totals: {} };
+    }
+
+    function deltaMetricSpec() {
+      const axis = matrixAxisDef(deltaMapAxis);
+      const metrics = axis.metrics || [];
+      let metricId = deltaMapMetric;
+      if (!metrics.some(m => m.id === metricId)) {
+        metricId = metrics[0]?.id || "r2";
+      }
+      const metric = metrics.find(m => m.id === metricId) || metrics[0];
+      const higherBetter = metric?.higher_better !== false;
+      const label = metric?.label || metricId.toUpperCase();
+      const deltaScale = HORIZON_DELTA_SCALES[metricId] || { lo: -0.15, hi: 0.15, higher_better: true, label: `Δ ${label}` };
+      return {
+        axisId: axis.id,
+        axisLabel: axis.label,
+        metricId,
+        label,
+        higherBetter,
+        deltaScale,
+        note: axis.note || axis.label,
+        cellValue(cell) {
+          if (!cell) return null;
+          const axes = cell.axes || {};
+          const bucket = axes[axis.id] || {};
+          if (bucket[metricId] !== undefined && bucket[metricId] !== null) {
+            return bucket[metricId];
+          }
+          if (axis.id === "overall" && metricId === "nrmse") return cell.median_nrmse ?? null;
+          if (axis.id === "overall" && metricId === "r2") return cell.median_r2 ?? null;
+          return null;
+        },
+      };
+    }
+
+    function syncDeltaMetricControl() {
+      const axis = matrixAxisDef(deltaMapAxis);
+      const metrics = axis.metrics || [];
+      const showPicker = metrics.length > 1;
+      deltaMapMetricWrap.style.display = showPicker ? "" : "none";
+      if (!showPicker && metrics.length === 1) {
+        deltaMapMetric = metrics[0]?.id || "r2";
+        return;
+      }
+      const options = metrics.map(m => `<option value="${m.id}">${m.label}</option>`).join("");
+      const prev = deltaMapMetric;
+      deltaMapMetricSelect.innerHTML = options;
+      deltaMapMetric = metrics.some(m => m.id === prev) ? prev : metrics[0].id;
+      deltaMapMetricSelect.value = deltaMapMetric;
+    }
+
+    function populateDeltaMapModelSelect() {
+      const fromMatrix = deltaMatrixSource(deltaMapFromHz);
+      const toMatrix = deltaMatrixSource(deltaMapToHz);
+      const fromModels = new Set(fromMatrix.models || []);
+      const models = (toMatrix.models || []).filter(m => fromModels.has(m));
+      const prev = deltaMapModel;
+      if (!models.length) {
+        deltaMapModelSelect.innerHTML = `<option value="">No models</option>`;
+        deltaMapModel = "";
+        return;
+      }
+      const preferred = models.find(m => !["average", "average_yield", "averageyieldmodel"].includes(String(m).toLowerCase()));
+      deltaMapModelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join("");
+      if (prev && models.includes(prev)) {
+        deltaMapModel = prev;
+      } else if (preferred) {
+        deltaMapModel = preferred;
+      } else {
+        deltaMapModel = models[0];
+      }
+      deltaMapModelSelect.value = deltaMapModel;
+    }
+
+    function horizonImprovementDelta(fromVal, toVal, higherBetter) {
+      if (fromVal === null || fromVal === undefined || toVal === null || toVal === undefined) return null;
+      if (Number.isNaN(fromVal) || Number.isNaN(toVal)) return null;
+      return higherBetter ? (toVal - fromVal) : (fromVal - toVal);
+    }
+
+    function currentDeltaMapCountryRows() {
+      const spec = deltaMetricSpec();
+      const fromMatrix = deltaMatrixSource(deltaMapFromHz);
+      const toMatrix = deltaMatrixSource(deltaMapToHz);
+      const fromByCountry = new Map();
+      for (const cell of fromMatrix.cells || []) {
+        if (cell.model !== deltaMapModel) continue;
+        const value = spec.cellValue(cell);
+        if (value === null || value === undefined) continue;
+        fromByCountry.set(cell.country, { value, n_datasets: cell.n_datasets ?? null });
+      }
+      const rows = [];
+      for (const cell of toMatrix.cells || []) {
+        if (cell.model !== deltaMapModel) continue;
+        const toVal = spec.cellValue(cell);
+        const fromRec = fromByCountry.get(cell.country);
+        if (!fromRec || toVal === null || toVal === undefined) continue;
+        const delta = horizonImprovementDelta(fromRec.value, toVal, spec.higherBetter);
+        if (delta === null) continue;
+        rows.push({
+          country: cell.country,
+          map_cc: mapCc(cell.country),
+          from_value: fromRec.value,
+          to_value: toVal,
+          delta,
+          n_datasets: cell.n_datasets ?? fromRec.n_datasets ?? null,
+        });
+      }
+      return { spec, rows };
+    }
+
+    function deltaMapColor(delta, spec, palette = deltaMapPalette) {
+      const scale = spec.deltaScale || HORIZON_DELTA_SCALES[spec.metricId] || { lo: -0.15, hi: 0.15 };
+      const lo = scale.lo ?? -0.15;
+      const hi = scale.hi ?? 0.15;
+      const t = metricPerformanceT(delta, lo, hi, true);
+      if (t == null) return MAP_FILL_BENCHMARK;
+      return palette === "semantic" ? metricSemanticColor(t) : metricIntensityColor(t);
+    }
+
+    function updateDeltaMapLegendStyle() {
+      const el = document.querySelector("#delta-map-legend .metric-map-gradient");
+      if (!el) return;
+      el.classList.toggle("semantic", deltaMapPalette === "semantic");
+    }
+
+    function renderHorizonDeltaMap() {
+      if (!worldFeatures) return;
+      const fromLabel = HORIZON_LABELS[deltaMapFromHz] || deltaMapFromHz;
+      const toLabel = HORIZON_LABELS[deltaMapToHz] || deltaMapToHz;
+      if (deltaMapFromHz === deltaMapToHz) {
+        deltaMapNote.textContent = "Select two different horizons to compare.";
+        deltaMapSummary.textContent = "";
+        deltaMapSvg.selectAll("path.country").remove();
+        return;
+      }
+      const { spec, rows } = currentDeltaMapCountryRows();
+      const byCountry = new Map(rows.map(r => [r.map_cc, r]));
+      const scale = spec.deltaScale || HORIZON_DELTA_SCALES[spec.metricId] || {};
+      const lo = scale.lo ?? -0.15;
+      const hi = scale.hi ?? 0.15;
+      const deltaLabel = scale.label || `Δ ${spec.label}`;
+      updateDeltaMapLegendStyle();
+      deltaMapLegendLabel.textContent = deltaMapPalette === "semantic"
+        ? `${deltaLabel}: ${fmt(lo)} (worse at later horizon) → 0 → ${fmt(hi)} (better at later horizon)`
+        : `${deltaLabel}: ${fmt(lo)} (worse) → ${fmt(hi)} (better); darker blue = larger improvement`;
+
+      deltaMapSvg.selectAll("path.country")
+        .data(worldFeatures)
+        .join("path")
+        .attr("class", "country")
+        .attr("shape-rendering", "geometricPrecision")
+        .attr("d", mapPath)
+        .attr("fill", d => {
+          const iso = d.properties.ISO_A2;
+          if (!isColoredBenchmarkIso(iso)) return MAP_FILL_OUTSIDE;
+          const rec = byCountry.get(iso);
+          if (!rec) return MAP_FILL_BENCHMARK;
+          return deltaMapColor(rec.delta, spec);
+        })
+        .attr("stroke", d => mapCountryStroke(d.properties.ISO_A2).color)
+        .attr("stroke-width", d => mapCountryStroke(d.properties.ISO_A2).width)
+        .selectAll("title")
+        .data(d => [d])
+        .join("title")
+        .text(d => {
+          const iso = d.properties.ISO_A2;
+          if (!isColoredBenchmarkIso(iso)) {
+            return `${d.properties.NAME || iso}: not in CY-Bench`;
+          }
+          const rec = byCountry.get(iso);
+          if (!rec) {
+            return `${d.properties.NAME || iso}: no paired data for ${deltaMapModel || "model"}`;
+          }
+          const ds = rec.n_datasets != null ? ` · ${rec.n_datasets} dataset(s)` : "";
+          return `${rec.country}: ${spec.label} ${fmt(rec.from_value)} → ${fmt(rec.to_value)} (Δ=${fmt(rec.delta)})${ds}`;
+        });
+
+      const cropLabel = deltaMapCrop === "all" ? "all crops" : deltaMapCrop;
+      deltaMapNote.textContent = `${spec.axisLabel} · ${deltaLabel} for ${deltaMapModel || "—"} (${fromLabel} → ${toLabel}, ${cropLabel}${deltaMapSkilledOnly ? ", skilful only" : ""}).`;
+      if (!deltaMapModel) {
+        deltaMapSummary.textContent = "Select a model to color countries.";
+        return;
+      }
+      if (!rows.length) {
+        deltaMapSummary.textContent = "No countries with data at both horizons for this selection.";
+        return;
+      }
+      const deltas = rows.map(r => r.delta);
+      const med = d3.median(deltas);
+      const improved = rows.filter(r => r.delta > 0).length;
+      const worsened = rows.filter(r => r.delta < 0).length;
+      const flat = rows.length - improved - worsened;
+      deltaMapSummary.textContent =
+        `${rows.length} countries with paired data · median Δ=${fmt(med)} · improved ${improved}, flat ${flat}, worsened ${worsened}.`;
+    }
+
+    function renderHorizonDeltaMapPanel() {
+      populateDeltaMapModelSelect();
+      syncDeltaMetricControl();
+      renderHorizonDeltaMap();
+    }
+
+    const _renderMetricMapPanelOrig = renderMetricMapPanel;
+    renderMetricMapPanel = function () {
+      _renderMetricMapPanelOrig();
+      renderHorizonDeltaMapPanel();
+    };
+
+    populateDeltaHorizonSelects();
+    deltaMapFromSelect.addEventListener("change", () => {
+      deltaMapFromHz = deltaMapFromSelect.value || deltaMapFromHz;
+      renderHorizonDeltaMapPanel();
+    });
+    deltaMapToSelect.addEventListener("change", () => {
+      deltaMapToHz = deltaMapToSelect.value || deltaMapToHz;
+      renderHorizonDeltaMapPanel();
+    });
+    deltaMapCropFilter.addEventListener("change", () => {
+      deltaMapCrop = deltaMapCropFilter.value || "all";
+      renderHorizonDeltaMapPanel();
+    });
+    deltaMapSkilledCheckbox.addEventListener("change", () => {
+      deltaMapSkilledOnly = deltaMapSkilledCheckbox.checked;
+      renderHorizonDeltaMapPanel();
+    });
+    deltaMapModelSelect.addEventListener("change", () => {
+      deltaMapModel = deltaMapModelSelect.value || "";
+      renderHorizonDeltaMap();
+    });
+    deltaMapAxisToolbar.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        deltaMapAxisToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        deltaMapAxis = btn.dataset.axis || "overall";
+        syncDeltaMetricControl();
+        renderHorizonDeltaMap();
+      });
+    });
+    deltaMapMetricSelect.addEventListener("change", () => {
+      deltaMapMetric = deltaMapMetricSelect.value || "nrmse";
+      renderHorizonDeltaMap();
+    });
+    if (deltaMapPaletteToolbar) {
+      deltaMapPaletteToolbar.querySelectorAll("button").forEach(btn => {
+        btn.addEventListener("click", () => {
+          deltaMapPaletteToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          deltaMapPalette = btn.dataset.palette || "semantic";
+          renderHorizonDeltaMap();
+        });
+      });
+    }
 
     // Horizon skill curves
     function modelPlotColor(entry) {

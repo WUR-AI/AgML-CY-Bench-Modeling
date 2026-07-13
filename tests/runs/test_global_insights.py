@@ -449,6 +449,8 @@ def test_build_insights_payload_structure(tmp_path: Path):
     assert "benchmark_map_isos" in payload
     assert "metric_map_scales" in payload
     assert payload["metric_map_scales"]["nrmse"]["higher_better"] is False
+    assert "horizon_delta_scales" in payload
+    assert payload["horizon_delta_scales"]["nrmse"]["higher_better"] is True
 
 
 def _three_horizon_fixture(tmp_path: Path) -> pd.DataFrame:
