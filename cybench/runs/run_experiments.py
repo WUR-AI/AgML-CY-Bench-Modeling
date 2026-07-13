@@ -385,7 +385,7 @@ def main(cfg):
                     float_format="%.6f",
                 )
             if cfg.store.model:
-                model.save(path=repetition_path)
+                model.save(str(repetition_path))
             if cfg.store.meta:
                 save_meta_dict(path=repetition_path, dict=meta_dict)
 
