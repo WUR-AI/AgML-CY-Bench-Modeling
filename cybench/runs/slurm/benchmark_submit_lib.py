@@ -12,7 +12,7 @@ from pathlib import Path
 from cybench.config import DATASETS, PATH_DATA_DIR
 
 # Countries with at least this many regions use the gpu SLURM partition for torch/TabPFN.
-DEFAULT_GPU_REGION_THRESHOLD = 600
+DEFAULT_GPU_REGION_THRESHOLD = 350
 
 _BATCH_RE = re.compile(
     r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid|qtr|early)_v(?P<version>\d+)$"
@@ -61,7 +61,7 @@ def batch_suffix_to_horizon(batch_hz: str) -> str:
     return batch_hz
 
 
-def batch_name(country: str, horizon: str, version: int = 3) -> str:
+def batch_name(country: str, horizon: str, version: int = 4) -> str:
     cc = country.upper()
     hz = horizon_batch_suffix(horizon)
     return f"baselines_{cc}_{hz}_v{version}"
@@ -213,7 +213,7 @@ def build_submit_plans(
     *,
     countries: list[str] | None = None,
     horizons: list[str] | None = None,
-    version: int = 3,
+    version: int = 4,
     region_threshold: int = DEFAULT_GPU_REGION_THRESHOLD,
     manifest_root: Path,
     data_dir: Path | None = None,
@@ -324,7 +324,7 @@ def main() -> None:
         default=None,
         help="Default: eos middle-of-season",
     )
-    parser.add_argument("--version", type=int, default=3)
+    parser.add_argument("--version", type=int, default=4)
     parser.add_argument(
         "--region-threshold",
         type=int,

@@ -27,6 +27,7 @@ from cybench.datasets.torch_dataset import TorchDataset
 from cybench.models.model import BaseModel
 from cybench.models.torch.utils.augmentation import create_collate_fn, AugmentationComposer
 from cybench.models.torch.utils.early_stopping import EarlyStopping
+from cybench.util.config_utils import deterministic_torch_training, set_seed
 
 # init logger
 log = logging.getLogger(__name__)
@@ -164,6 +165,11 @@ class TorchTrainer(BaseModel):
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _dataloader_generator(self) -> torch.Generator:
+        generator = torch.Generator()
+        generator.manual_seed(self.seed)
+        return generator
+
     def _create_dataloader(
         self, dataset: TorchDataset, augment: bool, shuffle: bool
     ) -> DataLoader[Any]:
@@ -179,15 +185,17 @@ class TorchTrainer(BaseModel):
             Configured DataLoader instance.
         """
         dataloader = self.dataloader
+        loader_kwargs: dict[str, Any] = {"dataset": dataset, "shuffle": shuffle}
+        if shuffle:
+            loader_kwargs["generator"] = self._dataloader_generator()
 
         if self.augmentation is not None and augment:
             collate_fn = create_collate_fn(
                 augmentation=self.augmentation,
                 context_columns=dataset.x_context_columns,
             )
-            return dataloader(dataset=dataset, collate_fn=collate_fn, shuffle=shuffle)
-        else:
-            return dataloader(dataset=dataset, shuffle=shuffle)
+            loader_kwargs["collate_fn"] = collate_fn
+        return dataloader(**loader_kwargs)
 
     # ------------------------------------------------------------------
     # BaseModel API
@@ -211,6 +219,8 @@ class TorchTrainer(BaseModel):
         Returns:
             A tuple containing the fitted model and a dict with training history.
         """
+        set_seed(self.seed)
+
         epochs = fit_params.get("epochs", self.epochs)
         val_dataset = fit_params.get("val_dataset", None)
         val_every_n_epochs = fit_params.get("val_every_n_epochs", 1)
@@ -242,110 +252,111 @@ class TorchTrainer(BaseModel):
         total_batches = epochs * len(train_loader)
         pbar = tqdm(range(total_batches), desc=self.__class__.__name__) if self.verbose else None
 
-        self.model.train()
-        # TODO delete time tracking. Only for debugging
-        tt = 0
-        start_training = time.time()
-        for epoch in range(epochs):
-            epochs_run = epoch + 1
-            total_loss = 0.0
-            num_batches = 0
+        with deterministic_torch_training():
+            self.model.train()
+            # TODO delete time tracking. Only for debugging
+            tt = 0
+            start_training = time.time()
+            for epoch in range(epochs):
+                epochs_run = epoch + 1
+                total_loss = 0.0
+                num_batches = 0
 
-            for batch in train_loader:
-                y, x_ctx, x_ts, doy_ts = batch
-                if (not self.preload_to_device) and (self.device.type != "cpu"):
-                    y = y.to(self.device, non_blocking=True)
-                    x_ctx = x_ctx.to(self.device, non_blocking=True)
-                    x_ts = x_ts.to(self.device, non_blocking=True)
-                    doy_ts = doy_ts.to(self.device, non_blocking=True)
+                for batch in train_loader:
+                    y, x_ctx, x_ts, doy_ts = batch
+                    if (not self.preload_to_device) and (self.device.type != "cpu"):
+                        y = y.to(self.device, non_blocking=True)
+                        x_ctx = x_ctx.to(self.device, non_blocking=True)
+                        x_ts = x_ts.to(self.device, non_blocking=True)
+                        doy_ts = doy_ts.to(self.device, non_blocking=True)
 
-                self.optimizer.zero_grad(set_to_none=True)
-                start = time.time()
-                pred = self.model(x_ctx, x_ts, doy_ts)
-                # DEBUG Model:
-                #print(self.model.state_dict()["regression_head.net.3.weight"][0, 0])
-                #print(self.model.context_encoder(x_ctx[0]))
-                #print(self.model.temporal_encoder(x_ts[0]))
+                    self.optimizer.zero_grad(set_to_none=True)
+                    start = time.time()
+                    pred = self.model(x_ctx, x_ts, doy_ts)
+                    # DEBUG Model:
+                    #print(self.model.state_dict()["regression_head.net.3.weight"][0, 0])
+                    #print(self.model.context_encoder(x_ctx[0]))
+                    #print(self.model.temporal_encoder(x_ts[0]))
 
-                if pred.ndim > 1:
-                    pred = pred.squeeze(-1)
+                    if pred.ndim > 1:
+                        pred = pred.squeeze(-1)
 
-                loss = self.loss_fn(pred, y.squeeze(-1))
-                loss.backward()
-                tt += time.time() - start
-                if self.max_grad_norm is not None:
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(),
-                        self.max_grad_norm,
-                    )
+                    loss = self.loss_fn(pred, y.squeeze(-1))
+                    loss.backward()
+                    tt += time.time() - start
+                    if self.max_grad_norm is not None:
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(),
+                            self.max_grad_norm,
+                        )
 
-                self.optimizer.step()
+                    self.optimizer.step()
 
-                total_loss += loss.item()
-                num_batches += 1
+                    total_loss += loss.item()
+                    num_batches += 1
 
-                if pbar is not None:
-                    pbar.update(1)
+                    if pbar is not None:
+                        pbar.update(1)
 
-            avg_loss = total_loss / num_batches
-            history["train_loss"].append(avg_loss)
+                avg_loss = total_loss / num_batches
+                history["train_loss"].append(avg_loss)
 
-            val_loss = None
-            # Validate every N epochs
-            if val_loader is not None and (epoch + 1) % val_every_n_epochs == 0:
-                val_loss = self._evaluate_loss(val_loader)
-                history["val_loss"].append(val_loss)
-            else:
-                history["val_loss"].append(None)
-
-            if self.early_stopping is not None:
-                monitor_loss = None
-                if early_stopping_monitor == "val" and val_loss is not None:
-                    monitor_loss = val_loss
-                elif early_stopping_monitor == "train":
-                    monitor_loss = avg_loss
-                if monitor_loss is not None:
-                    self.early_stopping(monitor_loss, self.model, epoch + 1)
-                    if self.early_stopping.early_stop:
-                        log.info("Early stopping triggered.")
-                        if self.verbose:
-                            print(f"Early stopping triggered: after epoch {epoch + 1}")
-                        break
-
-            # Step Scheduler (ReduceLROnPlateau requires val loss)
-            if self.scheduler is not None:
-                if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                    # Only step if we have a valid metric this epoch
-                    if val_loss is not None:
-                        self.scheduler.step(val_loss)
+                val_loss = None
+                # Validate every N epochs
+                if val_loader is not None and (epoch + 1) % val_every_n_epochs == 0:
+                    val_loss = self._evaluate_loss(val_loader)
+                    history["val_loss"].append(val_loss)
                 else:
-                    self.scheduler.step()
+                    history["val_loss"].append(None)
 
-            if self.verbose:
-                lr = self.optimizer.param_groups[0]['lr']
-                msg = f"Epoch {epoch + 1:4d}/{epochs} | train {avg_loss:.4f}"
-                if val_loss is not None:
-                    msg += f" | val {val_loss:.4f}"
-                msg += f" | lr {lr:.2e}"
-                tqdm.write(msg)
-            elif epoch_log_interval and (
-                (epoch + 1) % int(epoch_log_interval) == 0
-                or epoch + 1 == epochs
-                or (self.early_stopping is not None and self.early_stopping.early_stop)
-            ):
-                msg = f"Epoch {epoch + 1}/{epochs} | train {avg_loss:.4f}"
-                if val_loss is not None:
-                    msg += f" | val {val_loss:.4f}"
-                log.info(msg)
+                if self.early_stopping is not None:
+                    monitor_loss = None
+                    if early_stopping_monitor == "val" and val_loss is not None:
+                        monitor_loss = val_loss
+                    elif early_stopping_monitor == "train":
+                        monitor_loss = avg_loss
+                    if monitor_loss is not None:
+                        self.early_stopping(monitor_loss, self.model, epoch + 1)
+                        if self.early_stopping.early_stop:
+                            log.info("Early stopping triggered.")
+                            if self.verbose:
+                                print(f"Early stopping triggered: after epoch {epoch + 1}")
+                            break
 
-        log.debug("Forward and backward pass took", np.round(tt / (time.time() - start_training) * 100), "% of training time.")
-        if pbar is not None:
-            pbar.close()
+                # Step Scheduler (ReduceLROnPlateau requires val loss)
+                if self.scheduler is not None:
+                    if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                        # Only step if we have a valid metric this epoch
+                        if val_loss is not None:
+                            self.scheduler.step(val_loss)
+                    else:
+                        self.scheduler.step()
 
-        # Restore Best Weights (Critical Step)
-        if self.early_stopping is not None and self.early_stopping.best_model_state is not None:
-            log.info(f"Restoring best model weights (Loss: {self.early_stopping.best_loss:.3f})")
-            self.model.load_state_dict(self.early_stopping.best_model_state)
+                if self.verbose:
+                    lr = self.optimizer.param_groups[0]['lr']
+                    msg = f"Epoch {epoch + 1:4d}/{epochs} | train {avg_loss:.4f}"
+                    if val_loss is not None:
+                        msg += f" | val {val_loss:.4f}"
+                    msg += f" | lr {lr:.2e}"
+                    tqdm.write(msg)
+                elif epoch_log_interval and (
+                    (epoch + 1) % int(epoch_log_interval) == 0
+                    or epoch + 1 == epochs
+                    or (self.early_stopping is not None and self.early_stopping.early_stop)
+                ):
+                    msg = f"Epoch {epoch + 1}/{epochs} | train {avg_loss:.4f}"
+                    if val_loss is not None:
+                        msg += f" | val {val_loss:.4f}"
+                    log.info(msg)
+
+            log.debug("Forward and backward pass took", np.round(tt / (time.time() - start_training) * 100), "% of training time.")
+            if pbar is not None:
+                pbar.close()
+
+            # Restore Best Weights (Critical Step)
+            if self.early_stopping is not None and self.early_stopping.best_model_state is not None:
+                log.info(f"Restoring best model weights (Loss: {self.early_stopping.best_loss:.3f})")
+                self.model.load_state_dict(self.early_stopping.best_model_state)
 
         if self.early_stopping is not None and self.early_stopping.best_epoch is not None:
             history["best_epoch"] = self.early_stopping.best_epoch

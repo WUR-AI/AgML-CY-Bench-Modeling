@@ -23,7 +23,7 @@ Options:
   --all-countries     All countries with output dirs, manifest rows, or yield data
   --horizon H         Single horizon (default: eos); repeat or use --horizons
   --horizons H ...    eos, mid, early-season, middle-of-season (default: eos)
-  --version N         Batch version suffix (default: 3)
+  --version N         Batch version suffix (default: 4)
   --max N             Process at most N batch×horizon targets (0 = unlimited)
   --manifest PATH     Explicit job list
   --model MODEL       Limit to model slug (repeatable, e.g. --model lpjml_bc or twso_bc)
@@ -40,7 +40,7 @@ Options:
   --cpu               Force torch/TabPFN group to CPU partition
   --only-cpu          Complete/submit only CPU+naive models (needs_gpu=no)
   --force-gpu         Use gpu partition even when regions < threshold
-  --region-threshold N  gpu when country has >= N regions (default: 600)
+  --region-threshold N  gpu when country has >= N regions (default: 350)
 
 Examples:
   orchestrate_benchmark_complete.sh --country DE --horizons eos mid --list

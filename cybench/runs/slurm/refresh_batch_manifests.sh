@@ -22,7 +22,7 @@ exist under the output root (or for explicit --countries).
 
 Options:
   --horizon H       eos | mid | qtr | early-season (default: qtr)
-  --version N       Batch version suffix (default: 3)
+  --version N       Batch version suffix (default: 4)
   --countries CC..  Only these countries (default: all matching batch dirs)
   --models FILE     Model catalogue (default: models.txt)
   --output-root DIR Parent of baselines_* (default: $CYBENCH_OUTPUT_ROOT or lustre)
@@ -52,7 +52,7 @@ GENERATE_PY="${SLURM_DIR}/generate_job_manifest.py"
 MODELS_FILE="${SLURM_DIR}/models.txt"
 
 HORIZON_KEY="qtr"
-VERSION="3"
+VERSION="4"
 COUNTRIES=()
 OUTPUT_ROOT="${CYBENCH_OUTPUT_ROOT:-}"
 DATA_DIR=""

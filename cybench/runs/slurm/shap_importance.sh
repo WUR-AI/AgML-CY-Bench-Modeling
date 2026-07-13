@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Compute SHAP feature importance by retraining walk-forward models from frozen
-# screening artifacts. Default: maize NL family reps (RF, Transformer, TabPFN).
+# Compute SHAP feature importance from walk-forward models (loads saved checkpoints
+# when store.model=true; otherwise refits from frozen screening artifacts).
 #
 # Example (GPU node recommended for tabpfn + transformer_lf):
 #   sbatch cybench/runs/slurm/shap_importance.sh

@@ -21,8 +21,8 @@ def test_normalize_horizon():
 
 
 def test_batch_name():
-    assert batch_name("de", "eos") == "baselines_DE_eos_v3"
-    assert batch_name("pl", "mid") == "baselines_PL_mid_v3"
+    assert batch_name("de", "eos") == "baselines_DE_eos_v4"
+    assert batch_name("pl", "mid") == "baselines_PL_mid_v4"
     assert batch_name("de", "eos", version=1) == "baselines_DE_eos_v1"
     assert horizon_batch_suffix("middle-of-season") == "mid"
     assert horizon_batch_suffix("quarter-of-season") == "qtr"
@@ -85,15 +85,15 @@ def test_resolve_batch_dir_and_parse_batch_name(tmp_path: Path):
 def test_gpu_region_threshold_default_routes_fr_to_cpu(tmp_path: Path, monkeypatch):
     from cybench.runs.slurm import benchmark_submit_lib as lib
 
-    assert lib.DEFAULT_GPU_REGION_THRESHOLD == 600
+    assert lib.DEFAULT_GPU_REGION_THRESHOLD == 350
 
     def _fake_count(country: str, data_dir=None) -> int:
         return {"FR": 100, "DE": 397, "IN": 557, "US": 2509}[country.upper()]
 
     monkeypatch.setattr(lib, "count_regions", _fake_count)
     assert lib.gpu_partition_for_country("FR")[0] is False
-    assert lib.gpu_partition_for_country("DE")[0] is False
-    assert lib.gpu_partition_for_country("IN")[0] is False
+    assert lib.gpu_partition_for_country("DE")[0] is True
+    assert lib.gpu_partition_for_country("IN")[0] is True
     assert lib.gpu_partition_for_country("US")[0] is True
 
 

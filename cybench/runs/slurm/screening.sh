@@ -81,7 +81,7 @@ fi
 COMMON=(
   "dataset/crop=${CROP}"
   "dataset.country=${COUNTRY}"
-  dataset.use_cache=true
+  dataset.use_cache=false
   validation=screening
   "experiment.name=${CYBENCH_EXPERIMENT_NAME}"
   experiment.n_repetitions=1

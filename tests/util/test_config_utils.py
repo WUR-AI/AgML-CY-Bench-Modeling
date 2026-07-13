@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import torch
@@ -12,6 +13,7 @@ from cybench.util.config_utils import (
     adjust_model_cfg_to_dataset,
     apply_force_cpu_to_frozen_model_cfg,
     is_cybench_force_cpu,
+    set_seed,
     walk_forward_force_cpu,
 )
 
@@ -96,3 +98,9 @@ def test_apply_force_cpu_to_frozen_torch_model_cfg():
     out = apply_force_cpu_to_frozen_model_cfg(frozen)
     assert out.device == "cpu"
     assert out.torch_model.device == "cpu"
+
+
+def test_set_seed_sets_cublas_workspace(monkeypatch):
+    monkeypatch.delenv("CUBLAS_WORKSPACE_CONFIG", raising=False)
+    set_seed(123)
+    assert os.environ.get("CUBLAS_WORKSPACE_CONFIG") == ":4096:8"

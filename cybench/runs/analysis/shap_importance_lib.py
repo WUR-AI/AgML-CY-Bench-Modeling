@@ -1,4 +1,4 @@
-"""Retrain walk-forward models and compute SHAP-based feature importance."""
+"""Load or retrain walk-forward models and compute SHAP-based feature importance."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any, Iterable, Sequence, cast
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-from hydra.utils import instantiate
+from hydra.utils import get_class, instantiate
 from omegaconf import DictConfig, OmegaConf, open_dict
 
 from cybench.config import KEY_TARGET
@@ -83,6 +83,7 @@ class ShapRunSpec:
     max_background: int = 50
     max_eval_samples: int = 80
     force_cpu: bool = False
+    use_cache: bool = False
 
 
 def model_run_name(model_slug: str) -> str:
@@ -158,7 +159,7 @@ def compose_dataset_overrides(
     overrides = [
         f"dataset/crop={spec.crop}",
         f"dataset.country={spec.country}",
-        "dataset.use_cache=false",
+        f"dataset.use_cache={str(spec.use_cache).lower()}",
         f"dataset.temporal.season.end_of_sequence={spec.horizon}",
         f"dataset.framework={framework}",
     ]
@@ -188,6 +189,7 @@ def build_dataset(
     )
     dataset = DataFactory(cfg.dataset).build(normalizer_fit_years=normalizer_fit_years)
     if framework == "torch" and OmegaConf.select(cfg, "process"):
+        assert isinstance(dataset, TorchDataset)
         dataset.process(cfg.process)
     return dataset
 
@@ -226,7 +228,57 @@ def _is_torch_model(model_cfg: DictConfig) -> bool:
     return OmegaConf.select(model_cfg, "framework") == "torch"
 
 
-def fit_at_origin(
+def find_saved_model_artifact(
+    walk_forward_run_dir: Path | None,
+    *,
+    test_year: int,
+    seed: int,
+    model_name: str,
+) -> Path | None:
+    """Return a saved checkpoint under ``<run_dir>/<year>/<seed>/`` if present."""
+    if walk_forward_run_dir is None:
+        return None
+    repetition_dir = walk_forward_run_dir / str(test_year) / str(seed)
+    for suffix in (".pt", ".pkl"):
+        candidate = repetition_dir / f"{model_name}{suffix}"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def load_saved_walk_forward_model(
+    model_cfg: DictConfig,
+    artifact_path: Path,
+    *,
+    torch_dataset: TorchDataset | None = None,
+) -> BaseModel:
+    """Load a walk-forward checkpoint written by ``run_experiments`` (``store.model=true``)."""
+    from cybench.models.torch.trainer import TorchTrainer
+
+    cfg = cast(
+        DictConfig,
+        OmegaConf.create(OmegaConf.to_container(remove_search_keys(model_cfg))),
+    )
+    if _is_torch_model(cfg):
+        if torch_dataset is None:
+            raise ValueError("torch_dataset is required to load a torch checkpoint")
+        cfg = adjust_model_cfg_to_dataset(cfg, torch_dataset)
+        shell = cast(TorchTrainer, instantiate(cfg))
+        return TorchTrainer.load(
+            str(artifact_path),
+            model=shell.model,
+            optimizer=shell.optimizer,
+            name=shell.name,
+            device=str(shell.device),
+            dataloader=shell.dataloader,
+            scheduler=shell.scheduler,
+        )
+
+    loader = get_class(cfg._target_)
+    return loader.load(str(artifact_path.parent), name=str(cfg.name))
+
+
+def resolve_model_at_origin(
     *,
     model_cfg: DictConfig,
     fs_cfg: DictConfig | None,
@@ -235,7 +287,11 @@ def fit_at_origin(
     test_dataset: BaseDataset,
     train_years: list[int],
     walk_forward_nn: bool,
+    walk_forward_run_dir: Path | None = None,
+    seed: int | None = None,
+    test_years: Sequence[int] | None = None,
 ) -> tuple[BaseModel, BaseDataset, BaseDataset]:
+    """Fit at a walk-forward origin, or load a saved checkpoint when available."""
     if fs_cfg is not None:
         if not isinstance(source_dataset, PandasDataset):
             raise ValueError("mRMR feature selection requires a PandasDataset.")
@@ -246,12 +302,58 @@ def fit_at_origin(
             train_dataset=cast(PandasDataset, train_dataset),
             eval_dataset=cast(PandasDataset, test_dataset),
         )
+
+    artifact: Path | None = None
+    if walk_forward_run_dir is not None and seed is not None and test_years is not None:
+        artifact = find_saved_model_artifact(
+            walk_forward_run_dir,
+            test_year=int(test_years[0]),
+            seed=int(seed),
+            model_name=str(model_cfg.name),
+        )
+    if artifact is not None:
+        log.info("Loading saved walk-forward model from %s", artifact)
+        torch_ds = train_dataset if isinstance(train_dataset, TorchDataset) else None
+        model = load_saved_walk_forward_model(
+            model_cfg, artifact, torch_dataset=torch_ds
+        )
+        return model, train_dataset, test_dataset
+
+    model_seed = int(OmegaConf.select(model_cfg, "seed") or 42)
+    set_seed(model_seed)
     model = instantiate(model_cfg)
     if walk_forward_nn:
         model.fit(train_dataset, early_stopping_monitor="train")
     else:
         model.fit(train_dataset)
     return model, train_dataset, test_dataset
+
+
+def fit_at_origin(
+    *,
+    model_cfg: DictConfig,
+    fs_cfg: DictConfig | None,
+    source_dataset: BaseDataset,
+    train_dataset: BaseDataset,
+    test_dataset: BaseDataset,
+    train_years: list[int],
+    walk_forward_nn: bool,
+    walk_forward_run_dir: Path | None = None,
+    seed: int | None = None,
+    test_years: Sequence[int] | None = None,
+) -> tuple[BaseModel, BaseDataset, BaseDataset]:
+    return resolve_model_at_origin(
+        model_cfg=model_cfg,
+        fs_cfg=fs_cfg,
+        source_dataset=source_dataset,
+        train_dataset=train_dataset,
+        test_dataset=test_dataset,
+        train_years=train_years,
+        walk_forward_nn=walk_forward_nn,
+        walk_forward_run_dir=walk_forward_run_dir,
+        seed=seed,
+        test_years=test_years,
+    )
 
 
 def verify_predictions(
@@ -516,6 +618,9 @@ def reproduce_walk_forward_origin(
         test_dataset=test_dataset,
         train_years=train_years,
         walk_forward_nn=_is_torch_model(model_cfg),
+        walk_forward_run_dir=walk_forward_run_dir,
+        seed=spec.seed,
+        test_years=test_years,
     )
     preds, _ = model.predict(test_dataset)
     reproduction = (
@@ -574,6 +679,9 @@ def run_origin_shap(
         test_dataset=test_dataset,
         train_years=train_years,
         walk_forward_nn=_is_torch_model(model_cfg),
+        walk_forward_run_dir=walk_forward_run_dir,
+        seed=spec.seed,
+        test_years=test_years,
     )
     preds, _ = model.predict(test_dataset)
     reproduction = (

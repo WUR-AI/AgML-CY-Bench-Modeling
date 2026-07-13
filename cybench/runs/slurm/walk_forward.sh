@@ -34,6 +34,8 @@ else
 fi
 source "${SLURM_DIR}/slurm_common.sh"
 slurm_setup
+# Single-threaded BLAS during torch walk-forward fits (override to use more CPUs).
+export CYBENCH_TORCH_THREADS="${CYBENCH_TORCH_THREADS:-1}"
 mkdir -p output/walk_forward
 
 read_benchmark_job
@@ -78,13 +80,14 @@ echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_
 COMMON=(
   "dataset/crop=${CROP}"
   "dataset.country=${COUNTRY}"
-  dataset.use_cache=true
+  dataset.use_cache=false
   validation=walk_forward
   "validation.frozen_screening_dir=${FROZEN_DIR}"
   "experiment.name=${CYBENCH_EXPERIMENT_NAME}"
   "experiment.n_repetitions=${WF_RUN_REPS}"
   "experiment.seed=${WF_START_SEED}"
   "model=${MODEL}"
+  store.model=true
 )
 
 configure_parallelism COMMON

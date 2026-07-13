@@ -12,7 +12,7 @@
 #
 set -euo pipefail
 
-export HP_TRIALS="${HP_TRIALS:-20}"
+export HP_TRIALS="${HP_TRIALS:-30}"
 
 usage() {
   cat <<'EOF'
@@ -30,8 +30,8 @@ Options:
   --dry-run           Print submit_benchmark.sh commands without sbatch
   --countries CC ...  Limit to these countries (default: all with data on disk)
   --horizon H ...     eos | mid | qtr | early (alias early-season; repeatable)
-  --region-threshold N  gpu partition when country has >= N regions (default: 600)
-  --version N         Batch version suffix (default: 3)
+  --region-threshold N  gpu partition when country has >= N regions (default: 350)
+  --version N         Batch version suffix (default: 4)
   --phase MODE        screening | walk_forward | all (default: all)
   --repetitions N     Walk-forward seeds 42..42+N-1 (passed to submit_benchmark.sh)
   --skip-naive        Omit average/trend jobs
@@ -43,13 +43,13 @@ Options:
   --data-dir DIR      Override cybench/data
 
 Environment:
-  HP_TRIALS           Optuna trials in screening (default: 20)
+  HP_TRIALS           Optuna trials in screening (default: 30)
   WF_REPETITIONS      Default for --repetitions when omitted (default: 1)
 
 Examples:
   orchestrate_benchmark_submit.sh --list --horizon early --version 2
   orchestrate_benchmark_submit.sh --horizon early --version 2 --dry-run
-  export HP_TRIALS=20 WF_REPETITIONS=5
+  export HP_TRIALS=30 WF_REPETITIONS=5
   orchestrate_benchmark_submit.sh --horizon early --version 2 --skip-naive --repetitions 5
   orchestrate_benchmark_submit.sh --countries IN --horizon eos
   orchestrate_benchmark_submit.sh --region-threshold 50 --max 3
@@ -72,8 +72,8 @@ DRY_RUN=false
 FORCE=false
 ALL_COUNTRIES=false
 PHASE_MODE="all"
-VERSION=3
-REGION_THRESHOLD=600
+VERSION=4
+REGION_THRESHOLD=350
 MAX_BATCHES=0
 MANIFEST_ROOT="${SLURM_DIR}/manifests"
 DATA_DIR=""

@@ -43,4 +43,4 @@ framework: ${model.framework}
 
 # Optional: (true or false) whether to cache the final dataset or load the cached dataset if it got created before
 # This creates extra files in cybench/data/cache/ but can save a lot of time when running multiple experiments on the same data
-use_cache: true
+use_cache: false

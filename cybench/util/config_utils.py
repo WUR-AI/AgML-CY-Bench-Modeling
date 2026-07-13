@@ -3,8 +3,9 @@ from __future__ import annotations
 import os
 import pathlib
 import random
+from contextlib import contextmanager
 from pathlib import Path
-from typing import List, cast
+from typing import Iterator, List, cast
 
 import numpy as np
 import yaml
@@ -124,15 +125,51 @@ def get_run_description(overrides_path: pathlib.Path) -> str:
 
 
 def set_seed(seed: int = 42):
+    """Seed Python/NumPy/PyTorch RNGs for reproducible training."""
     random.seed(seed)
     np.random.seed(seed)
     try:
         import torch
     except ImportError:
         return
+    # Fixed cuBLAS workspace for deterministic CUDA matmuls (no perf hit on CPU).
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-        # Safe to put these here since we checked cuda availability
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+
+
+@contextmanager
+def deterministic_torch_training() -> Iterator[None]:
+    """Tighten PyTorch determinism for the training loop only.
+
+    Uses warn_only=True so unsupported ops keep working. Single-threaded CPU
+    matmuls avoid BLAS races; cost is small on typical CY-Bench batch sizes.
+    """
+    try:
+        import torch
+    except ImportError:
+        yield
+        return
+
+    thread_count = os.environ.get("CYBENCH_TORCH_THREADS", "1")
+    blas_env = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
+    prev_env = {key: os.environ.get(key) for key in blas_env}
+    prev_threads = torch.get_num_threads()
+    prev_det = torch.are_deterministic_algorithms_enabled()
+    for key in blas_env:
+        os.environ[key] = thread_count
+    torch.set_num_threads(int(thread_count))
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    try:
+        yield
+    finally:
+        torch.use_deterministic_algorithms(prev_det, warn_only=True)
+        torch.set_num_threads(prev_threads)
+        for key, value in prev_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value

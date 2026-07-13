@@ -181,7 +181,7 @@ cybench/runs/slurm/orchestrate_benchmark_complete.sh \
 **Early season (~25% observed)** — same orchestration as eos/mid/qtr:
 
 ```bash
-export HP_TRIALS=20 WF_REPETITIONS=5
+export HP_TRIALS=30 WF_REPETITIONS=5
 
 # Preview plan (all countries with yield data)
 cybench/runs/slurm/orchestrate_benchmark_submit.sh --list --horizon early --version 2

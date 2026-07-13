@@ -1,5 +1,18 @@
 from __future__ import annotations
 
+import os
+
+# Optional CPU determinism for torch training (set CYBENCH_TORCH_THREADS, default 1).
+_thread_count = os.environ.get("CYBENCH_TORCH_THREADS")
+if _thread_count is not None:
+    for _blas_var in (
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+    ):
+        os.environ.setdefault(_blas_var, _thread_count)
+
 import sys
 from pathlib import Path
 from typing import cast

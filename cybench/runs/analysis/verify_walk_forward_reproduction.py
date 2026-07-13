@@ -11,6 +11,18 @@ Example (cluster, maize NL Transformer, eos v3)::
 
 from __future__ import annotations
 
+import os
+
+# BLAS thread pools must be configured before NumPy/PyTorch import for CPU determinism.
+_thread_count = os.environ.get("CYBENCH_TORCH_THREADS", "1")
+for _blas_var in (
+    "OMP_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+):
+    os.environ.setdefault(_blas_var, _thread_count)
+
 import argparse
 import json
 import logging
@@ -104,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     cfg = reload_config_with_overrides(
         CONF_DIR,
         "config",
-        overrides=[f"model={args.model}", "dataset.use_cache=false", *overrides],
+        overrides=[f"model={args.model}", *overrides],
     )
     dataset_years = DataFactory.peek_dataset_years(cfg.dataset)
 

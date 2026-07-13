@@ -10,6 +10,7 @@ from omegaconf import OmegaConf
 
 from cybench.runs.analysis.shap_importance_lib import (
     aggregate_feature_importance,
+    find_saved_model_artifact,
     find_screening_split_dir,
     find_walk_forward_run_dir,
     model_run_name,
@@ -18,6 +19,27 @@ from cybench.runs.analysis.shap_importance_lib import (
 
 def test_model_run_name_random_forest():
     assert model_run_name("random_forest") == "random_forest"
+
+
+def test_find_saved_model_artifact_torch_and_sklearn(tmp_path: Path):
+    wf = tmp_path / "wf"
+    rep = wf / "2017" / "42"
+    rep.mkdir(parents=True)
+    (rep / "transformer_lf.pt").write_bytes(b"pt")
+    (rep / "random_forest.pkl").write_bytes(b"pkl")
+
+    assert find_saved_model_artifact(
+        wf, test_year=2017, seed=42, model_name="transformer_lf"
+    ) == rep / "transformer_lf.pt"
+    assert find_saved_model_artifact(
+        wf, test_year=2017, seed=42, model_name="random_forest"
+    ) == rep / "random_forest.pkl"
+    assert find_saved_model_artifact(
+        wf, test_year=2018, seed=42, model_name="transformer_lf"
+    ) is None
+    assert find_saved_model_artifact(
+        None, test_year=2017, seed=42, model_name="transformer_lf"
+    ) is None
 
 
 def test_find_screening_and_walk_forward_dirs(tmp_path: Path):

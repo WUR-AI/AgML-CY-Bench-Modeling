@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -142,6 +143,178 @@ def normalize_prediction_frame(
     return out.dropna(subset=["adm_id", "year", "yield", model_slug])
 
 
+def dedupe_prediction_rows(
+    df: pd.DataFrame,
+    *,
+    model_slug: str,
+) -> tuple[pd.DataFrame, int]:
+    """Collapse duplicate (adm_id, year, crop) rows by averaging yield and predictions."""
+    keys = ["adm_id", "year", "crop"]
+    if not df.duplicated(subset=keys, keep=False).any():
+        return df, 0
+    n_before = len(df)
+    deduped = (
+        df.groupby(keys, as_index=False)[["yield", model_slug]]
+        .mean()
+        .astype({"year": "Int64"})
+    )
+    return deduped, n_before - len(deduped)
+
+
+def _year_csv_files(preds_dir: Path, dataset: str) -> list[Path]:
+    return sorted(preds_dir.glob(f"{dataset}_h*_year_*.csv"))
+
+
+def diagnose_model_predictions(
+    row: dict[str, Any],
+    collect_dir: Path,
+    *,
+    source: SourceMode,
+    seed: int | None,
+) -> dict[str, Any]:
+    """Report why (adm_id, year, crop) keys are duplicated for one model."""
+    model = str(row["model"])
+    dataset = str(row["dataset"])
+    crop = dataset_crop(dataset)
+    report: dict[str, Any] = {"model": model, "dataset": dataset, "crop": crop}
+
+    if source == "baselines":
+        frame = load_model_predictions(row, collect_dir, source=source, seed=seed)
+        if frame is None or frame.empty:
+            report["error"] = "no predictions loaded"
+            return report
+        dup_mask = frame.duplicated(subset=["adm_id", "year", "crop"], keep=False)
+        report["n_rows"] = len(frame)
+        report["n_duplicate_rows"] = int(dup_mask.sum())
+        if dup_mask.any():
+            sample = (
+                frame.loc[dup_mask, ["adm_id", "year", "crop"]]
+                .drop_duplicates()
+                .head(5)
+                .to_dict(orient="records")
+            )
+            report["sample_duplicate_keys"] = sample
+            report["note"] = "Duplicates come from pooled walk-forward test_preds.csv files"
+        return report
+
+    preds_dir = preds_dir_for_row(collect_dir, row)
+    if preds_dir is None:
+        report["error"] = "missing preds dir"
+        return report
+    files = _year_csv_files(preds_dir, dataset)
+    report["preds_dir"] = str(preds_dir)
+    report["n_year_csv_files"] = len(files)
+
+    horizon_tags = sorted(
+        {
+            m.group(1)
+            for fp in files
+            if (m := re.search(rf"{re.escape(dataset)}_h(.+)_year_\d+\.csv$", fp.name))
+        }
+    )
+    report["horizon_tags_in_filenames"] = horizon_tags
+
+    files_by_year: dict[str, list[str]] = {}
+    within_file_dupes: list[dict[str, Any]] = []
+    for fp in files:
+        year_match = re.search(r"_year_(\d+)\.csv$", fp.name)
+        year = year_match.group(1) if year_match else "?"
+        files_by_year.setdefault(year, []).append(fp.name)
+        try:
+            raw = pd.read_csv(fp)
+        except OSError as exc:
+            within_file_dupes.append({"file": fp.name, "error": str(exc)})
+            continue
+        if raw.empty:
+            continue
+        loc_col = _loc_column(raw)
+        year_col = _year_column(raw)
+        dup_mask = raw.duplicated(subset=[loc_col, year_col], keep=False)
+        if dup_mask.any():
+            within_file_dupes.append(
+                {
+                    "file": fp.name,
+                    "duplicate_rows": int(dup_mask.sum()),
+                    "sample_keys": (
+                        raw.loc[dup_mask, [loc_col, year_col]]
+                        .drop_duplicates()
+                        .head(3)
+                        .rename(columns={loc_col: "adm_id", year_col: "year"})
+                        .to_dict(orient="records")
+                    ),
+                }
+            )
+
+    years_with_multiple_files = {
+        year: names for year, names in sorted(files_by_year.items()) if len(names) > 1
+    }
+    report["years_with_multiple_files"] = years_with_multiple_files
+    report["within_file_duplicates"] = within_file_dupes
+
+    frame = load_model_predictions(row, collect_dir, source=source, seed=seed)
+    if frame is None or frame.empty:
+        report["error"] = "no predictions loaded after concat"
+        return report
+    dup_mask = frame.duplicated(subset=["adm_id", "year", "crop"], keep=False)
+    report["n_rows_after_concat"] = len(frame)
+    report["n_duplicate_rows_after_concat"] = int(dup_mask.sum())
+    if dup_mask.any():
+        report["sample_duplicate_keys"] = (
+            frame.loc[dup_mask, ["adm_id", "year", "crop"]]
+            .drop_duplicates()
+            .head(5)
+            .to_dict(orient="records")
+        )
+    if years_with_multiple_files:
+        report["likely_cause"] = "multiple year CSV files for the same harvest year"
+    elif within_file_dupes:
+        report["likely_cause"] = "duplicate adm_id+year rows inside one or more year CSV files"
+    elif int(dup_mask.sum()) > 0:
+        report["likely_cause"] = "duplicate keys after concat (inspect year CSV set)"
+    else:
+        report["likely_cause"] = "no duplicates in this model frame"
+    return report
+
+
+def print_collect_diagnosis(bundle: CollectBundle, *, source: SourceMode, seed: int | None) -> None:
+    summary_rows = pd.read_csv(bundle.path / "walk_forward_summary.csv").to_dict(
+        orient="records"
+    )
+    print(f"\n=== diagnose {bundle.path.name} ===")
+    for row in summary_rows:
+        report = diagnose_model_predictions(
+            row, bundle.path, source=source, seed=seed
+        )
+        model = report["model"]
+        print(f"\n[{model}] dataset={report.get('dataset')}")
+        if report.get("error"):
+            print(f"  error: {report['error']}")
+            continue
+        if source == "collect":
+            print(f"  preds_dir: {report.get('preds_dir')}")
+            print(f"  year CSV files: {report.get('n_year_csv_files')}")
+            tags = report.get("horizon_tags_in_filenames") or []
+            if tags:
+                print(f"  horizon tags in filenames: {', '.join(tags)}")
+            multi = report.get("years_with_multiple_files") or {}
+            if multi:
+                print("  years with >1 CSV file:")
+                for year, names in multi.items():
+                    print(f"    {year}: {names}")
+            within = report.get("within_file_duplicates") or []
+            if within:
+                print("  within-file duplicate adm_id+year:")
+                for item in within:
+                    print(f"    {item}")
+        n_dup = report.get("n_duplicate_rows_after_concat", report.get("n_duplicate_rows"))
+        print(f"  rows after load: {report.get('n_rows_after_concat', report.get('n_rows'))}")
+        print(f"  duplicate rows: {n_dup}")
+        if report.get("likely_cause"):
+            print(f"  likely cause: {report['likely_cause']}")
+        if report.get("sample_duplicate_keys"):
+            print(f"  sample keys: {report['sample_duplicate_keys']}")
+
+
 def load_model_predictions(
     row: dict[str, Any],
     collect_dir: Path,
@@ -183,6 +356,15 @@ def load_model_predictions(
     )
 
 
+def _finalize_model_frame(
+    frame: pd.DataFrame,
+    *,
+    model: str,
+) -> tuple[pd.DataFrame, int]:
+    frame, n_dupes = dedupe_prediction_rows(frame, model_slug=model)
+    return frame, n_dupes
+
+
 def build_wide_table(
     summary_rows: list[dict[str, Any]],
     collect_dir: Path,
@@ -196,6 +378,7 @@ def build_wide_table(
     merged: pd.DataFrame | None = None
     seeds_seen: set[int] = set()
     skipped_models: list[str] = []
+    duplicate_rows_collapsed: dict[str, int] = {}
 
     for row in summary_rows:
         crop = dataset_crop(str(row["dataset"]))
@@ -206,6 +389,9 @@ def build_wide_table(
         if frame is None or frame.empty:
             skipped_models.append(model)
             continue
+        frame, n_dupes = _finalize_model_frame(frame, model=model)
+        if n_dupes:
+            duplicate_rows_collapsed[model] = n_dupes
         if seed is not None:
             seeds_seen.add(seed)
         elif row.get("plot_seed") is not None and not pd.isna(row.get("plot_seed")):
@@ -237,6 +423,7 @@ def build_wide_table(
         "seed": sorted(seeds_seen) if seeds_seen else None,
         "models": model_order,
         "skipped_models": skipped_models,
+        "duplicate_rows_collapsed": duplicate_rows_collapsed,
         "n_rows": int(len(merged)),
         "crops": sorted(merged["crop"].dropna().unique().tolist()),
     }
@@ -374,7 +561,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--dest",
         type=Path,
-        required=True,
         help="Directory for exported CSV files (and optional zip/README)",
     )
     parser.add_argument("--version", type=int, default=2, help="Collect batch version tag")
@@ -424,7 +610,15 @@ def main(argv: list[str] | None = None) -> int:
         "--zip-name",
         help="Zip filename inside --dest (default: <dest.name>.zip)",
     )
+    parser.add_argument(
+        "--diagnose",
+        action="store_true",
+        help="Print duplicate-key analysis for collect preds and exit (no export)",
+    )
     args = parser.parse_args(argv)
+
+    if not args.diagnose and args.dest is None:
+        parser.error("--dest is required unless --diagnose is set")
 
     countries = {c.upper() for c in args.countries} if args.countries else None
     horizons = set(args.horizons) if args.horizons else None
@@ -441,6 +635,11 @@ def main(argv: list[str] | None = None) -> int:
             f"No paper_walk_forward_* collect dirs with walk_forward_summary.csv "
             f"under {args.output_root} (version={args.version})"
         )
+
+    if args.diagnose:
+        for bundle in bundles:
+            print_collect_diagnosis(bundle, source=args.source, seed=args.seed)
+        return 0
 
     dest_root = args.dest.resolve()
     dest_root.mkdir(parents=True, exist_ok=True)
@@ -466,6 +665,14 @@ def main(argv: list[str] | None = None) -> int:
                 f"[OK] {rel} | {rec['n_rows']} rows | "
                 f"{len(rec.get('models') or [])} models | seed={seed_repr}"
             )
+            dupes = rec.get("duplicate_rows_collapsed") or {}
+            if dupes:
+                total = sum(dupes.values())
+                models = ", ".join(f"{m}({n})" for m, n in sorted(dupes.items()))
+                print(
+                    f"     [WARN] collapsed {total} duplicate region×year row(s) "
+                    f"(likely overlapping year CSVs in preds/): {models}"
+                )
             if rec.get("skipped_models"):
                 print(f"     skipped models: {', '.join(rec['skipped_models'])}")
         all_records.extend(records)

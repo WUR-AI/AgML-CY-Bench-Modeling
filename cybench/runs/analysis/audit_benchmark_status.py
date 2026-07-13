@@ -187,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--countries", nargs="+")
     parser.add_argument("--all-countries", action="store_true")
     parser.add_argument("--horizon", default="eos")
-    parser.add_argument("--version", type=int, default=3)
+    parser.add_argument("--version", type=int, default=4)
     parser.add_argument("--output-root", type=Path)
     parser.add_argument("--repo-root", type=Path, default=_REPO_ROOT)
     parser.add_argument("--publish-root", type=Path)
