@@ -407,6 +407,40 @@ find_latest_walk_forward_run_dir() {
   ls -td "${BASELINES_DIR}/${crop}_${country}_${model_name}_walk_forward_${htag}_"* 2>/dev/null | head -1 || true
 }
 
+# All walk-forward Hydra run folders for a crop/country/model (newest first).
+list_walk_forward_run_dirs() {
+  local crop=$1 country=$2 model_slug=$3
+  local htag model_name
+  htag=$(horizon_tag)
+  model_name=$(model_run_name "${model_slug}")
+  ls -td "${BASELINES_DIR}/${crop}_${country}_${model_name}_walk_forward_${htag}_"* 2>/dev/null || true
+}
+
+# True when dir was not present in the snapshot taken at parallel seed-task start.
+wf_run_dir_is_new() {
+  local dir=$1
+  shift
+  if [[ -z "${dir}" || ! -d "${dir}" ]]; then
+    return 1
+  fi
+  if [[ $# -eq 0 ]]; then
+    return 0
+  fi
+  local known
+  for known in "$@"; do
+    if [[ "${dir}" == "${known}" ]]; then
+      return 1
+    fi
+  done
+  return 0
+}
+
+# True when seed ${base} has created at least one <year>/<base>/ folder (fit started).
+wf_base_seed_started_in_run() {
+  local run_dir=$1 base=$2
+  find "${run_dir}" -mindepth 2 -maxdepth 2 -type d -name "${base}" 2>/dev/null | grep -q .
+}
+
 discover_run_seeds_py() {
   local run_dir=$1
   poetry run python -c "
@@ -486,22 +520,36 @@ plan_walk_forward_seeds() {
 plan_walk_forward_single_seed() {
   local crop=$1 country=$2 model_slug=$3 seed=$4
   local base=${WF_BASE_SEED:-42}
+  local resume=${WF_RESUME:-no}
   local run_dir=""
   local wait_secs=${WF_SEED_WAIT_SECS:-7200}
   local interval=${WF_SEED_WAIT_INTERVAL:-30}
   local elapsed=0
+  local -a known_dirs=()
+
+  # Fresh submits: snapshot existing run dirs so parallel seed 43+ tasks do not attach to
+  # a stale folder from an earlier attempt while seed ${base} is still creating a new one.
+  if [[ "${resume}" == "no" && "${seed}" != "${base}" ]]; then
+    mapfile -t known_dirs < <(list_walk_forward_run_dirs "${crop}" "${country}" "${model_slug}")
+  fi
 
   # Parallel per-seed arrays may start seed 43+ before seed ${base} creates the run dir.
   while true; do
     run_dir=$(find_latest_walk_forward_run_dir "${crop}" "${country}" "${model_slug}")
-    if [[ -n "${run_dir}" && -d "${run_dir}" ]]; then
-      break
-    fi
     if [[ "${seed}" == "${base}" ]]; then
       break
     fi
+    if [[ -n "${run_dir}" && -d "${run_dir}" ]]; then
+      if [[ "${resume}" != "no" ]]; then
+        break
+      fi
+      if wf_run_dir_is_new "${run_dir}" "${known_dirs[@]}" \
+        && wf_base_seed_started_in_run "${run_dir}" "${base}"; then
+        break
+      fi
+    fi
     if [[ "${elapsed}" -eq 0 ]]; then
-      echo "[WAIT] Seed ${seed} waiting for walk-forward run dir (seed ${base})..." >&2
+      echo "[WAIT] Seed ${seed} waiting for walk-forward run dir from seed ${base}..." >&2
     fi
     if [[ "${elapsed}" -ge "${wait_secs}" ]]; then
       echo "[ERROR] Seed ${seed} timed out after ${wait_secs}s waiting for walk-forward run (seed ${base})" >&2
