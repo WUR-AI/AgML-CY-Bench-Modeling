@@ -12,6 +12,8 @@ from cybench.runs.analysis.global_insights_lib import (
     aggregate_model_leaderboard,
     attach_baseline_metrics,
     build_dashboard_hrefs,
+    build_continent_horizon_payload,
+    build_continent_horizon_table,
     build_family_models_horizon_table,
     build_horizon_skill_curves_payload,
     build_insights_payload,
@@ -581,6 +583,73 @@ def test_horizon_skill_curves_eos_only_lpjml_in_table_not_plot(tmp_path: Path):
     assert lpj_all["eos_only"] is True
     assert lpj_all["family"] == "Process-Based"
     assert "plot_excluded_note" in payload
+
+
+def test_continent_horizon_payload_splits_regions():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        df = _three_horizon_fixture(Path(tmp))
+        za_rows = [
+            {
+                "crop": "maize",
+                "country": "ZA",
+                "model": model,
+                "batch_horizon": hz,
+                "nrmse": nrmse,
+                "r2": 0.5,
+                "r_spatial": 0.5,
+                "r_temporal": 0.4,
+                "r_res": 0.3,
+                "n_samples": 30,
+            }
+            for hz, nrmse_by_model in [
+                ("mid", {"ridge": 0.40, "trend": 0.44, "xgboost": 0.38, "average": 0.46, "lstm_lf": 0.45}),
+                ("qtr", {"ridge": 0.32, "trend": 0.40, "xgboost": 0.30, "average": 0.42, "lstm_lf": 0.37}),
+                ("eos", {"ridge": 0.25, "trend": 0.38, "xgboost": 0.24, "average": 0.40, "lstm_lf": 0.30}),
+            ]
+            for model, nrmse in nrmse_by_model.items()
+        ]
+        df = pd.concat([df, pd.DataFrame(za_rows)], ignore_index=True)
+
+        payload = build_continent_horizon_payload(df)
+        assert len(payload["horizons"]) == 3
+        maize = payload["by_crop"]["maize"]
+        regions = {r["label"]: r["n_countries"] for r in maize["regions"]}
+        assert regions["Global"] == 4
+        assert regions["Africa"] == 1
+        assert regions["Europe"] == 2
+        assert regions["North America"] == 1
+
+        europe_xgb = next(
+            e
+            for e in maize["entries"]
+            if e["region"] == "Europe" and e["model"] == "xgboost"
+        )
+        africa_xgb = next(
+            e
+            for e in maize["entries"]
+            if e["region"] == "Africa" and e["model"] == "xgboost"
+        )
+        europe_eos = next(
+            p["metrics"]["nrmse"]["median"]
+            for p in europe_xgb["points"]
+            if p["horizon"] == "eos"
+        )
+        africa_eos = next(
+            p["metrics"]["nrmse"]["median"]
+            for p in africa_xgb["points"]
+            if p["horizon"] == "eos"
+        )
+        assert europe_eos < africa_eos
+
+        table = build_continent_horizon_table(df, crop="maize")
+        assert "region" in table.columns
+        assert set(table["region"]) >= {"Global", "Europe", "Africa"}
+
+        insights = build_insights_payload(Path(tmp), version=1)
+        assert "continent_horizons" in insights
+        assert insights["continent_horizons"]["by_crop"]["maize"]["regions"]
 
 
 def test_horizon_models_include_partial_early_coverage():

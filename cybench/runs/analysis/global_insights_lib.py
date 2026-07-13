@@ -1230,6 +1230,204 @@ def build_horizon_skill_curves_payload(
     }
 
 
+CONTINENT_REGION_ORDER: tuple[str, ...] = (
+    "Africa",
+    "Asia",
+    "Europe",
+    "North America",
+    "South America",
+)
+
+
+def _country_to_continent() -> dict[str, str]:
+    from cybench.config import CONTINENT_DICT
+
+    out: dict[str, str] = {}
+    for continent, codes in CONTINENT_DICT.items():
+        for cc in codes:
+            out[str(cc).upper()] = continent
+    return out
+
+
+def _continent_region_id(label: str) -> str:
+    if label == "Global":
+        return "global"
+    return label.lower().replace(" ", "_")
+
+
+def _region_country_sets(work: pd.DataFrame) -> list[tuple[str, str, set[str]]]:
+    """(region_id, label, countries) for Global and each continent with data."""
+    if work.empty or "country" not in work.columns:
+        return [("global", "Global", set())]
+    all_countries = {str(c).upper() for c in work["country"].unique()}
+    cc_to_cont = _country_to_continent()
+    from cybench.config import CONTINENT_DICT
+
+    regions: list[tuple[str, str, set[str]]] = [("global", "Global", all_countries)]
+    for continent in CONTINENT_REGION_ORDER:
+        codes = {str(c).upper() for c in CONTINENT_DICT.get(continent, [])}
+        present = all_countries & codes
+        if present:
+            regions.append((_continent_region_id(continent), continent, present))
+    return regions
+
+
+def _filter_work_to_countries(work: pd.DataFrame, countries: set[str]) -> pd.DataFrame:
+    if work.empty or not countries:
+        return work.iloc[0:0].copy()
+    upper = {str(c).upper() for c in countries}
+    return work[work["country"].astype(str).str.upper().isin(upper)].copy()
+
+
+def build_continent_horizon_payload(
+    df: pd.DataFrame,
+    *,
+    representatives: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Per-region horizon medians for EOS family representatives."""
+    from cybench.runs.analysis.model_family_radar_lib import (
+        FAMILY_COLORS,
+        FAMILY_ORDER,
+        MODEL_DISPLAY_NAMES,
+        pick_representatives,
+    )
+
+    horizons = horizons_in_data(df)
+    if len(horizons) < 2:
+        return {
+            "horizons": [],
+            "by_crop": {},
+            "note": "Need at least two forecast horizons with collected summaries.",
+        }
+
+    rep_source_hz = "eos" if "eos" in horizons else horizons[-1]
+    rep_work = _filter_summary_work(df, batch_horizon=rep_source_hz)
+    reps = pick_representatives(rep_work, overrides=representatives)
+    trend_model = reps.get("Naive baselines", "trend")
+
+    value_columns = tuple(c for c in HORIZON_SKILL_VALUE_COLUMNS if c in df.columns)
+    crop_keys = ["all", *_crop_keys(df)]
+    by_crop: dict[str, Any] = {}
+
+    for crop_key in crop_keys:
+        crop_filter = None if crop_key == "all" else crop_key
+        crop_work = _filter_summary_work(df, crop=crop_filter)
+        region_specs = _region_country_sets(crop_work)
+        regions_meta: list[dict[str, Any]] = []
+        entries: list[dict[str, Any]] = []
+
+        for region_id, region_label, countries in region_specs:
+            regional_work = _filter_work_to_countries(crop_work, countries)
+            regions_meta.append(
+                {
+                    "id": region_id,
+                    "label": region_label,
+                    "n_countries": len(countries),
+                }
+            )
+            if regional_work.empty:
+                continue
+            for family in FAMILY_ORDER:
+                model = reps.get(family)
+                if not model or model == trend_model:
+                    continue
+                entry = _build_model_horizon_entry_independent(
+                    regional_work,
+                    model=model,
+                    trend_model=trend_model,
+                    horizons=horizons,
+                    value_columns=value_columns,
+                )
+                if entry is None:
+                    continue
+                entries.append(
+                    {
+                        "region": region_label,
+                        "region_id": region_id,
+                        "family": family,
+                        "display": MODEL_DISPLAY_NAMES.get(model, model),
+                        "color": FAMILY_COLORS.get(family, "#666"),
+                        **entry,
+                    }
+                )
+
+        by_crop[crop_key] = {
+            "regions": regions_meta,
+            "entries": entries,
+        }
+
+    rep_labels = ", ".join(f"{f}: {m}" for f, m in reps.items())
+    return {
+        "horizons": [
+            {"id": hz, "label": HORIZON_DISPLAY_LABELS.get(hz, hz), "order": i}
+            for i, hz in enumerate(horizons)
+        ],
+        "representatives_summary": rep_labels,
+        "by_crop": by_crop,
+        "note": (
+            "EOS family representatives only. Median across countries within each region "
+            "(each country weighs equally). Horizons scored independently — blank cells mean "
+            "no runs at that horizon in that region. Small regions (e.g. Asia, Americas) may "
+            "have few countries; check n in tooltips via country counts per horizon in the "
+            "exported table."
+        ),
+    }
+
+
+def build_continent_horizon_table(
+    df: pd.DataFrame,
+    *,
+    crop: str | None = None,
+    horizons: tuple[str, ...] | None = None,
+    metrics: tuple[str, ...] = ("nrmse", "r2", "r_spatial", "r_temporal", "r_res"),
+    representatives: dict[str, str] | None = None,
+) -> pd.DataFrame:
+    """Flatten :func:`build_continent_horizon_payload` to a CSV-friendly table."""
+    payload = build_continent_horizon_payload(df, representatives=representatives)
+    horizons = horizons or tuple(h["id"] for h in payload.get("horizons", []))
+    crop_key = crop or "all"
+    slice_data = payload.get("by_crop", {}).get(crop_key, {})
+    present_metrics = tuple(m for m in metrics if m in HORIZON_SKILL_VALUE_COLUMNS)
+
+    rows: list[dict[str, Any]] = []
+    for entry in slice_data.get("entries", []):
+        row: dict[str, Any] = {
+            "region": entry.get("region"),
+            "region_id": entry.get("region_id"),
+            "family": entry.get("family"),
+            "model": entry.get("model"),
+            "display_name": entry.get("display"),
+            "eos_only": entry.get("eos_only", False),
+        }
+        points_by_hz = {p["horizon"]: p for p in entry.get("points", [])}
+        for hz in horizons:
+            pt = points_by_hz.get(hz)
+            row[f"n_countries_{hz}"] = pt.get("n_countries") if pt else None
+            for metric in present_metrics:
+                stats = (pt.get("metrics") or {}).get(metric) if pt else None
+                if isinstance(stats, dict):
+                    row[f"{hz}_{metric}_median"] = stats.get("median")
+                    row[f"{hz}_{metric}_q25"] = stats.get("q25")
+                    row[f"{hz}_{metric}_q75"] = stats.get("q75")
+                else:
+                    row[f"{hz}_{metric}_median"] = float("nan")
+                    row[f"{hz}_{metric}_q25"] = float("nan")
+                    row[f"{hz}_{metric}_q75"] = float("nan")
+        rows.append(row)
+
+    if not rows:
+        return pd.DataFrame()
+    region_order = ["Global", *list(CONTINENT_REGION_ORDER)]
+    ord_map = {name: i for i, name in enumerate(region_order)}
+    out = pd.DataFrame(rows)
+    out["_region_ord"] = out["region"].map(lambda r: ord_map.get(r, 99))
+    return (
+        out.sort_values(["_region_ord", "family", "model"])
+        .drop(columns=["_region_ord"])
+        .reset_index(drop=True)
+    )
+
+
 def _model_country_count(work: pd.DataFrame, model: str) -> int:
     sub = work[work["model"] == model]
     if sub.empty or "country" not in sub.columns:
@@ -1523,6 +1721,7 @@ def build_insights_payload(output_root: Path, *, version: int = 2) -> dict[str, 
         "model_country": model_country,
         "model_country_skilled": model_country_skilled,
         "horizon_skill_curves": build_horizon_skill_curves_payload(df),
+        "continent_horizons": build_continent_horizon_payload(df),
         "crop_comparison": build_crop_comparison_payload(df),
         "country_map_cc": country_map_cc,
         "benchmark_map_isos": benchmark_map_isos,

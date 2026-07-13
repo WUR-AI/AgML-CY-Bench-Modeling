@@ -502,6 +502,10 @@
       <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">By family (median across countries)</h3>
       <div class="table-scroll" id="horizon-curves-table-wrap"></div>
       <p class="muted note" id="horizon-curves-metric-note"></p>
+      <h3 style="font-size:1rem;margin:1.5rem 0 0.5rem;">By region (median across countries)</h3>
+      <p class="muted" id="horizon-continent-note"></p>
+      <p class="muted" id="horizon-continent-meta"></p>
+      <div class="table-scroll" id="horizon-continent-table-wrap"></div>
     </div>
 
     <div class="card">
@@ -2032,11 +2036,16 @@
     const hscAxisToolbar = document.getElementById("horizon-curves-axis-toolbar");
     const hscMetricWrap = document.getElementById("horizon-curves-metric-wrap");
     const hscMetricSelect = document.getElementById("horizon-curves-metric");
+    const hscContinentNote = document.getElementById("horizon-continent-note");
+    const hscContinentMeta = document.getElementById("horizon-continent-meta");
+    const hscContinentTableWrap = document.getElementById("horizon-continent-table-wrap");
     let hscCrop = "all";
     let hscAxis = "overall";
     let hscMetric = "nrmse";
     let hscTableSort = "family";
     let hscTableDir = "asc";
+    let hscContinentTableSort = "region";
+    let hscContinentTableDir = "asc";
 
     const HSC_AXES = HSC.axes || MATRIX_AXES.map(axis => ({
       ...axis,
@@ -2160,6 +2169,11 @@
     }
 
     hscNote.textContent = HSC.note || "Horizon skill curves require at least two collected horizons.";
+    if (hscContinentNote) {
+      hscContinentNote.textContent = (DATA.continent_horizons || {}).note || (
+        "Family representatives by continent (median across countries in each region)."
+      );
+    }
 
     const hscCropKeys = Object.keys(HSC.by_crop || {});
     if (hscCropKeys.length) {
@@ -2202,6 +2216,7 @@
         hscChart.innerHTML = `<p class="muted">Not enough paired horizon data for this crop.</p>`;
         hscLegend.innerHTML = "";
         hscTableWrap.innerHTML = `<p class="muted">No horizon table for this crop.</p>`;
+        renderHorizonContinentTable();
         return;
       }
 
@@ -2246,6 +2261,55 @@
             hscTableDir = key === "family" || key === "model" ? "asc" : "desc";
           }
           renderHorizonSkillCurves();
+        },
+        metricId: hscMetric,
+        metricCol,
+        metricValueFn: hscMetricValue,
+        cellBgFn: hscCellBg,
+      });
+      renderHorizonContinentTable();
+    }
+
+    function renderHorizonContinentTable() {
+      if (!hscContinentTableWrap) return;
+      const CONT = DATA.continent_horizons || {};
+      const slice = (CONT.by_crop || {})[hscCrop] || { entries: [], regions: [] };
+      const horizons = CONT.horizons || HSC.horizons || [];
+      const metricCol = hscMetricColumn(hscMetric);
+      const entries = slice.entries || [];
+
+      const regionBits = (slice.regions || [])
+        .filter(r => (r.n_countries || 0) > 0)
+        .map(r => `${r.label} (${r.n_countries})`);
+      let meta = regionBits.length ? regionBits.join(" · ") : "No regional breakdown for this crop.";
+      const reps = CONT.representatives_summary || HSC.representatives_summary || "";
+      if (reps) meta += ` · Representatives: ${reps}`;
+      if (hscContinentMeta) hscContinentMeta.textContent = meta;
+
+      if (!entries.length || horizons.length < 2) {
+        hscContinentTableWrap.innerHTML = `<p class="muted">No regional horizon table for this crop.</p>`;
+        return;
+      }
+
+      renderHorizonPointsTable({
+        container: hscContinentTableWrap,
+        horizons,
+        entries,
+        leadingCols: [
+          { key: "region", label: "Region", value: entry => entry.region },
+          { key: "family", label: "Family", value: entry => entry.family },
+          { key: "model", label: "Model", value: entry => entry.display || entry.model },
+        ],
+        sortKey: hscContinentTableSort,
+        sortDir: hscContinentTableDir,
+        onSort: (key) => {
+          if (hscContinentTableSort === key) {
+            hscContinentTableDir = hscContinentTableDir === "asc" ? "desc" : "asc";
+          } else {
+            hscContinentTableSort = key;
+            hscContinentTableDir = key === "region" || key === "family" || key === "model" ? "asc" : "desc";
+          }
+          renderHorizonContinentTable();
         },
         metricId: hscMetric,
         metricCol,
