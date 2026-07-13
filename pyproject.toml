@@ -43,6 +43,7 @@ tabpfn = ">=6.4.0,<7.0.0"
 tabicl = ">=2.1.0"
 tabdpt = ">=1.2.0"
 zenodo-get = "^1.6.1"
+shap = "^0.46.0"
 
 [build-system]
 requires = ["poetry-core"]
