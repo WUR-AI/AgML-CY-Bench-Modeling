@@ -1679,6 +1679,8 @@ def build_crop_comparison_payload(df: pd.DataFrame) -> dict[str, dict[str, Any]]
 
 def build_insights_payload(output_root: Path, *, version: int = 2) -> dict[str, Any]:
     """Build JSON-serializable payload for the global insights dashboard."""
+    from cybench.runs.analysis.model_family_radar_lib import build_radar_payload
+
     paths = discover_summary_tables(output_root, version=version)
     df = load_summary_frame(paths)
 
@@ -1728,6 +1730,7 @@ def build_insights_payload(output_root: Path, *, version: int = 2) -> dict[str, 
         "map_coverage_note": MAP_COVERAGE_NOTE,
         "metric_map_scales": METRIC_MAP_SCALES,
         "horizon_delta_scales": HORIZON_DELTA_SCALES,
+        "family_dashboard": build_radar_payload(output_root, version=version),
     }
 
 

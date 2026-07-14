@@ -374,8 +374,8 @@ PREDICTION_HORIZON=middle-of-season cybench/runs/slurm/submit_array.sh walk_forw
 # Multi-seed walk-forward:
 #   GPU manifest  → one SLURM task per seed (parallel; seeds 42..46 with --repetitions 5)
 #   CPU/naive     → one task runs all seeds sequentially in run_experiments.py
-# Non-base GPU seeds wait for a *new* run dir from seed 42 (not a stale partial run).
-# Logs show [WAIT] Seed N waiting for walk-forward run dir from seed 42... when queued behind base seed.
+# Non-base GPU seeds wait until seed 42 has started in the latest run dir (<year>/42/).
+# Logs show [WAIT] Seed N waiting for walk-forward run dir from seed 42... until then.
 # Add missing seeds into existing runs with --resume (skips seeds already on disk):
 cybench/runs/slurm/submit_benchmark.sh walk_forward --horizon eos --batch baselines_DE_eos_v2 --repetitions 5 --resume
 ```

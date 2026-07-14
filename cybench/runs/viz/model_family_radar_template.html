@@ -232,8 +232,7 @@
     <p class="back"><a href="index.html">← All dashboards</a></p>
     <header>
       <h1>Model family comparison</h1>
-      <p class="lead">NRMSE (Overall); Pearson r (Spatial, Temporal, and pooled anomaly r<sub>res</sub>) — one best-NRMSE representative per modeling paradigm (five families).</p>
-      <p class="muted">Paper-level summary. For every model and crop×country drill-down, see <a href="insights.html">Global insights</a> (leaderboard and model×country heatmap).</p>
+      <p class="lead">Paper-level summaries: training-set scaling and country-level AI advantage. For model×country heatmaps and family medians, see <a href="insights.html">Global insights</a> (RQ1).</p>
     </header>
 
     <div class="card">
@@ -244,74 +243,13 @@
         <label>Crop
           <select id="crop-select"></select>
         </label>
-        <span class="muted">Radar scale</span>
-        <div class="toolbar" id="radar-mode-toolbar">
-          <button type="button" data-mode="relative" class="active">Relative</button>
-          <button type="button" data-mode="absolute">Absolute</button>
-        </div>
-      </div>
-      <p class="muted" id="norm-note"></p>
-    </div>
-
-    <div class="layout">
-      <div class="card">
-        <h2>Radar chart</h2>
-        <div id="radar-wrap"></div>
-        <div class="legend" id="legend"></div>
-      </div>
-      <div class="card">
-        <h2>Evaluation views</h2>
-        <ul class="view-list" id="view-list"></ul>
       </div>
     </div>
 
     <div class="card">
-      <h2>Median across countries (family representatives)</h2>
-      <p class="muted" id="metrics-table-note">Median [IQR] across countries.</p>
-      <div class="table-scroll">
-        <table id="metrics-table">
-          <thead></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="export-toolbar">
-        <button type="button" id="table-export-latex">Download table (LaTeX)</button>
-        <button type="button" id="table-export-latex-copy">Copy LaTeX</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Performance vs training set size</h2>
+      <h2>Research Q4 — Performance vs training set size</h2>
       <p class="muted" id="scatter-note">Each point is one crop×country dataset for the family representative. Y-axis: model NRMSE ÷ average yield NRMSE (1.0 = baseline; lower is better). X-axis: log₁₀(mean training rows); view spans the 5th–95th percentile range.</p>
       <div class="scatter-panel" id="scatter-panel"></div>
-    </div>
-
-    <div class="card">
-      <h2>World map</h2>
-      <div class="controls">
-        <span class="muted">Map</span>
-        <div class="toolbar" id="map-mode-toolbar">
-          <button type="button" data-mode="winner" class="active">Winning family</button>
-          <button type="button" data-mode="benefit">AI error reduction</button>
-        </div>
-        <span class="muted" id="winner-aspect-label">Aspect</span>
-        <div class="toolbar" id="winner-aspect-toolbar"></div>
-      </div>
-      <p class="muted" id="map-mode-note">Colors show which model family wins in each country for the selected evaluation aspect.</p>
-      <p class="muted" id="map-coverage-note"></p>
-      <div class="world-map-wrap" id="winner-map-wrap"><p class="muted">Loading map…</p></div>
-      <div class="export-toolbar">
-        <button type="button" id="map-export-svg" disabled>Download map (SVG)</button>
-        <button type="button" id="map-export-png" disabled>Download map (PNG)</button>
-      </div>
-      <p class="muted">For LaTeX figures: use PNG with <code>\includegraphics</code>, or convert SVG to PDF (Inkscape) for vector output — pdfLaTeX does not embed SVG directly.</p>
-      <div class="winner-legend" id="winner-legend"></div>
-      <div class="benefit-legend" id="benefit-legend" style="display:none;">
-        <span class="benefit-gradient" aria-hidden="true"></span>
-        <span id="benefit-legend-label">−40% · 0% · +40%</span>
-        <span class="muted">orange = traditional better · blue = AI better (colorblind-safe; exact % on hover)</span>
-      </div>
-      <p class="muted winner-summary" id="winner-summary"></p>
     </div>
 
     <div class="card" id="country-bootstrap-card">
@@ -1633,13 +1571,7 @@ ${bodyRows}
     }
 
     function render() {
-      const slice = currentSlice();
-      const families = slice.families || [];
-      renderRadar(families);
-      renderLegend(families);
-      renderTable(families);
       renderScatter();
-      renderWorldMap();
       renderBootstrapTable();
     }
 
@@ -1649,12 +1581,7 @@ ${bodyRows}
     });
     cropSelect.addEventListener("change", render);
 
-    renderViewList();
-    initMapModeToolbar();
-    initWinnerAspectToolbar();
     populateCropOptions();
-    loadWinnerMapGeometry();
-    ensureExportFont();
     render();
   </script>
 </body>

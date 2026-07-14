@@ -25,7 +25,10 @@ def build_insights_html(payload: dict) -> str:
     template_path = (
         Path(__file__).resolve().parent.parent / "viz" / "global_insights_template.html"
     )
+    panel_path = template_path.parent / "family_rq1_panel.js"
     template = template_path.read_text(encoding="utf-8")
+    panel_js = panel_path.read_text(encoding="utf-8") if panel_path.is_file() else ""
+    template = template.replace("__FAMILY_PANEL_SCRIPT__", panel_js)
     data_json = json.dumps(payload)
     return template.replace("__DATA_JSON__", data_json)
 

@@ -407,34 +407,6 @@ find_latest_walk_forward_run_dir() {
   ls -td "${BASELINES_DIR}/${crop}_${country}_${model_name}_walk_forward_${htag}_"* 2>/dev/null | head -1 || true
 }
 
-# All walk-forward Hydra run folders for a crop/country/model (newest first).
-list_walk_forward_run_dirs() {
-  local crop=$1 country=$2 model_slug=$3
-  local htag model_name
-  htag=$(horizon_tag)
-  model_name=$(model_run_name "${model_slug}")
-  ls -td "${BASELINES_DIR}/${crop}_${country}_${model_name}_walk_forward_${htag}_"* 2>/dev/null || true
-}
-
-# True when dir was not present in the snapshot taken at parallel seed-task start.
-wf_run_dir_is_new() {
-  local dir=$1
-  shift
-  if [[ -z "${dir}" || ! -d "${dir}" ]]; then
-    return 1
-  fi
-  if [[ $# -eq 0 ]]; then
-    return 0
-  fi
-  local known
-  for known in "$@"; do
-    if [[ "${dir}" == "${known}" ]]; then
-      return 1
-    fi
-  done
-  return 0
-}
-
 # True when seed ${base} has created at least one <year>/<base>/ folder (fit started).
 wf_base_seed_started_in_run() {
   local run_dir=$1 base=$2
@@ -525,13 +497,6 @@ plan_walk_forward_single_seed() {
   local wait_secs=${WF_SEED_WAIT_SECS:-7200}
   local interval=${WF_SEED_WAIT_INTERVAL:-30}
   local elapsed=0
-  local -a known_dirs=()
-
-  # Fresh submits: snapshot existing run dirs so parallel seed 43+ tasks do not attach to
-  # a stale folder from an earlier attempt while seed ${base} is still creating a new one.
-  if [[ "${resume}" == "no" && "${seed}" != "${base}" ]]; then
-    mapfile -t known_dirs < <(list_walk_forward_run_dirs "${crop}" "${country}" "${model_slug}")
-  fi
 
   # Parallel per-seed arrays may start seed 43+ before seed ${base} creates the run dir.
   while true; do
@@ -543,8 +508,7 @@ plan_walk_forward_single_seed() {
       if [[ "${resume}" != "no" ]]; then
         break
       fi
-      if wf_run_dir_is_new "${run_dir}" "${known_dirs[@]}" \
-        && wf_base_seed_started_in_run "${run_dir}" "${base}"; then
+      if wf_base_seed_started_in_run "${run_dir}" "${base}"; then
         break
       fi
     fi

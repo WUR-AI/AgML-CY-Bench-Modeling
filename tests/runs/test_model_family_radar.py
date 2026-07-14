@@ -415,15 +415,11 @@ def test_build_radar_html_embeds_payload(tmp_path: Path):
     html = build_radar_html(payload)
     assert "Model family comparison" in html
     assert '"Feature-Engineered ML"' in html
-    assert "data-mode=\"absolute\"" in html
-    assert "data-mode=\"benefit\"" in html
-    assert 'id="map-export-svg"' in html
-    assert 'id="map-export-png"' in html
-    assert 'id="table-export-latex"' in html
-    assert "buildMetricsTableLatex" in html
+    assert "Research Q4" in html
     assert 'id="bootstrap-export-latex"' in html
     assert "buildBootstrapTableLatex" in html
     assert "booktabs" in html
+    assert "Radar chart" not in html
 
 
 def test_build_radar_slice_includes_r2_in_family_raw():
