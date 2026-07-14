@@ -22,6 +22,8 @@
 
 set -euo pipefail
 
+export CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME:-baselines_NL_eos_v4}"
+
 if [[ -f "${SLURM_SUBMIT_DIR:-}/cybench/runs/slurm/slurm_common.sh" ]]; then
   export SLURM_DIR="${SLURM_SUBMIT_DIR}/cybench/runs/slurm"
 else
@@ -38,13 +40,14 @@ MODELS="${MODELS:-random_forest,transformer_lf,tabpfn}"
 ORIGINS="${ORIGINS:-}"
 LAST_ORIGIN_ONLY="${LAST_ORIGIN_ONLY:-no}"
 FORCE_CPU="${FORCE_CPU:-0}"
-CYBENCH_EXPERIMENT_NAME="${CYBENCH_EXPERIMENT_NAME:-baselines_NL_eos_v4}"
-BASELINES_DIR="${CYBENCH_BASELINES_DIR:-${BASELINES_DIR}}"
 
 LUSTRE_ROOT="${CYBENCH_OUTPUT_ROOT:-/lustre/backup/SHARED/AIN/agml/output}"
-if [[ ! -d "${BASELINES_DIR}" && -d "${LUSTRE_ROOT}/${CYBENCH_EXPERIMENT_NAME}" ]]; then
+if [[ -n "${CYBENCH_BASELINES_DIR:-}" ]]; then
+  BASELINES_DIR="${CYBENCH_BASELINES_DIR}"
+elif [[ -d "${LUSTRE_ROOT}/${CYBENCH_EXPERIMENT_NAME}" ]]; then
   BASELINES_DIR="${LUSTRE_ROOT}/${CYBENCH_EXPERIMENT_NAME}"
 fi
+export BASELINES_DIR
 
 OUT_DIR="${SHAP_OUTPUT_DIR:-${LUSTRE_ROOT}/shap_importance/${CROP}_${COUNTRY}_${HORIZON}}"
 

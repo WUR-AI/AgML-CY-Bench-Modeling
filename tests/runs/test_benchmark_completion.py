@@ -313,20 +313,30 @@ def test_expand_walk_forward_gpu_per_seed(tmp_path: Path):
     assert all("ridge" not in line or line.count(" ") == 6 for line in lines if "ridge" in line)
 
 
-def test_walk_forward_complete_requires_all_repetitions(tmp_path: Path):
+def test_walk_forward_complete_requires_all_repetitions(tmp_path: Path, monkeypatch):
     from cybench.runs.slurm.benchmark_completion_lib import (
         JobRow,
         walk_forward_complete,
     )
+    from cybench.util.validation import expected_walk_forward_test_years
+
+    data = tmp_path / "data"
+    years = list(range(2000, 2025))
+    _write_yield(data / "maize" / "EL" / "yield_maize_EL.csv", "maize", "EL", years)
+    import cybench.config as cfg
+
+    monkeypatch.setattr(cfg, "PATH_DATA_DIR", str(data))
 
     repo = tmp_path / "repo"
     baselines = tmp_path / "output" / "baselines_EL_early_v2"
     run_dir = baselines / "maize_EL_tst_lf_walk_forward_early_season_20260709_120000"
     pred = "adm_id,year,targets,preds\nEL-01,2019,10,9\n"
+    expected_years = expected_walk_forward_test_years(set(years))
     for seed in (42, 43):
-        d = run_dir / "2019" / str(seed)
-        d.mkdir(parents=True)
-        (d / "test_preds.csv").write_text(pred, encoding="utf-8")
+        for year in expected_years:
+            d = run_dir / str(year) / str(seed)
+            d.mkdir(parents=True)
+            (d / "test_preds.csv").write_text(pred, encoding="utf-8")
 
     job = JobRow("maize", "EL", "tst_lf", "torch", "yes", "no", "yes")
     ok_any, _ = walk_forward_complete(
@@ -334,6 +344,7 @@ def test_walk_forward_complete_requires_all_repetitions(tmp_path: Path):
         job,
         horizon_tag_value="early_season",
         repo_root=repo,
+        data_dir=data,
     )
     assert ok_any is True
 
@@ -343,7 +354,47 @@ def test_walk_forward_complete_requires_all_repetitions(tmp_path: Path):
         horizon_tag_value="early_season",
         repo_root=repo,
         total_repetitions=5,
+        data_dir=data,
     )
     assert ok_all is False
     assert "missing walk-forward seeds" in reason
     assert "[44, 45, 46]" in reason
+
+
+def test_walk_forward_complete_requires_all_test_years(tmp_path: Path, monkeypatch):
+    from cybench.runs.slurm.benchmark_completion_lib import (
+        JobRow,
+        walk_forward_complete,
+    )
+    from cybench.util.validation import expected_walk_forward_test_years
+
+    data = tmp_path / "data"
+    years = list(range(2000, 2025))
+    _write_yield(data / "maize" / "EL" / "yield_maize_EL.csv", "maize", "EL", years)
+    import cybench.config as cfg
+
+    monkeypatch.setattr(cfg, "PATH_DATA_DIR", str(data))
+
+    repo = tmp_path / "repo"
+    baselines = tmp_path / "output" / "baselines_EL_early_v2"
+    run_dir = baselines / "maize_EL_tst_lf_walk_forward_early_season_20260709_120000"
+    pred = "adm_id,year,targets,preds\nEL-01,2019,10,9\n"
+    expected_years = expected_walk_forward_test_years(set(years))
+    only_year = expected_years[0]
+    for seed in (42, 43, 44, 45, 46):
+        d = run_dir / str(only_year) / str(seed)
+        d.mkdir(parents=True)
+        (d / "test_preds.csv").write_text(pred, encoding="utf-8")
+
+    job = JobRow("maize", "EL", "tst_lf", "torch", "yes", "no", "yes")
+    ok, reason = walk_forward_complete(
+        baselines,
+        job,
+        horizon_tag_value="early_season",
+        repo_root=repo,
+        total_repetitions=5,
+        data_dir=data,
+    )
+    assert ok is False
+    assert "incomplete walk-forward years" in reason
+    assert f"seed 42 missing {expected_years[1:]}" in reason

@@ -290,6 +290,7 @@ def resolve_model_at_origin(
     walk_forward_run_dir: Path | None = None,
     seed: int | None = None,
     test_years: Sequence[int] | None = None,
+    load_checkpoint: bool = True,
 ) -> tuple[BaseModel, BaseDataset, BaseDataset]:
     """Fit at a walk-forward origin, or load a saved checkpoint when available."""
     if fs_cfg is not None:
@@ -304,7 +305,12 @@ def resolve_model_at_origin(
         )
 
     artifact: Path | None = None
-    if walk_forward_run_dir is not None and seed is not None and test_years is not None:
+    if (
+        load_checkpoint
+        and walk_forward_run_dir is not None
+        and seed is not None
+        and test_years is not None
+    ):
         artifact = find_saved_model_artifact(
             walk_forward_run_dir,
             test_year=int(test_years[0]),
@@ -341,6 +347,7 @@ def fit_at_origin(
     walk_forward_run_dir: Path | None = None,
     seed: int | None = None,
     test_years: Sequence[int] | None = None,
+    load_checkpoint: bool = True,
 ) -> tuple[BaseModel, BaseDataset, BaseDataset]:
     return resolve_model_at_origin(
         model_cfg=model_cfg,
@@ -353,6 +360,7 @@ def fit_at_origin(
         walk_forward_run_dir=walk_forward_run_dir,
         seed=seed,
         test_years=test_years,
+        load_checkpoint=load_checkpoint,
     )
 
 
@@ -591,15 +599,15 @@ def compute_shap_torch(
     }
 
 
-def reproduce_walk_forward_origin(
+def _fit_and_predict_at_origin(
     spec: ShapRunSpec,
     *,
     train_years: list[int],
     test_years: list[int],
     frozen_dir: Path,
     walk_forward_run_dir: Path | None,
-) -> dict[str, Any]:
-    """Refit one walk-forward origin and compare predictions to saved test_preds.csv."""
+    from_scratch: bool,
+) -> tuple[npt.NDArray[Any], BaseDataset, int, int]:
     meta = MODEL_MANIFEST[spec.model]
     framework = str(meta["framework"])
     feature_design = bool(meta["feature_design"])
@@ -615,6 +623,7 @@ def reproduce_walk_forward_origin(
         dataset=dataset,
         framework=framework,
     )
+    fit_run_dir = None if from_scratch else walk_forward_run_dir
     model, train_dataset, test_dataset = fit_at_origin(
         model_cfg=model_cfg,
         fs_cfg=fs_cfg,
@@ -623,11 +632,65 @@ def reproduce_walk_forward_origin(
         test_dataset=test_dataset,
         train_years=train_years,
         walk_forward_nn=_is_torch_model(model_cfg),
-        walk_forward_run_dir=walk_forward_run_dir,
+        walk_forward_run_dir=fit_run_dir,
         seed=spec.seed,
         test_years=test_years,
+        load_checkpoint=not from_scratch,
     )
     preds, _ = model.predict(test_dataset)
+    return (
+        np.asarray(preds, dtype=float),
+        test_dataset,
+        len(train_dataset),
+        len(test_dataset),
+    )
+
+
+def reproduce_walk_forward_origin(
+    spec: ShapRunSpec,
+    *,
+    train_years: list[int],
+    test_years: list[int],
+    frozen_dir: Path,
+    walk_forward_run_dir: Path | None,
+    from_scratch: bool = False,
+    within_run_repeats: int = 1,
+) -> dict[str, Any]:
+    """Refit one walk-forward origin and compare predictions to saved test_preds.csv."""
+    if within_run_repeats < 1:
+        raise ValueError("within_run_repeats must be >= 1")
+
+    preds, test_dataset, n_train, n_test = _fit_and_predict_at_origin(
+        spec,
+        train_years=train_years,
+        test_years=test_years,
+        frozen_dir=frozen_dir,
+        walk_forward_run_dir=walk_forward_run_dir,
+        from_scratch=from_scratch,
+    )
+    within_run: dict[str, float | None] | None = None
+    if within_run_repeats > 1:
+        repeat_preds = [preds]
+        for _ in range(within_run_repeats - 1):
+            repeat_preds.append(
+                _fit_and_predict_at_origin(
+                    spec,
+                    train_years=train_years,
+                    test_years=test_years,
+                    frozen_dir=frozen_dir,
+                    walk_forward_run_dir=walk_forward_run_dir,
+                    from_scratch=from_scratch,
+                )[0]
+            )
+        stacked = np.stack(repeat_preds, axis=0)
+        ref = stacked[0]
+        diffs = np.max(np.abs(stacked[1:] - ref), axis=1)
+        within_run = {
+            "repeats": float(within_run_repeats),
+            "max_abs_pred_diff": float(np.max(diffs)),
+            "mean_abs_pred_diff": float(np.mean(diffs)),
+        }
+
     reproduction = (
         verify_predictions(
             walk_forward_run_dir=walk_forward_run_dir,
@@ -645,11 +708,13 @@ def reproduce_walk_forward_origin(
         "model": spec.model,
         "horizon": spec.horizon,
         "seed": spec.seed,
+        "from_scratch": from_scratch,
         "train_years": train_years,
         "test_years": test_years,
-        "n_train": len(train_dataset),
-        "n_test": len(test_dataset),
+        "n_train": n_train,
+        "n_test": n_test,
         "reproduction": reproduction,
+        "within_run": within_run,
     }
 
 

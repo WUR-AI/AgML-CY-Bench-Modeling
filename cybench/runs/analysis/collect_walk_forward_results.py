@@ -149,7 +149,7 @@ def summarize_walk_forward_n_train(run_dir: Path, *, seed: int) -> dict[str, Any
 
 
 def discover_run_seeds(run_dir: Path) -> list[int]:
-    """Seed subfolders under walk-forward year splits (e.g. 2016/42/test_preds.csv)."""
+    """Seeds with at least one ``<year>/<seed>/test_preds.csv`` (any origin year)."""
     seeds: set[int] = set()
     for split_dir in run_dir.iterdir():
         if not split_dir.is_dir() or not re.fullmatch(r"\d{4}", split_dir.name):
@@ -160,6 +160,33 @@ def discover_run_seeds(run_dir: Path) -> list[int]:
             if (child / "test_preds.csv").exists():
                 seeds.add(int(child.name))
     return sorted(seeds)
+
+
+def walk_forward_years_for_seed(run_dir: Path, seed: int) -> list[int]:
+    """Test years with predictions for one walk-forward seed."""
+    years: list[int] = []
+    for split_dir in sorted(run_dir.iterdir()):
+        if not split_dir.is_dir() or not re.fullmatch(r"\d{4}", split_dir.name):
+            continue
+        if (split_dir / str(seed) / "test_preds.csv").exists():
+            years.append(int(split_dir.name))
+    return years
+
+
+def walk_forward_missing_years(
+    run_dir: Path,
+    *,
+    expected_years: list[int],
+    seeds: list[int],
+) -> dict[int, list[int]]:
+    """Per-seed forecast years missing ``test_preds.csv``."""
+    missing: dict[int, list[int]] = {}
+    for seed in seeds:
+        present = set(walk_forward_years_for_seed(run_dir, seed))
+        miss = [year for year in expected_years if year not in present]
+        if miss:
+            missing[seed] = miss
+    return missing
 
 
 def aggregate_flat_metrics_across_seeds(

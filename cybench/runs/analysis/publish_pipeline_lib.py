@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from cybench.runs.analysis.benchmark_run_catalog import discover_benchmark_runs
-from cybench.runs.analysis.collect_walk_forward_results import load_pooled_predictions
+from cybench.runs.slurm.benchmark_completion_lib import JobRow, walk_forward_complete
 from cybench.runs.analysis.publish_dashboard_bundle import (
     _COUNTRY_NAMES,
     discover_index_entries,
@@ -147,6 +147,7 @@ def _complete_walk_forward_runs(
     *,
     country: str | None,
     horizon_tags: tuple[str, ...],
+    repo_root: Path,
 ) -> list:
     if not baselines_dir.is_dir():
         return []
@@ -166,9 +167,22 @@ def _complete_walk_forward_runs(
             key = (run.crop, run.country, run.model)
             if key in seen:
                 continue
-            try:
-                load_pooled_predictions(run.path, model_slug=run.model)
-            except ValueError:
+            job = JobRow(
+                run.crop,
+                run.country,
+                run.model,
+                "pandas",
+                "yes",
+                "yes",
+                "no",
+            )
+            ok, _ = walk_forward_complete(
+                baselines_dir,
+                job,
+                horizon_tag_value=horizon_tag,
+                repo_root=repo_root,
+            )
+            if not ok:
                 continue
             seen.add(key)
             complete.append(run)
@@ -188,6 +202,7 @@ def resolve_collect_baselines_dir(target: PublishTarget) -> tuple[Path, str | No
         per_country,
         country=target.country_upper,
         horizon_tags=target.horizon_tags,
+        repo_root=target.repo_root,
     ):
         return per_country, note_prefix
 
@@ -200,6 +215,7 @@ def resolve_collect_baselines_dir(target: PublishTarget) -> tuple[Path, str | No
         monolithic,
         country=target.country_upper,
         horizon_tags=target.horizon_tags,
+        repo_root=target.repo_root,
     ):
         note = (
             f"collecting from {monolithic} "
@@ -248,7 +264,7 @@ def discover_baselines_batches(
         for batch_hz, horizon_tags in HORIZON_TAGS_BY_BATCH_SUFFIX.items():
             by_country: set[str] = set()
             for run in _complete_walk_forward_runs(
-                mono, country=None, horizon_tags=horizon_tags
+                mono, country=None, horizon_tags=horizon_tags, repo_root=defaults.repo_root
             ):
                 by_country.add(run.country.upper())
             for cc in sorted(by_country):
@@ -541,6 +557,7 @@ def count_complete_walk_forward_runs(target: PublishTarget) -> int:
             baselines_dir,
             country=target.country_upper,
             horizon_tags=target.horizon_tags,
+            repo_root=target.repo_root,
         )
     )
 
@@ -593,6 +610,7 @@ def baselines_fingerprint(target: PublishTarget) -> dict[str, Any]:
         baselines_dir,
         country=target.country_upper,
         horizon_tags=target.horizon_tags,
+        repo_root=target.repo_root,
     ):
         runs_meta.append(
             {

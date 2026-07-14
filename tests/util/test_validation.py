@@ -4,6 +4,8 @@ from hydra import compose, initialize
 
 from cybench.util.validation import (
     default_screening_validation_cfg,
+    default_walk_forward_validation_cfg,
+    expected_walk_forward_test_years,
     get_screening_partitions,
     get_splits,
 )
@@ -132,3 +134,14 @@ def test_screening_final_fit_pool_excludes_test():
     assert test_years == list(range(2020, 2025))
     assert final_fit_years == list(range(2000, 2020))
     assert not set(final_fit_years) & set(test_years)
+
+
+def test_default_walk_forward_validation_cfg_matches_yaml():
+    cfg = default_walk_forward_validation_cfg()
+    assert cfg.name == "walk_forward"
+    assert cfg.test_years == "5-last"
+
+
+def test_expected_walk_forward_test_years_matches_rolling_origins():
+    years = set(range(2000, 2025))
+    assert expected_walk_forward_test_years(years) == list(range(2020, 2025))

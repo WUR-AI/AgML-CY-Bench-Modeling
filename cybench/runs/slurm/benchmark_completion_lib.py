@@ -14,6 +14,7 @@ from cybench.runs.analysis.benchmark_run_catalog import discover_benchmark_runs
 from cybench.runs.analysis.collect_walk_forward_results import (
     discover_run_seeds,
     load_pooled_predictions,
+    walk_forward_missing_years,
 )
 from cybench.runs.slurm.benchmark_submit_lib import (
     batch_name,
@@ -26,7 +27,11 @@ from cybench.runs.slurm.benchmark_submit_lib import (
     resolve_case_insensitive_child,
 )
 from cybench.util.prediction_horizon import prediction_horizon_tag
-from cybench.util.validation import default_screening_validation_cfg, get_screening_partitions
+from cybench.util.validation import (
+    default_screening_validation_cfg,
+    expected_walk_forward_test_years,
+    get_screening_partitions,
+)
 
 DEFAULT_MIN_YEAR = 2000
 DEFAULT_MAX_YEAR = 2024
@@ -306,6 +311,9 @@ def walk_forward_complete(
     repo_root: Path,
     base_seed: int = 42,
     total_repetitions: int | None = None,
+    data_dir: Path | None = None,
+    min_year: int = DEFAULT_MIN_YEAR,
+    max_year: int = DEFAULT_MAX_YEAR,
 ) -> tuple[bool, str]:
     run_dir = _latest_run(
         baselines_dir,
@@ -331,6 +339,26 @@ def walk_forward_complete(
         check_seeds = targets
     else:
         check_seeds = sorted(existing)
+    dataset_years = load_yield_years(
+        job.crop,
+        job.country,
+        data_dir=data_dir,
+        min_year=min_year,
+        max_year=max_year,
+    )
+    expected_years = expected_walk_forward_test_years(dataset_years)
+    if not expected_years:
+        return False, "no walk-forward test years for dataset window"
+    missing_years = walk_forward_missing_years(
+        run_dir,
+        expected_years=expected_years,
+        seeds=check_seeds,
+    )
+    if missing_years:
+        detail = ", ".join(
+            f"seed {seed} missing {years}" for seed, years in sorted(missing_years.items())
+        )
+        return False, f"incomplete walk-forward years in {run_dir.name}: {detail}"
     for seed in check_seeds:
         try:
             load_pooled_predictions(run_dir, model_slug=job.model, seed=seed)
@@ -382,6 +410,9 @@ def assess_job(
         repo_root=repo_root,
         base_seed=wf_base_seed,
         total_repetitions=wf_repetitions,
+        data_dir=data_dir,
+        min_year=min_year,
+        max_year=max_year,
     )
     if not scr_ok:
         wf_reason = "waiting for screening"

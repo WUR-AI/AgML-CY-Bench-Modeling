@@ -152,25 +152,40 @@ def test_filter_publish_targets_keeps_latest_version_when_requested(tmp_path: Pa
     assert len(all_versions) == 4
 
 
-def test_discover_baselines_batches_from_monolithic(tmp_path: Path):
+def test_discover_baselines_batches_from_monolithic(tmp_path: Path, monkeypatch):
     import pandas as pd
 
     from cybench.runs.analysis.publish_pipeline_lib import (
         PublishTarget,
         resolve_collect_baselines_dir,
     )
+    from cybench.util.validation import expected_walk_forward_test_years
+
+    data = tmp_path / "data"
+    years = list(range(2000, 2025))
+    yield_path = data / "maize" / "AO" / "yield_maize_AO.csv"
+    yield_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = ["crop_name,country_code,adm_id,harvest_year,yield"]
+    for year in years:
+        lines.append(f"maize,AO,R1,{year},10.0")
+    yield_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    import cybench.config as cfg
+
+    monkeypatch.setattr(cfg, "PATH_DATA_DIR", str(data))
 
     mono = tmp_path / "baselines"
-    run_dir = mono / "maize_AO_ridge_walk_forward_eos_20260101_120000" / "2016" / "42"
-    run_dir.mkdir(parents=True)
-    pd.DataFrame(
-        {
-            "adm_id": ["AO-1"],
-            "year": [2016],
-            "targets": [10.0],
-            "preds": [9.5],
-        }
-    ).to_csv(run_dir / "test_preds.csv", index=False)
+    expected_years = expected_walk_forward_test_years(set(years))
+    for year in expected_years:
+        run_dir = mono / "maize_AO_ridge_walk_forward_eos_20260101_120000" / str(year) / "42"
+        run_dir.mkdir(parents=True)
+        pd.DataFrame(
+            {
+                "adm_id": ["AO-1"],
+                "year": [year],
+                "targets": [10.0],
+                "preds": [9.5],
+            }
+        ).to_csv(run_dir / "test_preds.csv", index=False)
 
     targets = discover_baselines_batches(tmp_path)
     assert any(t.country_upper == "AO" and t.batch_horizon == "eos" for t in targets)

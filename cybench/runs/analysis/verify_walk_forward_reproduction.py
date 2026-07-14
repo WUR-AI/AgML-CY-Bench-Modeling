@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Verify local retraining reproduces cluster walk-forward predictions.
+"""Verify retraining reproduces cluster walk-forward predictions.
 
-Example (cluster, maize NL Transformer, eos v3)::
+Read-only: loads frozen screening artifacts and saved ``test_preds.csv`` from
+``--baselines-dir``; never writes into that tree.
+
+Example (cluster, maize NL Transformer, from scratch)::
 
     poetry run python cybench/runs/analysis/verify_walk_forward_reproduction.py \\
         --model transformer_lf \\
-        --baselines-dir /lustre/backup/SHARED/AIN/agml/output/baselines_NL_eos_v3 \\
-        --origins 2020
+        --baselines-dir /lustre/backup/SHARED/AIN/agml/output/baselines_NL_eos_v4 \\
+        --origins 2020 --from-scratch --within-run-repeats 2
 """
 
 from __future__ import annotations
@@ -46,6 +49,7 @@ log = logging.getLogger(__name__)
 
 REPRO_TOLERANCE_MAX_ABS_DIFF = 1e-2
 REPRO_TOLERANCE_MIN_CORR = 0.999
+WITHIN_RUN_TOLERANCE_MAX_ABS_DIFF = 1e-5
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -63,6 +67,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--screening-split-dir", type=Path)
     parser.add_argument("--walk-forward-run-dir", type=Path)
     parser.add_argument("--origins", required=True, help="Comma-separated test years")
+    parser.add_argument(
+        "--from-scratch",
+        action="store_true",
+        help="Retrain instead of loading saved .pt checkpoints",
+    )
+    parser.add_argument(
+        "--within-run-repeats",
+        type=int,
+        default=1,
+        help="Train this many times in-process and compare predictions (default: 1)",
+    )
+    parser.add_argument(
+        "--report",
+        type=Path,
+        help="Optional JSON report path (never written under baselines-dir)",
+    )
     parser.add_argument("--force-cpu", action="store_true")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -98,6 +118,11 @@ def main(argv: list[str] | None = None) -> int:
         )
     log.info("screening_split_dir=%s", screening_dir)
     log.info("walk_forward_run_dir=%s", walk_forward_dir)
+    log.info(
+        "mode=%s | within_run_repeats=%s",
+        "from_scratch" if args.from_scratch else "checkpoint",
+        args.within_run_repeats,
+    )
 
     spec = ShapRunSpec(
         crop=args.crop,
@@ -131,30 +156,61 @@ def main(argv: list[str] | None = None) -> int:
             test_years=origin_test_years,
             frozen_dir=screening_dir,
             walk_forward_run_dir=walk_forward_dir,
+            from_scratch=args.from_scratch,
+            within_run_repeats=args.within_run_repeats,
         )
         repro = record["reproduction"]
         max_diff = repro.get("max_abs_pred_diff")
         corr = repro.get("corr_saved_preds")
         origin = int(origin_test_years[0])
-        passed = (
+        cluster_passed = (
             max_diff is not None
             and corr is not None
             and float(max_diff) <= REPRO_TOLERANCE_MAX_ABS_DIFF
             and float(corr) >= REPRO_TOLERANCE_MIN_CORR
         )
+        within = record.get("within_run")
+        within_passed = True
+        if within is not None:
+            within_max = within.get("max_abs_pred_diff")
+            within_passed = (
+                within_max is not None
+                and float(within_max) <= WITHIN_RUN_TOLERANCE_MAX_ABS_DIFF
+            )
+        passed = cluster_passed and within_passed
         ok = ok and passed
         log.info(
-            "origin=%s | n_train=%s n_test=%s | corr=%s max_abs_diff=%s | %s",
+            "origin=%s | n_train=%s n_test=%s | cluster corr=%s max_abs_diff=%s | "
+            "within_run max_abs_diff=%s | %s",
             origin,
             record["n_train"],
             record["n_test"],
             corr,
             max_diff,
+            within.get("max_abs_pred_diff") if within else None,
             "PASS" if passed else "FAIL",
         )
         results.append(record)
 
-    print(json.dumps(results, indent=2))
+    payload = {
+        "crop": args.crop,
+        "country": args.country,
+        "model": args.model,
+        "horizon": args.horizon,
+        "seed": args.seed,
+        "from_scratch": args.from_scratch,
+        "within_run_repeats": args.within_run_repeats,
+        "screening_split_dir": str(screening_dir),
+        "walk_forward_run_dir": str(walk_forward_dir),
+        "passed": ok,
+        "origins": results,
+    }
+    if args.report is not None:
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        log.info("Wrote report to %s", args.report)
+
+    print(json.dumps(payload, indent=2))
     return 0 if ok else 1
 
 

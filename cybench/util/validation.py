@@ -15,6 +15,9 @@ log = logging.getLogger(__name__)
 _SCREENING_VALIDATION_PATH = (
     Path(__file__).resolve().parents[1] / "conf" / "validation" / "screening.yaml"
 )
+_WALK_FORWARD_VALIDATION_PATH = (
+    Path(__file__).resolve().parents[1] / "conf" / "validation" / "walk_forward.yaml"
+)
 
 
 def _as_python_years(years) -> list[int]:
@@ -157,6 +160,33 @@ def default_screening_validation_cfg() -> DictConfig:
             yaml.safe_load(_SCREENING_VALIDATION_PATH.read_text(encoding="utf-8"))
         ),
     )
+
+
+@lru_cache(maxsize=1)
+def default_walk_forward_validation_cfg() -> DictConfig:
+    """Load ``cybench/conf/validation/walk_forward.yaml`` (benchmark walk-forward split)."""
+    return cast(
+        DictConfig,
+        OmegaConf.create(
+            yaml.safe_load(_WALK_FORWARD_VALIDATION_PATH.read_text(encoding="utf-8"))
+        ),
+    )
+
+
+def expected_walk_forward_test_years(
+    dataset_years: set[Any],
+    *,
+    seed: int = 42,
+    cfg: DictConfig | None = None,
+) -> list[int]:
+    """Forecast-origin test years for walk-forward (one rolling split per year)."""
+    cfg = cfg or default_walk_forward_validation_cfg()
+    years: list[int] = []
+    for _train, test in get_splits(
+        cfg, which="test", dataset_years=dataset_years, seed=seed
+    ):
+        years.extend(int(y) for y in test)
+    return sorted(set(years))
 
 
 def get_splits(
