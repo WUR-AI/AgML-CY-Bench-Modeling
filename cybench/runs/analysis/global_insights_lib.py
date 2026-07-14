@@ -140,14 +140,27 @@ def dashboard_href_for_paper_dir(paper_dir_name: str) -> str | None:
     return f"{slug}/dashboard.html"
 
 
-def build_dashboard_hrefs(output_root: Path, *, version: int = 2) -> dict[str, dict[str, str]]:
+def build_dashboard_hrefs(
+    output_root: Path,
+    *,
+    version: int = 2,
+    data_dir: Path | None = None,
+) -> dict[str, dict[str, str]]:
     """Map CY-Bench country code -> horizon (``eos``/``mid``) -> dashboard HTML href."""
+    paths = discover_summary_tables(output_root, version=version)
+    df = load_summary_frame(paths, data_dir=data_dir)
+    included_countries: set[str] = set()
+    if not df.empty and "country" in df.columns:
+        included_countries = {str(cc) for cc in df["country"].unique()}
+
     hrefs: dict[str, dict[str, str]] = {}
-    for path in discover_summary_tables(output_root, version=version):
+    for path in paths:
         parsed = parse_paper_dir_name(path.parent.name)
         if parsed is None:
             continue
         country, hz, _ver = parsed
+        if included_countries and country not in included_countries:
+            continue
         rel = dashboard_href_for_paper_dir(path.parent.name)
         if rel:
             hrefs.setdefault(country, {})[hz] = rel

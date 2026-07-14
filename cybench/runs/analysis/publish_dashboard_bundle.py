@@ -325,8 +325,14 @@ def _subtitle_from_slug(slug: str) -> str:
     return f"{horizon} · walk-forward · v{ver}"
 
 
-def discover_index_entries(publish_root: Path) -> list[IndexEntry]:
+def discover_index_entries(
+    publish_root: Path,
+    *,
+    data_dir: Path | None = None,
+) -> list[IndexEntry]:
     """Discover published dashboards under publish_root."""
+    from cybench.util.benchmark_scope import is_benchmark_evaluation_country
+
     entries: list[IndexEntry] = []
     if (publish_root / "dashboard.html").is_file():
         entries.append(
@@ -346,6 +352,8 @@ def discover_index_entries(publish_root: Path) -> list[IndexEntry]:
             continue
         slug = child.name
         title, subtitle, cc = _label_from_slug(slug, child / "README.txt")
+        if cc and not is_benchmark_evaluation_country(cc, data_dir=data_dir):
+            continue
         entries.append(
             IndexEntry(
                 href=f"{slug}/dashboard.html",

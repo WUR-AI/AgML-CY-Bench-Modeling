@@ -60,8 +60,14 @@ def _horizon_key_from_slug(slug: str) -> str | None:
     return hz
 
 
-def group_walk_forward_entries(entries: list[IndexEntry]) -> list[dict[str, Any]]:
+def group_walk_forward_entries(
+    entries: list[IndexEntry],
+    *,
+    data_dir: Path | None = None,
+) -> list[dict[str, Any]]:
     """Group walk-forward index entries by ISO2 country code."""
+    from cybench.util.benchmark_scope import is_benchmark_evaluation_country
+
     walk_forward = [
         e
         for e in entries
@@ -89,16 +95,21 @@ def group_walk_forward_entries(entries: list[IndexEntry]) -> list[dict[str, Any]
             },
         )
         row[hz] = entry.href
-    return sorted(by_cc.values(), key=lambda r: r["name"])
+    return [
+        row
+        for row in sorted(by_cc.values(), key=lambda r: r["name"])
+        if is_benchmark_evaluation_country(row["cc"], data_dir=data_dir)
+    ]
 
 
 def build_index_map_payload(
     entries: list[IndexEntry],
     *,
     publish_root: Path | None = None,
+    data_dir: Path | None = None,
 ) -> dict[str, Any]:
     screening = [e for e in entries if e.kind == "screening"]
-    countries = group_walk_forward_entries(entries)
+    countries = group_walk_forward_entries(entries, data_dir=data_dir)
     return {
         "countries": countries,
         "n_countries": len(countries),

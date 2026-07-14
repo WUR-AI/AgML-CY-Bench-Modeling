@@ -137,6 +137,47 @@ def test_export_world_geojson_excludes_alaska_from_us(tmp_path: Path):
     assert any(row.geometry.centroid.y > 55 for _, row in overseas.iterrows())
 
 
+def test_group_walk_forward_entries_excludes_short_series_countries(
+    tmp_path: Path, monkeypatch
+):
+    data = tmp_path / "data"
+    for cc, years in [
+        ("DE", range(2000, 2025)),
+        ("MX", range(2014, 2023, 3)),  # 2014, 2017, 2019, 2022
+    ]:
+        lines = ["crop_name,country_code,adm_id,harvest_year,yield"]
+        for year in years:
+            lines.append(f"maize,{cc},R1,{year},10.0")
+        (data / "maize" / cc).mkdir(parents=True)
+        (data / "maize" / cc / f"yield_maize_{cc}.csv").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8"
+        )
+    import cybench.config as cfg
+
+    monkeypatch.setattr(cfg, "PATH_DATA_DIR", str(data))
+
+    entries = [
+        IndexEntry(
+            href="de_walk_forward_eos_v1/dashboard.html",
+            slug="de_walk_forward_eos_v1",
+            title="Germany",
+            subtitle="eos",
+            country_code="DE",
+            kind="walk_forward",
+        ),
+        IndexEntry(
+            href="mx_walk_forward_eos_v1/dashboard.html",
+            slug="mx_walk_forward_eos_v1",
+            title="Mexico",
+            subtitle="eos",
+            country_code="MX",
+            kind="walk_forward",
+        ),
+    ]
+    grouped = group_walk_forward_entries(entries, data_dir=data)
+    assert [r["cc"] for r in grouped] == ["DE"]
+
+
 def test_build_index_map_payload(tmp_path: Path):
     (tmp_path / "insights.html").write_text("<html></html>", encoding="utf-8")
     (tmp_path / "model_families.html").write_text("<html></html>", encoding="utf-8")
