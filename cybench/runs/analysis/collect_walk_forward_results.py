@@ -51,6 +51,12 @@ from cybench.runs.analysis.benchmark_run_catalog import (
     discover_benchmark_runs,
     flatten_report_metrics,
 )
+from cybench.runs.analysis.shap_dashboard_lib import (
+    ShapDashboardPayload,
+    build_shap_dashboard_payload,
+    resolve_shap_input_dir,
+    write_shap_sidecar,
+)
 from cybench.runs.viz.build_results_dashboard import (
     build_html,
     bundle_referenced_assets,
@@ -474,11 +480,24 @@ def write_model_comparison_dashboard(
     summary_rows: list[dict[str, Any]],
     *,
     bundle_assets: bool = True,
+    shap_dir: Path | None = None,
+    output_root: Path | None = None,
 ) -> Path:
     records = summary_rows_to_dashboard_records(summary_rows, output_dir)
     if not records:
         raise ValueError("No summary rows available for dashboard.")
     map_payload = build_region_map_payload(output_dir, summary_rows)
+    resolved_shap_dir = resolve_shap_input_dir(
+        shap_dir=shap_dir,
+        output_root=output_root,
+        summary_rows=summary_rows,
+    )
+    shap_payload: ShapDashboardPayload = (
+        build_shap_dashboard_payload(resolved_shap_dir, summary_rows)
+        if resolved_shap_dir is not None
+        else ShapDashboardPayload(available=False, shap_dir=None, by_key={})
+    )
+    write_shap_sidecar(output_dir, shap_payload)
     html_dir = str(output_dir)
     if bundle_assets:
         records = bundle_referenced_assets(
@@ -493,7 +512,21 @@ def write_model_comparison_dashboard(
             if map_payload.get("geojson_by_country"):
                 write_region_map_sidecar(output_dir, map_payload)
     html_path = output_dir / "compare_models.html"
-    html_path.write_text(build_html(records, map_payload=map_payload), encoding="utf-8")
+    html_path.write_text(
+        build_html(
+            records,
+            map_payload=map_payload,
+            shap_payload=cast(dict[str, Any], shap_payload),
+        ),
+        encoding="utf-8",
+    )
+    if shap_payload.get("available"):
+        print(
+            f"[DONE] SHAP dashboard data: {len(shap_payload.get('by_key', {}))} model(s)"
+            + (f" from {resolved_shap_dir}" if resolved_shap_dir else "")
+        )
+    elif resolved_shap_dir is not None:
+        print(f"[WARN] No shap_summary.yaml files found under {resolved_shap_dir}")
     return html_path
 
 
@@ -660,10 +693,29 @@ def main() -> None:
         action="store_true",
         help="Do not drop rows flagged in yield_quality sidecars",
     )
+    parser.add_argument(
+        "--shap-dir",
+        type=Path,
+        help=(
+            "SHAP importance output root (e.g. output/shap_importance/maize_NL_eos). "
+            "When omitted, auto-detects under --output-root/shap_importance/{crop}_{CC}_{horizon}."
+        ),
+    )
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        help="AgML output root for SHAP auto-discovery (default: parent of --output-dir)",
+    )
     args = parser.parse_args()
 
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    output_root = (
+        args.output_root.resolve()
+        if args.output_root is not None
+        else output_dir.parent
+    )
+    shap_dir = args.shap_dir.resolve() if args.shap_dir is not None else None
 
     if args.dashboard_only:
         summary_path = output_dir / "walk_forward_summary.csv"
@@ -672,7 +724,12 @@ def main() -> None:
                 f"--dashboard-only requires {summary_path}. Run collect first."
             )
         summary_rows = pd.read_csv(summary_path).to_dict(orient="records")
-        html_path = write_model_comparison_dashboard(output_dir, summary_rows)
+        html_path = write_model_comparison_dashboard(
+            output_dir,
+            summary_rows,
+            shap_dir=shap_dir,
+            output_root=output_root,
+        )
         print(f"[DONE] Multi-model dashboard: {html_path}")
         return
 
@@ -783,7 +840,12 @@ def main() -> None:
             )
 
     if args.dashboard:
-        html_path = write_model_comparison_dashboard(output_dir, summary_rows)
+        html_path = write_model_comparison_dashboard(
+            output_dir,
+            summary_rows,
+            shap_dir=shap_dir,
+            output_root=output_root,
+        )
         print(f"[DONE] Multi-model dashboard: {html_path}")
 
 

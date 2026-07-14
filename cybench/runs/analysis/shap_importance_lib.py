@@ -1,17 +1,23 @@
 """Load or retrain walk-forward models and compute SHAP-based feature importance."""
 
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
+
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Sequence, cast
+from typing import NotRequired, TypedDict, cast, override
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from hydra.utils import get_class, instantiate
 from omegaconf import DictConfig, OmegaConf, open_dict
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
 
 from cybench.config import KEY_TARGET
 from cybench.datasets.data_factory import DataFactory
@@ -28,7 +34,6 @@ from cybench.util.config_utils import (
     set_seed,
 )
 from cybench.util.feature_selection import apply_mrmr_at_origin
-from cybench.util.store_and_cache import _dataset_indices
 from cybench.util.prediction_horizon import prediction_horizon_tag
 from cybench.util.screening_artifacts import load_frozen_screening_artifacts
 from cybench.util.validation import (
@@ -49,8 +54,88 @@ DEFAULT_MAIZE_FAMILY_MODELS: tuple[str, ...] = (
     "tabpfn",
 )
 
+class ModelManifestEntry(TypedDict):
+    framework: str
+    feature_design: bool
+    needs_gpu: bool
+
+
+class FeatureRank(TypedDict):
+    name: str
+    mean_abs_shap: float
+    rank: int
+
+
+class ReproductionStats(TypedDict):
+    corr_saved_preds: float | None
+    max_abs_pred_diff: float | None
+
+
+class WithinRunStats(TypedDict):
+    repeats: float
+    max_abs_pred_diff: float
+    mean_abs_pred_diff: float
+
+
+class PandasShapPayload(TypedDict):
+    explainer: str
+    features: list[FeatureRank]
+    native_importance: NotRequired[list[FeatureRank]]
+    model: NotRequired[str]
+
+
+class TorchShapPayload(TypedDict):
+    explainer: str
+    features: list[FeatureRank]
+    temporal_aggregation: str
+
+
+class ShapOriginRecord(TypedDict):
+    crop: str
+    country: str
+    model: str
+    horizon: str
+    seed: int
+    train_years: list[int]
+    test_years: list[int]
+    n_train: int
+    n_test: int
+    reproduction: ReproductionStats
+    explainer: str
+    features: list[FeatureRank]
+    temporal_aggregation: NotRequired[str]
+    native_importance: NotRequired[list[FeatureRank]]
+
+
+class ReproduceOriginRecord(TypedDict):
+    crop: str
+    country: str
+    model: str
+    horizon: str
+    seed: int
+    from_scratch: bool
+    train_years: list[int]
+    test_years: list[int]
+    n_train: int
+    n_test: int
+    reproduction: ReproductionStats
+    within_run: WithinRunStats | None
+
+
+class ShapCaseSummary(TypedDict):
+    crop: str
+    country: str
+    model: str
+    horizon: str
+    seed: int
+    frozen_screening_dir: str
+    walk_forward_run_dir: str | None
+    n_origins: int
+    origins: list[ShapOriginRecord]
+
+
 # Mirrors cybench/runs/slurm/models.txt columns: framework, feature_design, needs_gpu.
-MODEL_MANIFEST: dict[str, dict[str, Any]] = {
+MODEL_MANIFEST: dict[str, ModelManifestEntry] = {
     "random_forest": {
         "framework": "pandas",
         "feature_design": True,
@@ -89,8 +174,19 @@ class ShapRunSpec:
 def model_run_name(model_slug: str) -> str:
     cfg_path = CONF_DIR / "model" / f"{model_slug}.yaml"
     if cfg_path.exists():
-        return str(OmegaConf.select(OmegaConf.load(cfg_path), "name", default=model_slug))
+        return cast(
+            str,
+            OmegaConf.select(OmegaConf.load(cfg_path), "name", default=model_slug),
+        )
     return model_slug
+
+
+def _dataset_row_indices(dataset: BaseDataset) -> pd.DataFrame:
+    if isinstance(dataset, (PandasDataset, TorchDataset)):
+        return dataset.indices.copy()
+    raise TypeError(
+        f"verify_predictions requires PandasDataset or TorchDataset, got {type(dataset).__name__}"
+    )
 
 
 def _horizon_tag(horizon: str) -> str:
@@ -182,15 +278,17 @@ def build_dataset(
         "config",
         overrides=[f"model={spec.model}", *overrides],
     )
+    dataset_cfg = cast(DictConfig, cfg.dataset)
     partition_cfg = default_screening_validation_cfg()
-    years = DataFactory.peek_dataset_years(cfg.dataset)
+    years = DataFactory.peek_dataset_years(dataset_cfg)
     normalizer_fit_years = get_screening_pre_test_years(
         years, seed=spec.seed, cfg=partition_cfg
     )
-    dataset = DataFactory(cfg.dataset).build(normalizer_fit_years=normalizer_fit_years)
+    dataset = DataFactory(dataset_cfg).build(normalizer_fit_years=normalizer_fit_years)
     if framework == "torch" and OmegaConf.select(cfg, "process"):
         assert isinstance(dataset, TorchDataset)
-        dataset.process(cfg.process)
+        process_cfg = cast(DictConfig, cfg.process)
+        dataset.process(process_cfg)
     return dataset
 
 
@@ -225,7 +323,8 @@ def _prepare_model_cfg(
 
 
 def _is_torch_model(model_cfg: DictConfig) -> bool:
-    return OmegaConf.select(model_cfg, "framework") == "torch"
+    framework = cast(str | None, OmegaConf.select(model_cfg, "framework"))
+    return framework == "torch"
 
 
 def find_saved_model_artifact(
@@ -274,8 +373,11 @@ def load_saved_walk_forward_model(
             scheduler=shell.scheduler,
         )
 
-    loader = get_class(cfg._target_)
-    return loader.load(str(artifact_path.parent), name=str(cfg.name))
+    loader = get_class(cast(str, cfg._target_))
+    return cast(
+        BaseModel,
+        loader.load(str(artifact_path.parent), name=cast(str, cfg.name)),
+    )
 
 
 def resolve_model_at_origin(
@@ -315,7 +417,7 @@ def resolve_model_at_origin(
             walk_forward_run_dir,
             test_year=int(test_years[0]),
             seed=int(seed),
-            model_name=str(model_cfg.name),
+            model_name=cast(str, OmegaConf.select(model_cfg, "name")),
         )
     if artifact is not None:
         log.info("Loading saved walk-forward model from %s", artifact)
@@ -325,13 +427,13 @@ def resolve_model_at_origin(
         )
         return model, train_dataset, test_dataset
 
-    model_seed = int(OmegaConf.select(model_cfg, "seed") or 42)
+    model_seed = int(cast(int, OmegaConf.select(model_cfg, "seed") or 42))
     set_seed(model_seed)
-    model = instantiate(model_cfg)
+    model = cast(BaseModel, instantiate(model_cfg))
     if walk_forward_nn:
-        model.fit(train_dataset, early_stopping_monitor="train")
+        _ = model.fit(train_dataset, early_stopping_monitor="train")
     else:
-        model.fit(train_dataset)
+        _ = model.fit(train_dataset)
     return model, train_dataset, test_dataset
 
 
@@ -369,20 +471,21 @@ def verify_predictions(
     walk_forward_run_dir: Path,
     test_year: int,
     seed: int,
-    new_preds: npt.NDArray[Any],
+    new_preds: npt.NDArray[np.float64],
     test_dataset: BaseDataset | None = None,
-) -> dict[str, float | None]:
+) -> ReproductionStats:
     pred_path = walk_forward_run_dir / str(test_year) / str(seed) / "test_preds.csv"
     if not pred_path.exists():
-        return {"corr_saved_preds": None, "max_abs_pred_diff": None}
+        return ReproductionStats(corr_saved_preds=None, max_abs_pred_diff=None)
     saved_df = pd.read_csv(pred_path)
-    new_preds = np.asarray(new_preds, dtype=float)
+    new_preds = np.asarray(new_preds, dtype=np.float64)
     if len(saved_df) != len(new_preds):
-        return {"corr_saved_preds": None, "max_abs_pred_diff": None}
+        return ReproductionStats(corr_saved_preds=None, max_abs_pred_diff=None)
 
+    saved: npt.NDArray[np.float64]
     # Align on adm_id/year: TorchDataset row order is not stable across builds.
     if test_dataset is not None:
-        indices_df = _dataset_indices(test_dataset).reset_index(drop=True)
+        indices_df = _dataset_row_indices(test_dataset).reset_index(drop=True)
         new_df = pd.concat(
             [indices_df, pd.DataFrame({"preds": new_preds})],
             axis=1,
@@ -391,20 +494,36 @@ def verify_predictions(
         if key_cols:
             merged = saved_df.merge(new_df, on=key_cols, suffixes=("_saved", "_new"))
             if len(merged) == len(saved_df):
-                saved = merged["preds_saved"].to_numpy(dtype=float)
-                new_preds = merged["preds_new"].to_numpy(dtype=float)
+                saved = cast(
+                    npt.NDArray[np.float64],
+                    merged["preds_saved"].to_numpy(dtype=np.float64),
+                )
+                new_preds = cast(
+                    npt.NDArray[np.float64],
+                    merged["preds_new"].to_numpy(dtype=np.float64),
+                )
             else:
-                saved = saved_df["preds"].to_numpy(dtype=float)
+                saved = cast(
+                    npt.NDArray[np.float64],
+                    saved_df["preds"].to_numpy(dtype=np.float64),
+                )
         else:
-            saved = saved_df["preds"].to_numpy(dtype=float)
+            saved = cast(
+                npt.NDArray[np.float64],
+                saved_df["preds"].to_numpy(dtype=np.float64),
+            )
     else:
-        saved = saved_df["preds"].to_numpy(dtype=float)
+        saved = cast(
+            npt.NDArray[np.float64],
+            saved_df["preds"].to_numpy(dtype=np.float64),
+        )
 
-    corr = float(np.corrcoef(saved, new_preds)[0, 1]) if len(saved) > 1 else 1.0
-    return {
-        "corr_saved_preds": corr,
-        "max_abs_pred_diff": float(np.max(np.abs(saved - new_preds))),
-    }
+    corr_matrix = np.corrcoef(saved, new_preds)
+    corr = float(cast(float, corr_matrix[0, 1])) if len(saved) > 1 else 1.0
+    return ReproductionStats(
+        corr_saved_preds=corr,
+        max_abs_pred_diff=float(cast(float, np.max(np.abs(saved - new_preds)))),
+    )
 
 
 def _subsample_indices(n: int, k: int, rng: np.random.Generator) -> npt.NDArray[np.int_]:
@@ -418,27 +537,29 @@ def _subsample_indices(n: int, k: int, rng: np.random.Generator) -> npt.NDArray[
 
 def _rank_features(
     names: Sequence[str],
-    mean_abs: npt.NDArray[Any],
-) -> list[dict[str, Any]]:
-    order = np.argsort(-mean_abs)
-    rows: list[dict[str, Any]] = []
-    for rank, idx in enumerate(order, start=1):
-        val = float(mean_abs[idx])
+    mean_abs: npt.NDArray[np.float64],
+) -> list[FeatureRank]:
+    order = cast(list[int], np.argsort(-mean_abs).tolist())
+    rows: list[FeatureRank] = []
+    for rank, index in enumerate(order, start=1):
+        val = float(np.asarray(mean_abs[index], dtype=np.float64))
         if not np.isfinite(val) or val <= 0:
             continue
         rows.append(
-            {
-                "name": str(names[idx]),
-                "mean_abs_shap": round(val, 8),
-                "rank": rank,
-            }
+            FeatureRank(
+                name=str(names[index]),
+                mean_abs_shap=round(val, 8),
+                rank=rank,
+            )
         )
     return rows
 
 
-def _native_rf_importance(model: RandomForest, feature_names: list[str]) -> list[dict[str, Any]]:
+def _native_rf_importance(
+    model: RandomForest, feature_names: list[str]
+) -> list[FeatureRank]:
     pipe = model.model
-    estimator = pipe.named_steps["estimator"]
+    estimator = cast(RandomForestRegressor, pipe.named_steps["estimator"])
     importances = np.asarray(estimator.feature_importances_, dtype=float)
     return _rank_features(feature_names, importances)
 
@@ -452,9 +573,9 @@ def compute_shap_pandas(
     max_background: int,
     max_eval_samples: int,
     seed: int,
-) -> dict[str, Any]:
-    import shap
-    from shap.maskers import Independent
+) -> PandasShapPayload:
+    import shap  # pyright: ignore[reportMissingImports]
+    from shap.maskers import Independent  # pyright: ignore[reportMissingImports]
 
     X_train, _ = train_dataset.xy
     X_test, _ = test_dataset.xy
@@ -467,24 +588,25 @@ def compute_shap_pandas(
 
     if isinstance(model, RandomForest):
         pipe = model.model
-        imputer = pipe.named_steps["imputer"]
-        scaler = pipe.named_steps["scaler"]
-        estimator = pipe.named_steps["estimator"]
-        X_bg_t = scaler.transform(imputer.transform(X_bg))
+        imputer = cast(SimpleImputer, pipe.named_steps["imputer"])
+        scaler = cast(StandardScaler, pipe.named_steps["scaler"])
+        estimator = cast(RandomForestRegressor, pipe.named_steps["estimator"])
         X_eval_t = scaler.transform(imputer.transform(X_eval))
         explainer = shap.TreeExplainer(estimator)
         shap_values = explainer.shap_values(X_eval_t)
         if isinstance(shap_values, list):
             shap_values = shap_values[0]
-        mean_abs = np.mean(np.abs(np.asarray(shap_values, dtype=float)), axis=0)
-        out: dict[str, Any] = {
-            "explainer": "TreeExplainer",
-            "features": _rank_features(feature_names, mean_abs),
-            "native_importance": _native_rf_importance(model, feature_names),
-        }
-        return out
+        mean_abs = cast(
+            npt.NDArray[np.float64],
+            np.mean(np.abs(np.asarray(shap_values, dtype=float)), axis=0),
+        )
+        return PandasShapPayload(
+            explainer="TreeExplainer",
+            features=_rank_features(feature_names, mean_abs),
+            native_importance=_native_rf_importance(model, feature_names),
+        )
 
-    def predict_matrix(x_matrix: npt.NDArray[Any]) -> npt.NDArray[Any]:
+    def predict_matrix(x_matrix: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         frame = pd.DataFrame(x_matrix, columns=pd.Index(feature_names))
         y_dummy = pd.DataFrame({KEY_TARGET: np.zeros(len(frame), dtype=np.float32)})
         ds = PandasDataset(
@@ -504,12 +626,15 @@ def compute_shap_pandas(
     values = np.asarray(explanation.values, dtype=float)
     if values.ndim == 1:
         values = values.reshape(-1, 1)
-    mean_abs = np.mean(np.abs(values), axis=0)
-    return {
-        "explainer": "PermutationExplainer",
-        "features": _rank_features(feature_names, mean_abs),
-        "model": model_slug,
-    }
+    mean_abs = cast(
+        npt.NDArray[np.float64],
+        np.mean(np.abs(values), axis=0),
+    )
+    return PandasShapPayload(
+        explainer="PermutationExplainer",
+        features=_rank_features(feature_names, mean_abs),
+        model=model_slug,
+    )
 
 
 def compute_shap_torch(
@@ -520,8 +645,8 @@ def compute_shap_torch(
     max_background: int,
     max_eval_samples: int,
     seed: int,
-) -> dict[str, Any]:
-    import shap
+) -> TorchShapPayload:
+    import shap  # pyright: ignore[reportMissingImports]
     import torch
     import torch.nn as nn
     from cybench.models.torch.trainer import TorchTrainer
@@ -548,17 +673,20 @@ def compute_shap_torch(
     _, eval_ctx, eval_ts, eval_doy = stack_batch(test_dataset, eval_idx)
 
     class _TorchPredictor(nn.Module):
-        def __init__(self, core: nn.Module):
+        core: nn.Module
+
+        def __init__(self, core: nn.Module) -> None:
             super().__init__()
             self.core = core
 
+        @override
         def forward(
             self,
             x_ctx: torch.Tensor,
             x_ts: torch.Tensor,
             doy: torch.Tensor,
         ) -> torch.Tensor:
-            pred = self.core(x_ctx, x_ts, doy)
+            pred = cast(torch.Tensor, self.core(x_ctx, x_ts, doy))
             if pred.ndim > 1:
                 pred = pred.squeeze(-1)
             return pred.unsqueeze(-1)
@@ -572,12 +700,21 @@ def compute_shap_torch(
 
     ctx_names = list(train_dataset.x_context_columns)
     ts_names = list(train_dataset.x_ts_columns)
-    ctx_mean = np.mean(np.abs(np.asarray(shap_values[0], dtype=float)), axis=0)
+    ctx_mean = cast(
+        npt.NDArray[np.float64],
+        np.mean(np.abs(np.asarray(shap_values[0], dtype=float)), axis=0),
+    )
     ts_raw = np.asarray(shap_values[1], dtype=float)
     if ts_raw.ndim == 3:
-        ts_mean = np.mean(np.abs(ts_raw), axis=(0, 1))
+        ts_mean = cast(
+            npt.NDArray[np.float64],
+            np.mean(np.abs(ts_raw), axis=(0, 1)),
+        )
     else:
-        ts_mean = np.mean(np.abs(ts_raw), axis=0)
+        ts_mean = cast(
+            npt.NDArray[np.float64],
+            np.mean(np.abs(ts_raw), axis=0),
+        )
 
     feature_rows = _rank_features(
         [f"ctx:{name}" for name in ctx_names],
@@ -592,11 +729,11 @@ def compute_shap_torch(
     feature_rows.sort(key=lambda row: row["rank"])
     for i, row in enumerate(feature_rows, start=1):
         row["rank"] = i
-    return {
-        "explainer": "GradientExplainer",
-        "features": feature_rows,
-        "temporal_aggregation": "mean_abs_over_time",
-    }
+    return TorchShapPayload(
+        explainer="GradientExplainer",
+        features=feature_rows,
+        temporal_aggregation="mean_abs_over_time",
+    )
 
 
 def _fit_and_predict_at_origin(
@@ -607,10 +744,10 @@ def _fit_and_predict_at_origin(
     frozen_dir: Path,
     walk_forward_run_dir: Path | None,
     from_scratch: bool,
-) -> tuple[npt.NDArray[Any], BaseDataset, int, int]:
+) -> tuple[npt.NDArray[np.float64], BaseDataset, int, int]:
     meta = MODEL_MANIFEST[spec.model]
-    framework = str(meta["framework"])
-    feature_design = bool(meta["feature_design"])
+    framework = meta["framework"]
+    feature_design = meta["feature_design"]
     set_seed(spec.seed)
 
     dataset = build_dataset(
@@ -639,7 +776,7 @@ def _fit_and_predict_at_origin(
     )
     preds, _ = model.predict(test_dataset)
     return (
-        np.asarray(preds, dtype=float),
+        np.asarray(preds, dtype=np.float64),
         test_dataset,
         len(train_dataset),
         len(test_dataset),
@@ -655,7 +792,7 @@ def reproduce_walk_forward_origin(
     walk_forward_run_dir: Path | None,
     from_scratch: bool = False,
     within_run_repeats: int = 1,
-) -> dict[str, Any]:
+) -> ReproduceOriginRecord:
     """Refit one walk-forward origin and compare predictions to saved test_preds.csv."""
     if within_run_repeats < 1:
         raise ValueError("within_run_repeats must be >= 1")
@@ -668,7 +805,7 @@ def reproduce_walk_forward_origin(
         walk_forward_run_dir=walk_forward_run_dir,
         from_scratch=from_scratch,
     )
-    within_run: dict[str, float | None] | None = None
+    within_run: WithinRunStats | None = None
     if within_run_repeats > 1:
         repeat_preds = [preds]
         for _ in range(within_run_repeats - 1):
@@ -683,15 +820,18 @@ def reproduce_walk_forward_origin(
                 )[0]
             )
         stacked = np.stack(repeat_preds, axis=0)
-        ref = stacked[0]
-        diffs = np.max(np.abs(stacked[1:] - ref), axis=1)
-        within_run = {
-            "repeats": float(within_run_repeats),
-            "max_abs_pred_diff": float(np.max(diffs)),
-            "mean_abs_pred_diff": float(np.mean(diffs)),
-        }
+        ref = cast(npt.NDArray[np.float64], stacked[0])
+        diffs = cast(
+            npt.NDArray[np.float64],
+            np.max(np.abs(stacked[1:] - ref), axis=1),
+        )
+        within_run = WithinRunStats(
+            repeats=float(within_run_repeats),
+            max_abs_pred_diff=float(np.max(diffs)),
+            mean_abs_pred_diff=float(np.mean(diffs)),
+        )
 
-    reproduction = (
+    reproduction: ReproductionStats = (
         verify_predictions(
             walk_forward_run_dir=walk_forward_run_dir,
             test_year=int(test_years[0]),
@@ -700,22 +840,22 @@ def reproduce_walk_forward_origin(
             test_dataset=test_dataset,
         )
         if walk_forward_run_dir is not None
-        else {"corr_saved_preds": None, "max_abs_pred_diff": None}
+        else ReproductionStats(corr_saved_preds=None, max_abs_pred_diff=None)
     )
-    return {
-        "crop": spec.crop,
-        "country": spec.country,
-        "model": spec.model,
-        "horizon": spec.horizon,
-        "seed": spec.seed,
-        "from_scratch": from_scratch,
-        "train_years": train_years,
-        "test_years": test_years,
-        "n_train": n_train,
-        "n_test": n_test,
-        "reproduction": reproduction,
-        "within_run": within_run,
-    }
+    return ReproduceOriginRecord(
+        crop=spec.crop,
+        country=spec.country,
+        model=spec.model,
+        horizon=spec.horizon,
+        seed=spec.seed,
+        from_scratch=from_scratch,
+        train_years=train_years,
+        test_years=test_years,
+        n_train=n_train,
+        n_test=n_test,
+        reproduction=reproduction,
+        within_run=within_run,
+    )
 
 
 def run_origin_shap(
@@ -725,10 +865,10 @@ def run_origin_shap(
     test_years: list[int],
     frozen_dir: Path,
     walk_forward_run_dir: Path | None,
-) -> dict[str, Any]:
+) -> ShapOriginRecord:
     meta = MODEL_MANIFEST[spec.model]
-    framework = str(meta["framework"])
-    feature_design = bool(meta["feature_design"])
+    framework = meta["framework"]
+    feature_design = meta["feature_design"]
     set_seed(spec.seed)
 
     dataset = build_dataset(
@@ -754,18 +894,19 @@ def run_origin_shap(
         test_years=test_years,
     )
     preds, _ = model.predict(test_dataset)
-    reproduction = (
+    reproduction: ReproductionStats = (
         verify_predictions(
             walk_forward_run_dir=walk_forward_run_dir,
             test_year=int(test_years[0]),
             seed=spec.seed,
-            new_preds=preds,
+            new_preds=np.asarray(preds, dtype=np.float64),
             test_dataset=test_dataset,
         )
         if walk_forward_run_dir is not None
-        else {"corr_saved_preds": None, "max_abs_pred_diff": None}
+        else ReproductionStats(corr_saved_preds=None, max_abs_pred_diff=None)
     )
 
+    shap_payload: PandasShapPayload | TorchShapPayload
     if isinstance(train_dataset, PandasDataset) and isinstance(test_dataset, PandasDataset):
         shap_payload = compute_shap_pandas(
             model,
@@ -788,7 +929,7 @@ def run_origin_shap(
     else:
         raise TypeError("Train/test dataset types do not match after feature selection.")
 
-    return {
+    record: ShapOriginRecord = {
         "crop": spec.crop,
         "country": spec.country,
         "model": spec.model,
@@ -799,12 +940,18 @@ def run_origin_shap(
         "n_train": len(train_dataset),
         "n_test": len(test_dataset),
         "reproduction": reproduction,
-        **shap_payload,
+        "explainer": shap_payload["explainer"],
+        "features": shap_payload["features"],
     }
+    if "native_importance" in shap_payload:
+        record["native_importance"] = shap_payload["native_importance"]
+    if "temporal_aggregation" in shap_payload:
+        record["temporal_aggregation"] = shap_payload["temporal_aggregation"]
+    return record
 
 
 def iter_walk_forward_origins(
-    dataset_years: set[Any],
+    dataset_years: set[int],
     *,
     seed: int,
     only_years: Sequence[int] | None = None,
@@ -813,14 +960,14 @@ def iter_walk_forward_origins(
     for train_years, test_years in get_splits(
         cfg=cfg, which="test", dataset_years=dataset_years, seed=seed
     ):
-        if only_years is not None and int(test_years[0]) not in only_years:
+        if only_years is not None and cast(int, test_years[0]) not in only_years:
             continue
         yield list(train_years), list(test_years)
 
 
-def aggregate_feature_importance(records: Sequence[dict[str, Any]]) -> pd.DataFrame:
+def aggregate_feature_importance(records: Sequence[ShapOriginRecord]) -> pd.DataFrame:
     """Median mean_abs_shap per feature across walk-forward origins."""
-    rows: list[dict[str, Any]] = []
+    rows: list[dict[str, object]] = []
     for record in records:
         origin = int(record["test_years"][0])
         for feat in record.get("features", []):
@@ -878,7 +1025,7 @@ def resolve_shap_paths(spec: ShapRunSpec) -> tuple[Path, Path | None, Path]:
     return frozen_dir, walk_forward_run_dir, baselines_dir
 
 
-def run_shap_case(spec: ShapRunSpec, *, output_dir: Path) -> dict[str, Any]:
+def run_shap_case(spec: ShapRunSpec, *, output_dir: Path) -> ShapCaseSummary:
     if spec.model not in MODEL_MANIFEST:
         raise ValueError(
             f"Unsupported model {spec.model!r}. Supported: {sorted(MODEL_MANIFEST)}"
@@ -887,10 +1034,10 @@ def run_shap_case(spec: ShapRunSpec, *, output_dir: Path) -> dict[str, Any]:
     meta = MODEL_MANIFEST[spec.model]
     dataset = build_dataset(
         spec,
-        framework=str(meta["framework"]),
-        feature_design=bool(meta["feature_design"]),
+        framework=meta["framework"],
+        feature_design=meta["feature_design"],
     )
-    records: list[dict[str, Any]] = []
+    records: list[ShapOriginRecord] = []
     for train_years, test_years in iter_walk_forward_origins(
         dataset.years,
         seed=spec.seed,
@@ -915,20 +1062,26 @@ def run_shap_case(spec: ShapRunSpec, *, output_dir: Path) -> dict[str, Any]:
         records.append(record)
         origin_dir = output_dir / f"origin_{test_years[0]}"
         origin_dir.mkdir(parents=True, exist_ok=True)
-        OmegaConf.save(OmegaConf.create(record), origin_dir / "shap_importance.yaml")
+        OmegaConf.save(
+            OmegaConf.create(dict(record)),
+            origin_dir / "shap_importance.yaml",
+        )
 
-    summary = {
-        "crop": spec.crop,
-        "country": spec.country,
-        "model": spec.model,
-        "horizon": spec.horizon,
-        "seed": spec.seed,
-        "frozen_screening_dir": str(frozen_dir),
-        "walk_forward_run_dir": str(walk_forward_run_dir) if walk_forward_run_dir else None,
-        "n_origins": len(records),
-        "origins": records,
-    }
-    OmegaConf.save(OmegaConf.create(summary), output_dir / "shap_summary.yaml")
+    summary = ShapCaseSummary(
+        crop=spec.crop,
+        country=spec.country,
+        model=spec.model,
+        horizon=spec.horizon,
+        seed=spec.seed,
+        frozen_screening_dir=str(frozen_dir),
+        walk_forward_run_dir=str(walk_forward_run_dir) if walk_forward_run_dir else None,
+        n_origins=len(records),
+        origins=records,
+    )
+    OmegaConf.save(
+        OmegaConf.create(dict(summary)),
+        output_dir / "shap_summary.yaml",
+    )
     agg = aggregate_feature_importance(records)
     if not agg.empty:
         agg.to_csv(output_dir / "shap_aggregate.csv", index=False)

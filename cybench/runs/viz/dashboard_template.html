@@ -212,6 +212,13 @@
       border: 1px solid var(--border);
       background: linear-gradient(to right, #440154, #31688e, #35b779, #fde725);
     }
+    #shap-panel { margin-top: 0.5rem; }
+    #shap-meta-chart { min-height: 220px; margin-bottom: 1rem; }
+    #shap-meta-chart .bar-label { font-size: 0.82rem; fill: var(--text); }
+    #shap-meta-chart .bar-value { font-size: 0.75rem; fill: var(--muted); }
+    #shap-features-table { font-size: 0.84rem; }
+    #shap-features-table th, #shap-features-table td { text-align: left; }
+    #shap-features-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
     .map-year-controls {
       display: flex;
       flex-wrap: wrap;
@@ -277,8 +284,19 @@
         <button data-panel="maps" class="active">Maps</button>
         <button data-panel="scatter">Scatter</button>
         <button data-panel="temporal">Temporal</button>
+        <button data-panel="shap" id="shap-panel-btn" style="display:none;">SHAP</button>
       </div>
       <div id="missing-note" class="muted"></div>
+      <div id="shap-panel" style="display:none;">
+        <div class="muted" id="shap-caption"></div>
+        <div id="shap-meta-chart"></div>
+        <table id="shap-features-table">
+          <thead>
+            <tr><th>Rank</th><th>Feature</th><th>Median |SHAP|</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
       <div id="map-year-controls" class="map-year-controls" style="display:none;">
         <label for="map-year-slider">
           Map year
@@ -314,6 +332,7 @@
   <script>
     const DATA = __DATA_JSON__;
     const MAP_DATA = __MAP_DATA_JSON__;
+    const SHAP_DATA = __SHAP_DATA_JSON__;
     const coverageInfo = document.getElementById("coverage-info");
     const heatmapWrap = document.getElementById("heatmap-wrap");
     const datasetFilter = document.getElementById("dataset-filter");
@@ -339,6 +358,17 @@
     const mapCaptionLeftDyn = document.getElementById("map-caption-left-dyn");
     const mapCaptionRightDyn = document.getElementById("map-caption-right-dyn");
     const panelButtons = Array.from(document.querySelectorAll(".toolbar button"));
+    const shapPanelBtn = document.getElementById("shap-panel-btn");
+    const shapPanel = document.getElementById("shap-panel");
+    const shapCaption = document.getElementById("shap-caption");
+    const shapMetaChart = document.getElementById("shap-meta-chart");
+    const shapFeaturesBody = document.querySelector("#shap-features-table tbody");
+
+    const HAS_SHAP = Boolean(
+      SHAP_DATA && SHAP_DATA.available && SHAP_DATA.by_key
+        && Object.keys(SHAP_DATA.by_key).length
+    );
+    if (HAS_SHAP && shapPanelBtn) shapPanelBtn.style.display = "";
 
     const MAP_YEAR_MEAN = "__mean__";
     let mapYearKeys = [MAP_YEAR_MEAN];
@@ -628,6 +658,83 @@
       mapGridDynamic.style.display = useDynamic ? "" : "none";
       imgGrid.style.display = useDynamic ? "none" : "";
       mapYearControls.style.display = useDynamic && mapYearKeys.length > 1 ? "" : "none";
+    }
+
+    function showShapMode(show) {
+      shapPanel.style.display = show ? "" : "none";
+      imgGrid.style.display = show ? "none" : "";
+      mapGridDynamic.style.display = "none";
+      mapYearControls.style.display = "none";
+    }
+
+    function renderShapPanel(dataset, model) {
+      const key = `${dataset}|||${model}`;
+      const entry = (SHAP_DATA.by_key || {})[key];
+      shapMetaChart.innerHTML = "";
+      shapFeaturesBody.innerHTML = "";
+      if (!entry) {
+        shapCaption.textContent =
+          "No SHAP importance for this model. Run compute_shap_importance.py for this country.";
+        return;
+      }
+      shapCaption.textContent =
+        `${entry.model_label || entry.model} · ${entry.explainer} · `
+        + `${entry.n_origins} walk-forward origin(s) · meta-group shares (median % of |SHAP|)`;
+
+      const groups = (entry.meta_groups || []).slice(0, 12);
+      if (groups.length) {
+        const width = Math.min(720, shapPanel.clientWidth || 720);
+        const height = Math.max(180, groups.length * 28 + 24);
+        const margin = { top: 8, right: 48, bottom: 8, left: 120 };
+        const svg = d3.select(shapMetaChart)
+          .append("svg")
+          .attr("width", width)
+          .attr("height", height);
+        const x = d3.scaleLinear()
+          .domain([0, d3.max(groups, d => d.share_pct) || 1])
+          .range([0, width - margin.left - margin.right]);
+        const y = d3.scaleBand()
+          .domain(groups.map(d => d.name))
+          .range([0, height - margin.top - margin.bottom])
+          .padding(0.18);
+        const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+        g.selectAll("rect")
+          .data(groups)
+          .join("rect")
+          .attr("x", 0)
+          .attr("y", d => y(d.name))
+          .attr("width", d => x(d.share_pct))
+          .attr("height", y.bandwidth())
+          .attr("fill", "#0969da")
+          .attr("rx", 3);
+        g.selectAll(".bar-label")
+          .data(groups)
+          .join("text")
+          .attr("class", "bar-label")
+          .attr("x", -8)
+          .attr("y", d => y(d.name) + y.bandwidth() / 2)
+          .attr("dy", "0.35em")
+          .attr("text-anchor", "end")
+          .text(d => d.name);
+        g.selectAll(".bar-value")
+          .data(groups)
+          .join("text")
+          .attr("class", "bar-value")
+          .attr("x", d => x(d.share_pct) + 6)
+          .attr("y", d => y(d.name) + y.bandwidth() / 2)
+          .attr("dy", "0.35em")
+          .text(d => `${d.share_pct.toFixed(1)}%`);
+      }
+
+      const features = entry.top_features || [];
+      for (const feat of features) {
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+          `<td class="num">${feat.rank}</td>`
+          + `<td>${feat.name}</td>`
+          + `<td class="num">${Number(feat.mean_abs_shap).toFixed(4)}</td>`;
+        shapFeaturesBody.appendChild(tr);
+      }
     }
 
     const METRIC_COLUMNS = [
@@ -1021,6 +1128,7 @@
       missingNote.textContent = "";
 
       if (activePanel === "maps") {
+        showShapMode(false);
         if (!HAS_DYNAMIC_MAPS || !(MAP_DATA.datasets || {})[selectedCell.dataset]) {
           showMapMode(false);
           missingNote.textContent =
@@ -1045,6 +1153,13 @@
         return;
       }
 
+      if (activePanel === "shap") {
+        showShapMode(true);
+        renderShapPanel(selectedCell.dataset, selectedCell.model);
+        return;
+      }
+
+      showShapMode(false);
       showMapMode(false);
       imgGrid.classList.remove("two");
       drillColB.style.display = "none";

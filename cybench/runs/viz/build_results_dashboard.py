@@ -8,7 +8,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -399,13 +399,20 @@ def load_records(sources: List[SourceConfig], output_dir: str) -> List[Dict]:
     return records
 
 
-def build_html(records: List[Dict], map_payload: dict | None = None) -> str:
+def build_html(
+    records: List[Dict],
+    map_payload: dict | None = None,
+    shap_payload: dict[str, Any] | None = None,
+) -> str:
     data_json = json.dumps(records)
     map_json = json.dumps(map_payload or {})
+    shap_json = json.dumps(shap_payload or {})
     template_path = Path(__file__).with_name("dashboard_template.html")
     template = template_path.read_text(encoding="utf-8")
     return (
-        template.replace("__DATA_JSON__", data_json).replace("__MAP_DATA_JSON__", map_json)
+        template.replace("__DATA_JSON__", data_json)
+        .replace("__MAP_DATA_JSON__", map_json)
+        .replace("__SHAP_DATA_JSON__", shap_json)
     )
 
 

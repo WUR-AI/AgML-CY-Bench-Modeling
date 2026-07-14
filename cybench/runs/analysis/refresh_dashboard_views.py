@@ -56,14 +56,25 @@ def publish_slug(paper_dir: Path) -> str:
     return f"{country.lower()}_walk_forward_{hz}_v{ver}"
 
 
-def refresh_one(paper_dir: Path, publish_root: Path, *, dry_run: bool = False) -> None:
+def refresh_one(
+    paper_dir: Path,
+    publish_root: Path,
+    *,
+    output_root: Path | None = None,
+    dry_run: bool = False,
+) -> None:
     summary_path = paper_dir / "walk_forward_summary.csv"
     rows = pd.read_csv(summary_path).to_dict(orient="records")
     slug = publish_slug(paper_dir)
     if dry_run:
         print(f"[DRY-RUN] refresh {paper_dir.name} -> {publish_root / slug}")
         return
-    write_model_comparison_dashboard(paper_dir, rows, bundle_assets=True)
+    write_model_comparison_dashboard(
+        paper_dir,
+        rows,
+        bundle_assets=True,
+        output_root=output_root or paper_dir.parent,
+    )
     publish_bundle(
         source_dir=paper_dir,
         dest_dir=publish_root / slug,
@@ -94,7 +105,7 @@ def main() -> int:
         return 1
 
     for paper_dir in dirs:
-        refresh_one(paper_dir, publish_root, dry_run=args.dry_run)
+        refresh_one(paper_dir, publish_root, output_root=output_root, dry_run=args.dry_run)
 
     if not args.dry_run:
         from cybench.runs.analysis.build_global_insights_dashboard import write_insights_dashboard

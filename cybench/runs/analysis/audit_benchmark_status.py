@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cybench.runs.analysis.benchmark_run_catalog import discover_benchmark_runs
-from cybench.runs.analysis.collect_walk_forward_results import load_pooled_predictions
+from cybench.runs.slurm.benchmark_completion_lib import JobRow, walk_forward_complete
 from cybench.runs.analysis.publish_pipeline_lib import (
     PipelineDefaults,
     PublishTarget,
@@ -61,6 +61,7 @@ def _count_runs(
     *,
     country: str,
     horizon_tag: str,
+    repo_root: Path,
 ) -> tuple[int, int, int]:
     if not baselines_dir.is_dir():
         return 0, 0, 0
@@ -82,11 +83,23 @@ def _count_runs(
                     screening += 1
             else:
                 walk_forward += 1
-                try:
-                    load_pooled_predictions(run.path, model_slug=run.model)
+                job = JobRow(
+                    run.crop,
+                    run.country,
+                    run.model,
+                    "pandas",
+                    "yes",
+                    "yes",
+                    "no",
+                )
+                ok, _ = walk_forward_complete(
+                    baselines_dir,
+                    job,
+                    horizon_tag_value=horizon_tag,
+                    repo_root=repo_root,
+                )
+                if ok:
                     wf_complete += 1
-                except ValueError:
-                    pass
     return screening, walk_forward, wf_complete
 
 
@@ -107,8 +120,12 @@ def audit_country(
     mono_dir = output_root / _MONOLITHIC
 
     hz_tag = "eos" if batch_hz == "eos" else "mid_season"
-    mono_scr, mono_wf, mono_ok = _count_runs(mono_dir, country=cc, horizon_tag=hz_tag)
-    pc_scr, pc_wf, pc_ok = _count_runs(per_country_dir, country=cc, horizon_tag=hz_tag)
+    mono_scr, mono_wf, mono_ok = _count_runs(
+        mono_dir, country=cc, horizon_tag=hz_tag, repo_root=repo_root
+    )
+    pc_scr, pc_wf, pc_ok = _count_runs(
+        per_country_dir, country=cc, horizon_tag=hz_tag, repo_root=repo_root
+    )
 
     target = PublishTarget(
         country=cc,
