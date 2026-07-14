@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import csv
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
 from omegaconf import OmegaConf
 
 import cybench.config as config
@@ -209,6 +211,59 @@ def model_run_name(model_slug: str, *, repo_root: Path) -> str:
     return str(name)
 
 
+_SPLIT_FOLDER_RE = re.compile(r"^\d+(?:_\d+)*$")
+
+
+def screening_test_years_from_run(screening_run_dir: Path) -> list[int] | None:
+    """Return held-out test years recorded during screening (runtime dataset years)."""
+    for yaml_path in screening_run_dir.rglob("screening_partitions.yaml"):
+        doc = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+        if isinstance(doc, dict) and doc.get("test_years"):
+            return sorted(int(y) for y in doc["test_years"])
+    optimal = next(screening_run_dir.rglob("optimal_model.yaml"), None)
+    if optimal is not None and _SPLIT_FOLDER_RE.fullmatch(optimal.parent.name):
+        return [int(y) for y in optimal.parent.name.split("_")]
+    return None
+
+
+def resolve_expected_walk_forward_test_years(
+    job: JobRow,
+    *,
+    baselines_dir: Path,
+    horizon_tag_value: str,
+    repo_root: Path,
+    data_dir: Path | None = None,
+    min_year: int = DEFAULT_MIN_YEAR,
+    max_year: int = DEFAULT_MAX_YEAR,
+) -> list[int]:
+    """Forecast-origin years for completeness checks.
+
+    Prefer screening artifacts (built from ``dataset.years`` at training time)
+    over raw yield CSV years, which can include harvest years without predictors.
+    """
+    screening_dir = _latest_run(
+        baselines_dir,
+        crop=job.crop,
+        country=job.country,
+        model_slug=job.model,
+        phase="screening",
+        horizon_tag_value=horizon_tag_value,
+        repo_root=repo_root,
+    )
+    if screening_dir is not None:
+        screening_test_years = screening_test_years_from_run(screening_dir)
+        if screening_test_years:
+            return screening_test_years
+    dataset_years = load_yield_years(
+        job.crop,
+        job.country,
+        data_dir=data_dir,
+        min_year=min_year,
+        max_year=max_year,
+    )
+    return expected_walk_forward_test_years(dataset_years)
+
+
 def load_yield_years(
     crop: str,
     country: str,
@@ -339,14 +394,15 @@ def walk_forward_complete(
         check_seeds = targets
     else:
         check_seeds = sorted(existing)
-    dataset_years = load_yield_years(
-        job.crop,
-        job.country,
+    expected_years = resolve_expected_walk_forward_test_years(
+        job,
+        baselines_dir=baselines_dir,
+        horizon_tag_value=horizon_tag_value,
+        repo_root=repo_root,
         data_dir=data_dir,
         min_year=min_year,
         max_year=max_year,
     )
-    expected_years = expected_walk_forward_test_years(dataset_years)
     if not expected_years:
         return False, "no walk-forward test years for dataset window"
     missing_years = walk_forward_missing_years(

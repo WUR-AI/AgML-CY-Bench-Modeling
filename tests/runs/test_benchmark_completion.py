@@ -361,6 +361,71 @@ def test_walk_forward_complete_requires_all_repetitions(tmp_path: Path, monkeypa
     assert "[44, 45, 46]" in reason
 
 
+def test_walk_forward_complete_uses_screening_test_years_not_raw_yield(
+    tmp_path: Path, monkeypatch
+):
+    """Yield CSV may list 2024 while runtime dataset (screening) ends at 2023."""
+    from cybench.runs.slurm.benchmark_completion_lib import (
+        JobRow,
+        walk_forward_complete,
+    )
+    from cybench.util.validation import expected_walk_forward_test_years
+
+    data = tmp_path / "data"
+    years = list(range(2000, 2025))  # includes 2024
+    _write_yield(data / "wheat" / "AU" / "yield_wheat_AU.csv", "wheat", "AU", years)
+    import cybench.config as cfg
+
+    monkeypatch.setattr(cfg, "PATH_DATA_DIR", str(data))
+
+    repo = tmp_path / "repo"
+    baselines = tmp_path / "output" / "baselines_AU_eos_v4"
+    scr_run = baselines / "wheat_AU_ridge_screening_eos_20260101_120000"
+    scr_split = scr_run / "2019_2020_2021_2022_2023"
+    scr_split.mkdir(parents=True)
+    (scr_split / "optimal_model.yaml").write_text("x: 1\n", encoding="utf-8")
+    (scr_split / "screening_partitions.yaml").write_text(
+        "train_years: [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, "
+        "2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018]\n"
+        "val_years: [2017, 2018]\n"
+        "test_years: [2019, 2020, 2021, 2022, 2023]\n"
+        "final_fit_years: [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, "
+        "2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018]\n",
+        encoding="utf-8",
+    )
+
+    run_dir = baselines / "wheat_AU_ridge_walk_forward_eos_20260714_223055"
+    pred = "adm_id,year,targets,preds\nAU-01,2019,10,9\n"
+    runtime_test_years = [2019, 2020, 2021, 2022, 2023]
+    for seed in (42, 43, 44, 45, 46):
+        for year in runtime_test_years:
+            d = run_dir / str(year) / str(seed)
+            d.mkdir(parents=True)
+            (d / "test_preds.csv").write_text(pred, encoding="utf-8")
+
+    job = JobRow("wheat", "AU", "ridge", "pandas", "yes", "yes", "no")
+    ok, reason = walk_forward_complete(
+        baselines,
+        job,
+        horizon_tag_value="eos",
+        repo_root=repo,
+        total_repetitions=5,
+        data_dir=data,
+    )
+    assert ok is True, reason
+    assert expected_walk_forward_test_years(set(years)) == list(range(2020, 2025))
+
+
+def test_screening_test_years_from_run_folder_name_fallback(tmp_path: Path):
+    from cybench.runs.slurm.benchmark_completion_lib import screening_test_years_from_run
+
+    run_dir = tmp_path / "wheat_AU_ridge_screening_eos_20260101_120000"
+    split = run_dir / "2019_2020_2021_2022_2023"
+    split.mkdir(parents=True)
+    (split / "optimal_model.yaml").write_text("x: 1\n", encoding="utf-8")
+    assert screening_test_years_from_run(run_dir) == [2019, 2020, 2021, 2022, 2023]
+
+
 def test_walk_forward_complete_requires_all_test_years(tmp_path: Path, monkeypatch):
     from cybench.runs.slurm.benchmark_completion_lib import (
         JobRow,
