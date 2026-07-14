@@ -165,9 +165,7 @@ def _complete_walk_forward_runs(
         ):
             if cc and run.country.upper() != cc:
                 continue
-            if not is_benchmark_evaluation_crop_country(
-                run.crop, run.country, data_dir=repo_root / "cybench" / "data"
-            ):
+            if not is_benchmark_evaluation_crop_country(run.crop, run.country):
                 continue
             key = (run.crop, run.country, run.model)
             if key in seen:

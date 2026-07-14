@@ -48,6 +48,9 @@ def benchmark_crop_country_key(crop: str, country: str) -> tuple[str, str]:
 @lru_cache(maxsize=256)
 def _full_screening_ok_cached(crop: str, country: str, data_dir: str) -> bool:
     years = _load_yield_years(crop, country, data_dir=Path(data_dir))
+    if not years:
+        # Summary-only fixtures / CI without cybench/data: do not drop rows.
+        return True
     ok, _ = check_full_benchmark_screening_years(years)
     return ok
 
@@ -59,8 +62,13 @@ def is_benchmark_evaluation_crop_country(
     data_dir: Path | str | None = None,
     years: set[int] | None = None,
 ) -> bool:
-    """Return True when crop×country has the full benchmark screening test window."""
+    """Return True when crop×country has the full benchmark screening test window.
+
+    When yield tables are missing on disk, returns True (cannot verify exclusion).
+    """
     if years is not None:
+        if not years:
+            return False
         ok, _ = check_full_benchmark_screening_years(years)
         return ok
     root = str(Path(data_dir or config.PATH_DATA_DIR).resolve())
@@ -95,5 +103,7 @@ def benchmark_evaluation_exclusion_reason(
         years = _load_yield_years(
             crop, country, data_dir=Path(data_dir or config.PATH_DATA_DIR)
         )
+    if not years:
+        return None
     ok, reason = check_full_benchmark_screening_years(years)
     return None if ok else reason

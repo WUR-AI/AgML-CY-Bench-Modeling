@@ -8,6 +8,10 @@ from cybench.util.benchmark_scope import (
 )
 
 
+def test_is_benchmark_evaluation_crop_country_keeps_rows_when_yield_missing():
+    assert is_benchmark_evaluation_crop_country("maize", "XX", data_dir="/nonexistent/path")
+
+
 def test_is_benchmark_evaluation_crop_country_uses_year_rule():
     full_years = set(range(2000, 2025))
     short_years = set(range(2019, 2025))  # only 3 screening test years
