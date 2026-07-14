@@ -17,6 +17,7 @@ from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
+from matplotlib.transforms import Bbox
 
 from cybench.config import KEY_LOC, KEY_TARGET
 from cybench.evaluation.aggregated_metrics import (
@@ -389,6 +390,8 @@ DEFAULT_PANEL_DPI = 160
 # Switch to hexbin when overplotting would obscure structure.
 SCATTER_HEX_THRESHOLD = 500
 SCATTER_HEX_GRIDSIZE = 50
+# Padding around per-panel PNG exports (inches). Union bbox avoids clipping labels.
+PANEL_EXPORT_PAD_INCHES = 0.2
 
 
 def parse_panels(raw: str) -> tuple[str, ...]:
@@ -401,13 +404,30 @@ def parse_panels(raw: str) -> tuple[str, ...]:
     return panels
 
 
+def _panel_export_bbox(fig: Figure, axis: Axes, renderer) -> Bbox:
+    """Bounding box for exporting one subplot as a standalone PNG.
+
+    ``get_tightbbox`` alone can clip axis labels when ``set_box_aspect`` is used,
+    and may bleed into neighbouring panels in a multi-panel figure. Union with the
+    axes window extent and pad on all sides.
+    """
+    window = axis.get_window_extent(renderer).transformed(fig.dpi_scale_trans.inverted())
+    tight = axis.get_tightbbox(renderer)
+    if tight is not None:
+        tight = tight.transformed(fig.dpi_scale_trans.inverted())
+        bbox = Bbox.union([window, tight])
+    else:
+        bbox = window
+    return bbox.padded(PANEL_EXPORT_PAD_INCHES)
+
+
 def save_panel_images(
     fig: Figure,
     panel_axes: dict[str, Axes],
     output_dir: str,
     dataset_key: str,
 ) -> Dict[str, str]:
-    """Save each subplot panel as a separate PNG and return relative paths."""
+    """Save each subplot panel as a separate PNG and return absolute paths."""
     os.makedirs(output_dir, exist_ok=True)
     renderer = FigureCanvasAgg(fig).get_renderer()
 
@@ -415,13 +435,10 @@ def save_panel_images(
 
     for panel_name, ax in panel_axes.items():
         axis = cast(Axes, ax)
-        tight_bbox = axis.get_tightbbox(renderer)
-        if tight_bbox is None:
-            tight_bbox = axis.bbox
-        bbox = tight_bbox.transformed(fig.dpi_scale_trans.inverted())
+        bbox = _panel_export_bbox(fig, axis, renderer)
         fn = f"{dataset_key}_{panel_name}.png"
         fp = os.path.join(output_dir, fn)
-        fig.savefig(fp, dpi=DEFAULT_PANEL_DPI, bbox_inches=bbox)
+        fig.savefig(fp, dpi=DEFAULT_PANEL_DPI, bbox_inches=bbox, pad_inches=0)
         out_paths[panel_name] = fp
 
     return out_paths
@@ -994,7 +1011,22 @@ def main():
                 ) as f:
                     json.dump(stats, f, indent=2)
 
-            panel_paths_abs = save_panel_images(fig, panel_axes, panel_dir, key)
+            # Export each panel from its own figure so crops do not bleed into neighbours.
+            panel_paths_abs: Dict[str, str] = {}
+            for panel_name in panels:
+                pfig, _, paxes = process_dataset(
+                    key,
+                    df,
+                    args.model,
+                    panels=(panel_name,),
+                    results_dir=args.results_dir,
+                )
+                try:
+                    panel_paths_abs.update(
+                        save_panel_images(pfig, paxes, panel_dir, key)
+                    )
+                finally:
+                    plt.close(pfig)
             stats["panel_paths"] = {
                 k: os.path.relpath(v, args.results_dir).replace(os.sep, "/")
                 for k, v in panel_paths_abs.items()

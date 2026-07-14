@@ -519,7 +519,7 @@ class TorchTrainer(BaseModel):
     ) -> "TorchTrainer":
         """Load a saved checkpoint into a new Trainer instance."""
         device = kwargs.get("device", "cuda" if torch.cuda.is_available() else "cpu")
-        ckpt = torch.load(model_path, map_location=device)
+        ckpt = torch.load(model_path, map_location=device, weights_only=False)
 
         model.load_state_dict(ckpt["model_state_dict"])
         optimizer.load_state_dict(ckpt["optimizer_state_dict"])
