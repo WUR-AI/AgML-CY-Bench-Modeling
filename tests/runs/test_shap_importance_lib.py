@@ -4,17 +4,40 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 from omegaconf import OmegaConf
 
 from cybench.runs.analysis.shap_importance_lib import (
+    _mean_abs_feature_importance,
+    _rank_features,
     aggregate_feature_importance,
     find_saved_model_artifact,
     find_screening_split_dir,
     find_walk_forward_run_dir,
     model_run_name,
 )
+
+
+def test_mean_abs_feature_importance_squeezes_output_dim():
+    # GradientExplainer often returns (n_eval, n_feat, 1) for a scalar head.
+    shap_ctx = np.random.rand(80, 7, 1)
+    out = _mean_abs_feature_importance(shap_ctx, n_features=7)
+    assert out.shape == (7,)
+
+
+def test_mean_abs_feature_importance_temporal():
+    shap_ts = np.random.rand(80, 24, 10)
+    out = _mean_abs_feature_importance(shap_ts, n_features=10)
+    assert out.shape == (10,)
+
+
+def test_rank_features_from_2d_mean_vector():
+    names = ["a", "b", "c"]
+    mean_abs = np.array([[0.1, 0.5, 0.2]])
+    rows = _rank_features(names, mean_abs)
+    assert rows[0]["name"] == "b"
 
 
 def test_model_run_name_random_forest():

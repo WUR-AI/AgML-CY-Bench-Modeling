@@ -8,7 +8,7 @@ import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NotRequired, TypedDict, cast, override
+from typing import NotRequired, TypedDict, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -535,19 +535,51 @@ def _subsample_indices(n: int, k: int, rng: np.random.Generator) -> npt.NDArray[
     return np.sort(rng.choice(n, size=k, replace=False))
 
 
+def _mean_abs_feature_importance(
+    values: npt.NDArray[np.float64] | np.ndarray,
+    *,
+    n_features: int,
+) -> npt.NDArray[np.float64]:
+    """Collapse sample/time axes and return one mean |SHAP| per feature."""
+    arr = np.abs(np.asarray(values, dtype=np.float64))
+    arr = np.squeeze(arr)
+    if arr.ndim == 0:
+        raise ValueError("SHAP values must not be scalar.")
+    if arr.ndim == 1:
+        if arr.shape[0] != n_features:
+            raise ValueError(
+                f"SHAP vector length {arr.shape[0]} does not match {n_features} features."
+            )
+        return arr.astype(np.float64, copy=False)
+    if arr.shape[-1] != n_features:
+        raise ValueError(
+            f"SHAP trailing dimension {arr.shape[-1]} does not match {n_features} features "
+            f"(full shape {arr.shape})."
+        )
+    lead_axes = tuple(range(arr.ndim - 1))
+    return np.mean(arr, axis=lead_axes)
+
+
 def _rank_features(
     names: Sequence[str],
     mean_abs: npt.NDArray[np.float64],
 ) -> list[FeatureRank]:
-    order = cast(list[int], np.argsort(-mean_abs).tolist())
+    values = np.asarray(mean_abs, dtype=np.float64).reshape(-1)
+    if values.shape[0] != len(names):
+        raise ValueError(
+            f"SHAP importance length {values.shape[0]} does not match "
+            f"{len(names)} feature names."
+        )
+    order = np.argsort(-values)
     rows: list[FeatureRank] = []
     for rank, index in enumerate(order, start=1):
-        val = float(np.asarray(mean_abs[index], dtype=np.float64))
+        idx = int(index)
+        val = float(values[idx])
         if not np.isfinite(val) or val <= 0:
             continue
         rows.append(
             FeatureRank(
-                name=str(names[index]),
+                name=str(names[idx]),
                 mean_abs_shap=round(val, 8),
                 rank=rank,
             )
@@ -596,9 +628,9 @@ def compute_shap_pandas(
         shap_values = explainer.shap_values(X_eval_t)
         if isinstance(shap_values, list):
             shap_values = shap_values[0]
-        mean_abs = cast(
-            npt.NDArray[np.float64],
-            np.mean(np.abs(np.asarray(shap_values, dtype=float)), axis=0),
+        mean_abs = _mean_abs_feature_importance(
+            np.asarray(shap_values, dtype=float),
+            n_features=len(feature_names),
         )
         return PandasShapPayload(
             explainer="TreeExplainer",
@@ -626,10 +658,7 @@ def compute_shap_pandas(
     values = np.asarray(explanation.values, dtype=float)
     if values.ndim == 1:
         values = values.reshape(-1, 1)
-    mean_abs = cast(
-        npt.NDArray[np.float64],
-        np.mean(np.abs(values), axis=0),
-    )
+    mean_abs = _mean_abs_feature_importance(values, n_features=values.shape[-1])
     return PandasShapPayload(
         explainer="PermutationExplainer",
         features=_rank_features(feature_names, mean_abs),
@@ -679,7 +708,6 @@ def compute_shap_torch(
             super().__init__()
             self.core = core
 
-        @override
         def forward(
             self,
             x_ctx: torch.Tensor,
@@ -700,21 +728,14 @@ def compute_shap_torch(
 
     ctx_names = list(train_dataset.x_context_columns)
     ts_names = list(train_dataset.x_ts_columns)
-    ctx_mean = cast(
-        npt.NDArray[np.float64],
-        np.mean(np.abs(np.asarray(shap_values[0], dtype=float)), axis=0),
+    ctx_mean = _mean_abs_feature_importance(
+        np.asarray(shap_values[0], dtype=float),
+        n_features=len(ctx_names),
     )
-    ts_raw = np.asarray(shap_values[1], dtype=float)
-    if ts_raw.ndim == 3:
-        ts_mean = cast(
-            npt.NDArray[np.float64],
-            np.mean(np.abs(ts_raw), axis=(0, 1)),
-        )
-    else:
-        ts_mean = cast(
-            npt.NDArray[np.float64],
-            np.mean(np.abs(ts_raw), axis=0),
-        )
+    ts_mean = _mean_abs_feature_importance(
+        np.asarray(shap_values[1], dtype=float),
+        n_features=len(ts_names),
+    )
 
     feature_rows = _rank_features(
         [f"ctx:{name}" for name in ctx_names],
