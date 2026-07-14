@@ -34,6 +34,7 @@ from cybench.runs.analysis.shap_importance_lib import (
     MODEL_MANIFEST,
     ShapRunSpec,
     aggregate_feature_importance,
+    configure_shap_job_logging,
     run_shap_case,
 )
 
@@ -94,6 +95,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-background", type=int, default=50)
     parser.add_argument("--max-eval-samples", type=int, default=80)
     parser.add_argument(
+        "--shapiq-budget",
+        type=int,
+        default=64,
+        help="Shapley budget per sample for TabPFN (shapiq TabPFNExplainer)",
+    )
+    parser.add_argument(
+        "--permutation-repeats",
+        type=int,
+        default=5,
+        help="sklearn permutation_importance repeats for TabICL/TabDPT",
+    )
+    parser.add_argument(
         "--force-cpu",
         action="store_true",
         help="Override frozen CUDA configs (useful on login nodes)",
@@ -101,10 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
+    configure_shap_job_logging(verbose=args.verbose)
 
     models = _parse_models(args.models)
     test_years = _parse_origins(args.origins, last_only=args.last_origin_only)
@@ -156,6 +166,8 @@ def main(argv: list[str] | None = None) -> int:
             test_years=test_years,
             max_background=args.max_background,
             max_eval_samples=args.max_eval_samples,
+            shapiq_budget=args.shapiq_budget,
+            permutation_repeats=args.permutation_repeats,
             force_cpu=args.force_cpu,
         )
         model_out = args.output_dir / f"{args.crop}_{args.country}" / model

@@ -10,13 +10,16 @@ import pytest
 from omegaconf import OmegaConf
 
 from cybench.runs.analysis.shap_importance_lib import (
+    _aggregate_shapiq_first_order,
     _mean_abs_feature_importance,
     _rank_features,
     aggregate_feature_importance,
     find_saved_model_artifact,
     find_screening_split_dir,
     find_walk_forward_run_dir,
+    interpretability_for_model,
     model_run_name,
+    resolve_shap_sample_limits,
 )
 
 
@@ -38,6 +41,47 @@ def test_rank_features_from_2d_mean_vector():
     mean_abs = np.array([[0.1, 0.5, 0.2]])
     rows = _rank_features(names, mean_abs)
     assert rows[0]["name"] == "b"
+
+
+def test_aggregate_shapiq_first_order():
+    class _FakeExplanation:
+        def __init__(self, values: list[float]) -> None:
+            self._values = values
+
+        def get_n_order_values(self, order: int) -> list[float]:
+            assert order == 1
+            return self._values
+
+    explanations = [
+        _FakeExplanation([0.4, 0.1, 0.2]),
+        _FakeExplanation([0.6, 0.0, 0.1]),
+    ]
+    out = _aggregate_shapiq_first_order(explanations, n_features=3)
+    assert out.tolist() == pytest.approx([0.5, 0.05, 0.15])
+
+
+def test_interpretability_for_model_families():
+    assert interpretability_for_model("random_forest")["method"] == "tree_shap"
+    assert interpretability_for_model("random_forest")["explainer_label"] == "TreeSHAP"
+    assert interpretability_for_model("tabpfn")["method"] == "tabpfn_shapley"
+    assert interpretability_for_model("tabpfn")["explainer_label"] == "TabPFNShapley"
+    assert interpretability_for_model("transformer_lf")["method"] == "gradient_shap"
+    assert interpretability_for_model("tabicl")["method"] == "sklearn_permutation"
+    unknown = interpretability_for_model("xgboost")
+    assert unknown["method"] == "permutation_shap"
+
+
+def test_resolve_shap_sample_limits_tabpfn():
+    bg, ev = resolve_shap_sample_limits(
+        "tabpfn", max_background=50, max_eval_samples=80
+    )
+    assert bg == 25
+    assert ev == 20
+    bg_rf, ev_rf = resolve_shap_sample_limits(
+        "random_forest", max_background=50, max_eval_samples=80
+    )
+    assert bg_rf == 50
+    assert ev_rf == 80
 
 
 def test_model_run_name_random_forest():

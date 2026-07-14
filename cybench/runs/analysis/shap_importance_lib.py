@@ -8,7 +8,7 @@ import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NotRequired, TypedDict, cast
+from typing import Any, NotRequired, TypedDict, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -25,6 +25,7 @@ from cybench.datasets.dataset import BaseDataset, PandasDataset
 from cybench.datasets.torch_dataset import TorchDataset
 from cybench.models.model import BaseModel
 from cybench.models.sklearn_models import RandomForest
+from cybench.models.tabular_foundation_model import TabPFNModel, TabularFoundationModel
 from cybench.util.config_utils import (
     adjust_model_cfg_to_dataset,
     apply_force_cpu_to_frozen_model_cfg,
@@ -44,6 +45,30 @@ from cybench.util.validation import (
 
 log = logging.getLogger(__name__)
 
+_NOISY_LOGGERS = (
+    "numba",
+    "numba.core",
+    "shap",
+    "shapiq",
+    "matplotlib",
+    "PIL",
+    "filelock",
+)
+
+
+def configure_shap_job_logging(*, verbose: bool = False) -> None:
+    """Keep Slurm stderr readable: cybench INFO, third-party WARNING+ only."""
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(message)s",
+        force=True,
+    )
+    logging.getLogger("cybench").setLevel(level)
+    for name in _NOISY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CONF_DIR = REPO_ROOT / "cybench" / "conf"
 
@@ -58,6 +83,38 @@ class ModelManifestEntry(TypedDict):
     framework: str
     feature_design: bool
     needs_gpu: bool
+
+
+class InterpretabilitySpec(TypedDict):
+    method: str
+    explainer_label: str
+
+
+# Best interpretability method per model family (dashboard shows explainer_label).
+INTERPRETABILITY_BY_MODEL: dict[str, InterpretabilitySpec] = {
+    "random_forest": {
+        "method": "tree_shap",
+        "explainer_label": "TreeSHAP",
+    },
+    "tabpfn": {
+        "method": "tabpfn_shapley",
+        "explainer_label": "TabPFNShapley",
+    },
+    "tabicl": {
+        "method": "sklearn_permutation",
+        "explainer_label": "PermutationImportance",
+    },
+    "tabdpt": {
+        "method": "sklearn_permutation",
+        "explainer_label": "PermutationImportance",
+    },
+    "transformer_lf": {
+        "method": "gradient_shap",
+        "explainer_label": "GradientSHAP",
+    },
+}
+
+ICL_TABULAR_MODELS = frozenset({"tabpfn", "tabicl", "tabdpt"})
 
 
 class FeatureRank(TypedDict):
@@ -167,6 +224,8 @@ class ShapRunSpec:
     test_years: tuple[int, ...] | None = None
     max_background: int = 50
     max_eval_samples: int = 80
+    shapiq_budget: int = 64
+    permutation_repeats: int = 5
     force_cpu: bool = False
     use_cache: bool = False
 
@@ -526,6 +585,131 @@ def verify_predictions(
     )
 
 
+def interpretability_for_model(model_slug: str) -> InterpretabilitySpec:
+    """Return the configured interpretability method for a model slug."""
+    if model_slug in INTERPRETABILITY_BY_MODEL:
+        return INTERPRETABILITY_BY_MODEL[model_slug]
+    return InterpretabilitySpec(
+        method="permutation_shap",
+        explainer_label="PermutationSHAP",
+    )
+
+
+# TabPFN (and similar ICL tabular models) use family-specific explainers below.
+
+
+def resolve_shap_sample_limits(
+    model_slug: str,
+    *,
+    max_background: int,
+    max_eval_samples: int,
+) -> tuple[int, int]:
+    """Tighter subsampling for expensive ICL tabular explainers."""
+    if model_slug in ICL_TABULAR_MODELS:
+        return min(max_background, 25), min(max_eval_samples, 20)
+    return max_background, max_eval_samples
+
+
+def _require_tabular_train_arrays(
+    model: TabularFoundationModel,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    if model._train_X is None or model._train_y is None:
+        raise RuntimeError(
+            f"{model.__class__.__name__} must be fitted before computing importance."
+        )
+    return (
+        np.asarray(model._train_X, dtype=np.float64),
+        np.asarray(model._train_y, dtype=np.float64).reshape(-1),
+    )
+
+
+def _aggregate_shapiq_first_order(
+    explanations: Sequence[object],
+    *,
+    n_features: int,
+) -> npt.NDArray[np.float64]:
+    if not explanations:
+        raise ValueError("TabPFN Shapley explainer returned no explanations.")
+    stacked = np.zeros((len(explanations), n_features), dtype=np.float64)
+    for row, explanation in enumerate(explanations):
+        order1 = np.asarray(
+            cast(Any, explanation).get_n_order_values(1),
+            dtype=np.float64,
+        ).reshape(-1)
+        if order1.shape[0] != n_features:
+            raise ValueError(
+                f"Shapley vector length {order1.shape[0]} does not match "
+                f"{n_features} features."
+            )
+        stacked[row] = np.abs(order1)
+    return np.mean(stacked, axis=0)
+
+
+def _compute_tabpfn_shapley_importance(
+    model: TabPFNModel,
+    *,
+    X_eval: pd.DataFrame,
+    feature_names: list[str],
+    shapiq_budget: int,
+    seed: int,
+) -> list[FeatureRank]:
+    from shapiq.explainer import TabPFNExplainer  # pyright: ignore[reportMissingImports]
+
+    if model.estimator is None:
+        raise RuntimeError("TabPFNModel.predict called before fit.")
+    X_train, y_train = _require_tabular_train_arrays(model)
+    X_eval_np = np.asarray(
+        model._prepare_features(X_eval, fit=False),
+        dtype=np.float64,
+    )
+    explainer = TabPFNExplainer(
+        cast(Any, model.estimator),
+        X_train,
+        y_train,
+        verbose=False,
+    )
+    explanations = explainer.explain_X(
+        X_eval_np,
+        budget=int(shapiq_budget),
+        random_state=int(seed),
+        verbose=False,
+    )
+    mean_abs = _aggregate_shapiq_first_order(
+        explanations,
+        n_features=len(feature_names),
+    )
+    return _rank_features(feature_names, mean_abs)
+
+
+def _compute_sklearn_permutation_importance(
+    model: TabularFoundationModel,
+    *,
+    X_eval: pd.DataFrame,
+    y_eval: pd.Series,
+    feature_names: list[str],
+    seed: int,
+    n_repeats: int,
+) -> list[FeatureRank]:
+    from sklearn.inspection import permutation_importance
+
+    if model.estimator is None:
+        raise RuntimeError(
+            f"{model.__class__.__name__}.predict called before fit."
+        )
+    X = np.asarray(model._prepare_features(X_eval, fit=False), dtype=np.float64)
+    y = np.asarray(y_eval.values.ravel(), dtype=np.float64)
+    result = permutation_importance(
+        model.estimator,
+        X,
+        y,
+        n_repeats=int(n_repeats),
+        random_state=int(seed),
+        n_jobs=1,
+    )
+    importances = np.asarray(cast(Any, result)["importances_mean"], dtype=np.float64)
+    return _rank_features(feature_names, importances)
+
+
 def _subsample_indices(n: int, k: int, rng: np.random.Generator) -> npt.NDArray[np.int_]:
     k = min(int(k), int(n))
     if k <= 0:
@@ -604,21 +788,30 @@ def compute_shap_pandas(
     model_slug: str,
     max_background: int,
     max_eval_samples: int,
+    shapiq_budget: int,
+    permutation_repeats: int,
     seed: int,
 ) -> PandasShapPayload:
     import shap  # pyright: ignore[reportMissingImports]
     from shap.maskers import Independent  # pyright: ignore[reportMissingImports]
 
     X_train, _ = train_dataset.xy
-    X_test, _ = test_dataset.xy
+    X_test, y_test = test_dataset.xy
     feature_names: list[str] = [str(c) for c in X_train.columns]
     rng = np.random.default_rng(seed)
     bg_idx = _subsample_indices(len(X_train), max_background, rng)
     eval_idx = _subsample_indices(len(X_test), max_eval_samples, rng)
     X_bg = X_train.iloc[bg_idx]
     X_eval = X_test.iloc[eval_idx]
+    interpretability = interpretability_for_model(model_slug)
+    method = interpretability["method"]
+    explainer_label = interpretability["explainer_label"]
 
-    if isinstance(model, RandomForest):
+    if method == "tree_shap":
+        if not isinstance(model, RandomForest):
+            raise TypeError(
+                f"tree_shap interpretability requires RandomForest, got {type(model).__name__}"
+            )
         pipe = model.model
         imputer = cast(SimpleImputer, pipe.named_steps["imputer"])
         scaler = cast(StandardScaler, pipe.named_steps["scaler"])
@@ -633,9 +826,46 @@ def compute_shap_pandas(
             n_features=len(feature_names),
         )
         return PandasShapPayload(
-            explainer="TreeExplainer",
+            explainer=explainer_label,
             features=_rank_features(feature_names, mean_abs),
             native_importance=_native_rf_importance(model, feature_names),
+        )
+
+    if method == "tabpfn_shapley":
+        if not isinstance(model, TabPFNModel):
+            raise TypeError(
+                f"tabpfn_shapley requires TabPFNModel, got {type(model).__name__}"
+            )
+        return PandasShapPayload(
+            explainer=explainer_label,
+            features=_compute_tabpfn_shapley_importance(
+                model,
+                X_eval=X_eval,
+                feature_names=feature_names,
+                shapiq_budget=shapiq_budget,
+                seed=seed,
+            ),
+            model=model_slug,
+        )
+
+    if method == "sklearn_permutation":
+        if not isinstance(model, TabularFoundationModel):
+            raise TypeError(
+                "sklearn_permutation requires TabularFoundationModel, "
+                f"got {type(model).__name__}"
+            )
+        y_eval = y_test.iloc[eval_idx][KEY_TARGET]
+        return PandasShapPayload(
+            explainer=explainer_label,
+            features=_compute_sklearn_permutation_importance(
+                model,
+                X_eval=X_eval,
+                y_eval=y_eval,
+                feature_names=feature_names,
+                seed=seed,
+                n_repeats=permutation_repeats,
+            ),
+            model=model_slug,
         )
 
     def predict_matrix(x_matrix: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
@@ -660,7 +890,7 @@ def compute_shap_pandas(
         values = values.reshape(-1, 1)
     mean_abs = _mean_abs_feature_importance(values, n_features=values.shape[-1])
     return PandasShapPayload(
-        explainer="PermutationExplainer",
+        explainer=explainer_label,
         features=_rank_features(feature_names, mean_abs),
         model=model_slug,
     )
@@ -750,8 +980,9 @@ def compute_shap_torch(
     feature_rows.sort(key=lambda row: row["rank"])
     for i, row in enumerate(feature_rows, start=1):
         row["rank"] = i
+    interpretability = interpretability_for_model("transformer_lf")
     return TorchShapPayload(
-        explainer="GradientExplainer",
+        explainer=interpretability["explainer_label"],
         features=feature_rows,
         temporal_aggregation="mean_abs_over_time",
     )
@@ -927,6 +1158,12 @@ def run_origin_shap(
         else ReproductionStats(corr_saved_preds=None, max_abs_pred_diff=None)
     )
 
+    max_background, max_eval_samples = resolve_shap_sample_limits(
+        spec.model,
+        max_background=spec.max_background,
+        max_eval_samples=spec.max_eval_samples,
+    )
+
     shap_payload: PandasShapPayload | TorchShapPayload
     if isinstance(train_dataset, PandasDataset) and isinstance(test_dataset, PandasDataset):
         shap_payload = compute_shap_pandas(
@@ -934,8 +1171,10 @@ def run_origin_shap(
             train_dataset=train_dataset,
             test_dataset=test_dataset,
             model_slug=spec.model,
-            max_background=spec.max_background,
-            max_eval_samples=spec.max_eval_samples,
+            max_background=max_background,
+            max_eval_samples=max_eval_samples,
+            shapiq_budget=spec.shapiq_budget,
+            permutation_repeats=spec.permutation_repeats,
             seed=spec.seed,
         )
     elif isinstance(train_dataset, TorchDataset) and isinstance(test_dataset, TorchDataset):
@@ -943,8 +1182,8 @@ def run_origin_shap(
             model,
             train_dataset=train_dataset,
             test_dataset=test_dataset,
-            max_background=spec.max_background,
-            max_eval_samples=spec.max_eval_samples,
+            max_background=max_background,
+            max_eval_samples=max_eval_samples,
             seed=spec.seed,
         )
     else:

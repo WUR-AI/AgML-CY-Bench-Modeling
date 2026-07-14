@@ -710,6 +710,8 @@ def run_collect_subprocess(
         str(baselines_dir),
         "--output-dir",
         str(target.collect_dir),
+        "--output-root",
+        str(target.output_root),
         "--country",
         target.country_upper,
         "--horizon",

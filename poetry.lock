@@ -536,6 +536,21 @@ colorama = {version = "*", markers = "sys_platform == \"win32\""}
 development = ["black", "flake8", "mypy", "pytest", "types-colorama"]
 
 [[package]]
+name = "colour"
+version = "0.1.5"
+description = "converts and manipulates various color representation (HSL, RVB, web, X11, ...)"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "colour-0.1.5-py2.py3-none-any.whl", hash = "sha256:33f6db9d564fadc16e59921a56999b79571160ce09916303d35346dddc17978c"},
+    {file = "colour-0.1.5.tar.gz", hash = "sha256:af20120fefd2afede8b001fbef2ea9da70ad7d49fafdb6489025dae8745c3aee"},
+]
+
+[package.extras]
+test = ["nose"]
+
+[[package]]
 name = "comet-ml"
 version = "3.57.3"
 description = "Supercharging Machine Learning"
@@ -1348,6 +1363,24 @@ test = ["aiohttp (!=4.0.0a0,!=4.0.0a1)", "numpy", "pytest", "pytest-asyncio (!=0
 test-downstream = ["aiobotocore (>=2.5.4,<3.0.0)", "dask[dataframe,test]", "moto[server] (>4,<5)", "pytest-timeout", "xarray"]
 test-full = ["adlfs", "aiohttp (!=4.0.0a0,!=4.0.0a1)", "backports-zstd ; python_version < \"3.14\"", "cloudpickle", "dask", "distributed", "dropbox", "dropboxdrivefs", "fastparquet", "fusepy", "gcsfs", "jinja2", "kerchunk", "libarchive-c", "lz4", "notebook", "numpy", "ocifs", "pandas (<3.0.0)", "panel", "paramiko", "pyarrow", "pyarrow (>=1)", "pyftpdlib", "pygit2", "pytest", "pytest-asyncio (!=0.22.0)", "pytest-benchmark", "pytest-cov", "pytest-mock", "pytest-recording", "pytest-rerunfailures", "python-snappy", "requests", "smbprotocol", "tqdm", "urllib3", "zarr", "zstandard ; python_version < \"3.14\""]
 tqdm = ["tqdm"]
+
+[[package]]
+name = "galois"
+version = "0.4.11"
+description = "A performant NumPy extension for Galois fields and their applications"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+markers = "python_version < \"3.12\""
+files = [
+    {file = "galois-0.4.11-py3-none-any.whl", hash = "sha256:d2e12a2b7fd44b108cc15d7de27dabcb8a98a556ea2c69c94fe695139629d9aa"},
+    {file = "galois-0.4.11.tar.gz", hash = "sha256:f5055546c4b39d1e36decae9d4f21f3d66d9c6c7c9aec39189cb5d2284e9022f"},
+]
+
+[package.dependencies]
+numba = ">=0.55"
+numpy = ">=1.21.0"
+typing_extensions = ">=4.0.0"
 
 [[package]]
 name = "geopandas"
@@ -4550,6 +4583,77 @@ docs = ["matplotlib", "numpydoc (==1.1.*)", "sphinx", "sphinx-book-theme", "sphi
 test = ["pytest", "pytest-cov", "scipy-doctest"]
 
 [[package]]
+name = "shapiq"
+version = "1.4.1"
+description = "Shapley Interactions for Machine Learning"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+markers = "python_version < \"3.12\""
+files = [
+    {file = "shapiq-1.4.1-py3-none-any.whl", hash = "sha256:c86667eb28ea0de56005fbe9fd072783242b74aa87fede11e07b6b915b93e7b3"},
+    {file = "shapiq-1.4.1.tar.gz", hash = "sha256:7f612c84fcfe4746ff826db72efa2944f9aa693c5c00c6e17a882613471534f8"},
+]
+
+[package.dependencies]
+colour = "*"
+galois = "*"
+joblib = "*"
+matplotlib = "*"
+networkx = "*"
+numpy = "*"
+pandas = "*"
+pillow = "*"
+requests = "*"
+scikit-learn = "*"
+scipy = "*"
+sparse-transform = "*"
+tqdm = "*"
+
+[[package]]
+name = "shapiq"
+version = "1.6.0"
+description = "Shapley Interactions for Machine Learning"
+optional = false
+python-versions = ">=3.12"
+groups = ["main"]
+markers = "python_version == \"3.12\""
+files = [
+    {file = "shapiq-1.6.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:50181eb6bd403ab8d3b82ebfeef520271570d36a3b5070b46c8aaba7f62ed57d"},
+    {file = "shapiq-1.6.0-cp312-cp312-macosx_12_0_arm64.whl", hash = "sha256:9c4bf791e7930dd37ad73a19ed1989c468531e7c6e9d01384cdd55da933a88b3"},
+    {file = "shapiq-1.6.0-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3247bbaa9fe3e3285a847d0943ee940442cd07171aafdf539b67fdba178133b3"},
+    {file = "shapiq-1.6.0-cp312-cp312-win_amd64.whl", hash = "sha256:727e66eb747632e817a93accbfda19d78db76f5b64be56fd8fcb60eeafc1d5c4"},
+    {file = "shapiq-1.6.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:95e839bfae2b3f8009c89bb994aecb9c73cac749fa4826cb9a91419c9ece4417"},
+    {file = "shapiq-1.6.0-cp313-cp313-macosx_12_0_arm64.whl", hash = "sha256:c2d6e80de6f6ff6740e13f9c7d3def18f4a5326750d06b36739637388608470c"},
+    {file = "shapiq-1.6.0-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e3356d25d3d4b31ee777e92e3c2a016c825c0422e78da0bcaf7125423343ef72"},
+    {file = "shapiq-1.6.0-cp313-cp313-win_amd64.whl", hash = "sha256:c872a7702f399b34dcaf04e751fc26109b139771ecd47861eac19c19899174a6"},
+    {file = "shapiq-1.6.0-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:ed9a46753b7063c18ffb19d1a686234260ece7314850e4b735b1eb843b360b01"},
+    {file = "shapiq-1.6.0-cp314-cp314-macosx_12_0_arm64.whl", hash = "sha256:945a3fb84d91ed0c19cb059adee06bee43c0567e901b02bf490f19005c2f356d"},
+    {file = "shapiq-1.6.0-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e2d5fd86510aabadb684241db49756c6dd15b54324bc7e7f5da078122312a01c"},
+    {file = "shapiq-1.6.0-cp314-cp314-win_amd64.whl", hash = "sha256:c2b5c337e3f767fe10a78e3cc2af84e13269e40f53eabd5e1b118400e6f83cc9"},
+    {file = "shapiq-1.6.0.tar.gz", hash = "sha256:da3e0c047198ab1abeae1ea845b261f75da9443130f26e46e96fb93c13cccfc5"},
+]
+
+[package.dependencies]
+colour = "*"
+joblib = "*"
+matplotlib = "*"
+networkx = "*"
+numpy = "*"
+pandas = "*"
+pillow = "*"
+requests = "*"
+scikit-learn = "*"
+scipy = "*"
+tqdm = "*"
+
+[package.extras]
+benchmark = ["lightgbm", "optuna", "tabpfn", "xgboost"]
+proxy = ["catboost", "lightgbm", "smac", "xgboost"]
+shapleig = ["botorch (>=0.14.0)", "gpytorch (>=1.14)", "linear_operator (>=0.6)", "torch (>=2.9.1)"]
+sparse = ["galois", "sparse-transform"]
+
+[[package]]
 name = "shellingham"
 version = "1.5.4"
 description = "Tool to Detect Surrounding Shell"
@@ -4716,6 +4820,29 @@ files = [
     {file = "snowballstemmer-3.0.1-py3-none-any.whl", hash = "sha256:6cd7b3897da8d6c9ffb968a6781fa6532dce9c3618a4b127d920dab764a19064"},
     {file = "snowballstemmer-3.0.1.tar.gz", hash = "sha256:6d5eeeec8e9f84d4d56b847692bacf79bc2c8e90c7f80ca4444ff8b6f2e52895"},
 ]
+
+[[package]]
+name = "sparse-transform"
+version = "0.2.1"
+description = "Efficiently computing sparse Fourier transforms of functions"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+markers = "python_version < \"3.12\""
+files = [
+    {file = "sparse_transform-0.2.1-py3-none-any.whl", hash = "sha256:d01b19f8add68e2b4c98a17272830af0e03d163667f03b1dc2b0c9eb8471727b"},
+    {file = "sparse_transform-0.2.1.tar.gz", hash = "sha256:470d54c884600d97254469a3d85fac775480d18a8aa2c43574350695e1015c66"},
+]
+
+[package.dependencies]
+galois = ">=0.4.1"
+numpy = ">1.18"
+scikit-learn = "*"
+scipy = "*"
+tqdm = "*"
+
+[package.extras]
+extra = ["colorama", "matplotlib"]
 
 [[package]]
 name = "sphinx"
@@ -5815,4 +5942,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "630f5ccbcddb21c86a678f8a1243697b57dc1af45c68d09abbfd4c65281ebcde"
+content-hash = "4f212638a20ebeee0ecbc9003cf5f70c691fc6c7ecddb7ceaceacefcc8009e13"

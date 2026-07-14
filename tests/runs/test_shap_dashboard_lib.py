@@ -34,7 +34,7 @@ def _write_summary(
                 "origins": [
                     {
                         "test_years": [2020],
-                        "explainer": "TreeExplainer",
+                        "explainer": "TreeSHAP",
                         "features": features,
                     }
                 ],
@@ -82,7 +82,7 @@ def test_build_shap_dashboard_payload(tmp_path: Path):
     payload = build_shap_dashboard_payload(shap_dir, summary_rows)
     assert payload["available"] is True
     entry = payload["by_key"]["maize_nl|||random_forest"]
-    assert entry["explainer"] == "TreeExplainer"
+    assert entry["explainer"] == "TreeSHAP"
     assert entry["top_features"][0]["name"] == "prec_sum_8"
     assert entry["meta_groups"]
 

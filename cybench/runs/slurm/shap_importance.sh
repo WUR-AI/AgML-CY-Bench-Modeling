@@ -40,6 +40,11 @@ MODELS="${MODELS:-random_forest,transformer_lf,tabpfn}"
 ORIGINS="${ORIGINS:-}"
 LAST_ORIGIN_ONLY="${LAST_ORIGIN_ONLY:-no}"
 FORCE_CPU="${FORCE_CPU:-0}"
+VERBOSE="${VERBOSE:-0}"
+MAX_BACKGROUND="${MAX_BACKGROUND:-}"
+MAX_EVAL_SAMPLES="${MAX_EVAL_SAMPLES:-}"
+SHAPIQ_BUDGET="${SHAPIQ_BUDGET:-}"
+PERMUTATION_REPEATS="${PERMUTATION_REPEATS:-}"
 
 LUSTRE_ROOT="${CYBENCH_OUTPUT_ROOT:-/lustre/backup/SHARED/AIN/agml/output}"
 if [[ -n "${CYBENCH_BASELINES_DIR:-}" ]]; then
@@ -61,6 +66,22 @@ fi
 if [[ "${FORCE_CPU}" == "1" ]]; then
   extra+=(--force-cpu)
 fi
+if [[ -n "${MAX_BACKGROUND}" ]]; then
+  extra+=(--max-background "${MAX_BACKGROUND}")
+fi
+if [[ -n "${MAX_EVAL_SAMPLES}" ]]; then
+  extra+=(--max-eval-samples "${MAX_EVAL_SAMPLES}")
+fi
+if [[ -n "${SHAPIQ_BUDGET}" ]]; then
+  extra+=(--shapiq-budget "${SHAPIQ_BUDGET}")
+fi
+if [[ -n "${PERMUTATION_REPEATS}" ]]; then
+  extra+=(--permutation-repeats "${PERMUTATION_REPEATS}")
+fi
+verbose=()
+if [[ "${VERBOSE}" == "1" ]]; then
+  verbose=(-v)
+fi
 
 echo "SHAP importance | ${CROP}/${COUNTRY} | models=${MODELS} | horizon=${HORIZON}"
 echo "  baselines=${BASELINES_DIR}"
@@ -74,4 +95,4 @@ poetry run python cybench/runs/analysis/compute_shap_importance.py \
   --baselines-dir "${BASELINES_DIR}" \
   --output-dir "${OUT_DIR}" \
   "${extra[@]}" \
-  -v
+  "${verbose[@]}"

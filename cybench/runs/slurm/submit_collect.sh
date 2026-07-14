@@ -34,6 +34,10 @@ Examples:
   # Full collect with plots for ready batches only:
   cybench/runs/slurm/submit_collect.sh --plot --mode ready --submit
 
+  # SHAP: run shap_importance.sh first; collect auto-embeds dashboard data from
+  #   {output_root}/shap_importance/{crop}_{CC}_{horizon}/
+  # when present (e.g. maize_NL_eos). Re-collect after SHAP finishes if needed.
+
   # After array completes, publish dashboards (login node):
   poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
       --version 2 --country DE --horizon eos --stages publish,index --no-plot
