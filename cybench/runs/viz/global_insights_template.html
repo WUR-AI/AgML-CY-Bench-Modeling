@@ -217,6 +217,15 @@
       flex-shrink: 0;
       font-style: normal;
     }
+    #family-metrics-table td.metric-cell { white-space: nowrap; cursor: help; }
+    #family-metrics-table td.metric-best { font-weight: 700; }
+    #family-metrics-table .sig-mark {
+      font-size: 0.68em;
+      line-height: 0;
+      vertical-align: super;
+      margin-left: 0.03em;
+      font-weight: 600;
+    }
     .world-map-wrap .country {
       transition: fill 0.15s;
     }
@@ -412,6 +421,9 @@
         <span id="family-benefit-legend-label">—</span>
       </div>
       <p class="muted" id="family-winner-summary"></p>
+      <div class="export-toolbar">
+        <button type="button" id="family-map-export-svg" disabled>Download map (SVG)</button>
+      </div>
     </div>
 
     <div class="card">

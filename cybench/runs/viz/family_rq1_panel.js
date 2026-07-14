@@ -17,6 +17,8 @@
   const winnerLegend = document.getElementById("family-winner-legend");
   const benefitLegend = document.getElementById("family-benefit-legend");
   const benefitLegendLabel = document.getElementById("family-benefit-legend-label");
+  const metricsNote = document.getElementById("family-metrics-note");
+  const mapExportSvgBtn = document.getElementById("family-map-export-svg");
   if (!metricsWrap || !metricsHorizon) return;
 
   const horizonLabels = FAMILY.horizon_labels || {};
@@ -79,6 +81,105 @@
     return FAMILY.table_columns || FAMILY.views || [];
   }
 
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function metricLowerIsBetter(metric) {
+    return metric === "nrmse";
+  }
+
+  function metricIsBetterValue(metric, candidate, incumbent) {
+    if (candidate == null || Number.isNaN(candidate)) return false;
+    if (incumbent == null || Number.isNaN(incumbent)) return true;
+    return metricLowerIsBetter(metric) ? candidate < incumbent : candidate > incumbent;
+  }
+
+  function bestFamiliesPerMetric(families, cols) {
+    const best = {};
+    for (const col of cols) {
+      const metric = col.metric;
+      let bestFamily = null;
+      let bestVal = null;
+      for (const fam of families) {
+        const v = fam.raw && fam.raw[metric];
+        if (v == null || Number.isNaN(v)) continue;
+        if (metricIsBetterValue(metric, v, bestVal)) {
+          bestVal = v;
+          bestFamily = fam.family;
+        }
+      }
+      if (bestFamily) best[metric] = bestFamily;
+    }
+    return best;
+  }
+
+  function metricSigMarker(fam, metric) {
+    if (fam.is_naive || fam.family === "Naive baselines") return "";
+    const stats = (fam.vs_naive || {})[metric];
+    if (stats && stats.significant_worse) return "†";
+    if (stats && stats.significant) return "*";
+    if ((fam.vs_naive_sig_worse || {})[metric]) return "†";
+    if ((fam.vs_naive_sig || {})[metric]) return "*";
+    return "";
+  }
+
+  function metricVsNaiveTooltip(fam, metric) {
+    if (fam.is_naive || fam.family === "Naive baselines") {
+      return "Naive baseline reference (no comparison).";
+    }
+    const stats = (fam.vs_naive || {})[metric];
+    if (!stats) {
+      return "No paired country data vs naive baseline.";
+    }
+    const n = stats.n_countries != null ? stats.n_countries : 0;
+    if (n === 0) {
+      return "No paired country data vs naive baseline for this metric.";
+    }
+    if (stats.median_delta == null) {
+      return `Only ${n} countr${n === 1 ? "y" : "ies"} with paired data (bootstrap needs ≥2).`;
+    }
+    let text = `vs naive: median per-country Δ = ${Number(stats.median_delta).toFixed(3)}`;
+    if (stats.table_median_gap != null) {
+      text += `; table median gap = ${Number(stats.table_median_gap) >= 0 ? "+" : ""}${Number(stats.table_median_gap).toFixed(3)}`;
+    }
+    if (stats.ci_lo != null && stats.ci_hi != null) {
+      text += `, 95% bootstrap CI [${Number(stats.ci_lo).toFixed(3)}, ${Number(stats.ci_hi).toFixed(3)}]`;
+    } else if (n < 2) {
+      text += " (bootstrap CI needs ≥2 countries)";
+    }
+    if (stats.p_one_sided != null) {
+      text += `, p(better) = ${Number(stats.p_one_sided).toFixed(3)}`;
+    }
+    if (stats.p_one_sided_worse != null) {
+      text += `, p(worse) = ${Number(stats.p_one_sided_worse).toFixed(3)}`;
+    }
+    if (stats.significant) text += " *";
+    if (stats.significant_worse) text += " †";
+    text += ` (${n} countries; positive Δ = family better)`;
+    return text;
+  }
+
+  function formatMetricSigMarkup(marker) {
+    if (!marker) return "";
+    return `<sup class="sig-mark">${marker}</sup>`;
+  }
+
+  function formatMetricWithIqr(fam, metric) {
+    const raw = fam.raw && fam.raw[metric];
+    if (raw == null) return "—";
+    const mark = formatMetricSigMarkup(metricSigMarker(fam, metric));
+    const band = (fam.iqr || {})[metric];
+    if (!band || band.q25 == null || band.q75 == null) {
+      return `${Number(raw).toFixed(3)}${mark}`;
+    }
+    return `${Number(raw).toFixed(3)}${mark} [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
+  }
+
   function renderFamilyTable() {
     const families = currentSlice().families || [];
     const cols = tableColumns();
@@ -86,21 +187,31 @@
       metricsWrap.innerHTML = '<p class="muted">No family data for this selection.</p>';
       return;
     }
-    const headers = ["Family", "Representative", ...cols.map(v => v.header || v.label)];
-    let html = "<table><thead><tr>";
-    html += headers.map(h => `<th>${h}</th>`).join("");
+    const sigNote = FAMILY.family_vs_naive_sig_note || "";
+    if (metricsNote) {
+      metricsNote.textContent = sigNote
+        ? `Five paradigms — one best-NRMSE representative per family; median [IQR] across countries. ${sigNote}`
+        : "Five paradigms — one best-NRMSE representative per family; median [IQR] across countries.";
+    }
+    const bestByMetric = bestFamiliesPerMetric(families, cols);
+    const viewHeaders = cols.map(v => {
+      const metric = v.display || v.metric;
+      if (v.header) return v.header;
+      return `${v.label} (${metric})`;
+    });
+    const headers = ["Family", "Representative", ...viewHeaders];
+    let html = '<table id="family-metrics-table"><thead><tr>';
+    html += headers.map(h => `<th>${escapeHtml(h)}</th>`).join("");
     html += "</tr></thead><tbody>";
     for (const fam of families) {
-      html += `<tr><td>${fam.family}</td><td>${fam.display_name}</td>`;
+      html += `<tr><td>${escapeHtml(fam.family)}</td><td>${escapeHtml(fam.display_name)}</td>`;
       for (const col of cols) {
         const metric = col.metric;
-        const raw = fam.raw && fam.raw[metric];
-        const band = fam.iqr && fam.iqr[metric];
-        let cell = raw == null ? "—" : Number(raw).toFixed(3);
-        if (band && band.q25 != null && band.q75 != null) {
-          cell += ` [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
-        }
-        html += `<td>${cell}</td>`;
+        const isBest = bestByMetric[metric] === fam.family;
+        const content = formatMetricWithIqr(fam, metric);
+        const title = metricVsNaiveTooltip(fam, metric);
+        const cls = isBest ? "metric-cell metric-best" : "metric-cell";
+        html += `<td class="${cls}" title="${escapeHtml(title)}">${content}</td>`;
       }
       html += "</tr>";
     }
@@ -108,9 +219,17 @@
     metricsWrap.innerHTML = html;
   }
 
-  const MAP_WIDTH = 960;
-  const MAP_HEIGHT = 520;
+  const MAP_WIDTH = 1280;
+  const MAP_HEIGHT = 694;
   const MAP_MARGIN = 8;
+  const MAP_EXPORT_SCALE = 4;
+  const MAP_EXPORT_PAD_B = 115;
+  const MAP_EXPORT_LEGEND_FS = 22;
+  const MAP_EXPORT_LEGEND_BAR_W = 520;
+  const MAP_EXPORT_LEGEND_BAR_H = 20;
+  const MAP_EXPORT_FONT = "DejaVu Sans";
+  const MAP_EXPORT_LABEL_GAP = 20;
+  const MAP_EXPORT_LEGEND_TICK = 7;
   let worldFeatures = null;
   let mapProjection = d3.geoNaturalEarth1();
   let mapPath = d3.geoPath(mapProjection);
@@ -300,8 +419,209 @@
     }
   }
 
+  function setMapExportEnabled(enabled) {
+    if (mapExportSvgBtn) mapExportSvgBtn.disabled = !enabled;
+  }
+
+  function escapeXml(text) {
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function mapExportMeta() {
+    const hzLabel = horizonLabels[famHorizon] || famHorizon;
+    const cropLabel = famCrop === "all" ? "all crops" : famCrop;
+    const modeLabel = mapMode === "benefit"
+      ? "AI error reduction vs naive baselines / LPJmL"
+      : `Winning family · ${winnerAspect}`;
+    return { hz: famHorizon, crop: famCrop, hzLabel, cropLabel, modeLabel };
+  }
+
+  function mapExportFilename(ext) {
+    const { hz, crop } = mapExportMeta();
+    const modeSlug = mapMode === "benefit"
+      ? "ai-benefit"
+      : `winner-${winnerAspect.toLowerCase().replace(/\s+/g, "-")}`;
+    return `cybench-map_${hz}_${crop}_${modeSlug}.${ext}`;
+  }
+
+  function exportLegendBaselineY(yBase) {
+    return yBase + MAP_EXPORT_LEGEND_BAR_H + MAP_EXPORT_LABEL_GAP + MAP_EXPORT_LEGEND_FS;
+  }
+
+  let exportMeasureSvg = null;
+  let exportFont = null;
+  let exportFontLoading = null;
+
+  function exportMeasureLayer() {
+    if (exportMeasureSvg) return exportMeasureSvg;
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("width", "0");
+    svg.setAttribute("height", "0");
+    svg.style.cssText = "position:fixed;left:-10000px;top:0;visibility:hidden;pointer-events:none";
+    document.body.appendChild(svg);
+    exportMeasureSvg = svg;
+    return svg;
+  }
+
+  function measureExportTextWidth(text) {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = exportMeasureLayer();
+    const t = document.createElementNS(ns, "text");
+    t.setAttribute("font-size", String(MAP_EXPORT_LEGEND_FS));
+    t.setAttribute("font-family", MAP_EXPORT_FONT);
+    t.textContent = String(text);
+    svg.appendChild(t);
+    const w = t.getBBox().width;
+    svg.removeChild(t);
+    return w;
+  }
+
+  function exportLegendLabel(refX, yBaseline, text, anchor) {
+    const w = measureExportTextWidth(text);
+    let textX = 0;
+    if (anchor === "middle") textX = -w / 2;
+    else if (anchor === "end") textX = -w;
+    return `<g transform="translate(${refX} ${yBaseline})"><text x="${textX}" y="0" font-size="${MAP_EXPORT_LEGEND_FS}" font-family="${MAP_EXPORT_FONT}" fill="#656d76">${escapeXml(text)}</text></g>`;
+  }
+
+  function exportLegendMarkup(refX, yBaseline, text, anchor) {
+    if (exportFont) {
+      const fontSize = MAP_EXPORT_LEGEND_FS;
+      let x = refX;
+      const w = exportFont.getAdvanceWidth(text, fontSize);
+      if (anchor === "middle") x = refX - w / 2;
+      else if (anchor === "end") x = refX - w;
+      const d = exportFont.getPath(text, x, yBaseline, fontSize).toPathData(2);
+      return `<path d="${d}" fill="#656d76"/>`;
+    }
+    return exportLegendLabel(refX, yBaseline, text, anchor);
+  }
+
+  function ensureExportFont() {
+    if (exportFont !== null) return Promise.resolve(exportFont || null);
+    if (!exportFontLoading) {
+      if (typeof opentype === "undefined") {
+        exportFont = false;
+        return Promise.resolve(null);
+      }
+      exportFontLoading = fetch("https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf")
+        .then(r => r.arrayBuffer())
+        .then(buf => {
+          exportFont = opentype.parse(buf);
+          return exportFont;
+        })
+        .catch(() => {
+          exportFont = false;
+          return null;
+        });
+    }
+    return exportFontLoading;
+  }
+
+  function buildWinnerLegendSvg(yBase) {
+    if (!winnerLegend) return "";
+    const items = winnerLegend.querySelectorAll("span");
+    if (!items.length) return "";
+    const fs = MAP_EXPORT_LEGEND_FS;
+    const sw = MAP_EXPORT_LEGEND_FS;
+    let x = 24;
+    let out = "";
+    items.forEach(span => {
+      const swatch = span.querySelector(".swatch");
+      const color = swatch ? (swatch.style.background || "#999") : "#999";
+      const text = span.textContent.trim();
+      out += `<rect x="${x}" y="${yBase}" width="${sw}" height="${sw}" fill="${color}" rx="1.5"/>`;
+      out += `<g transform="translate(${x + sw + 4} ${yBase + 1})"><text y="0" font-size="${fs}" font-family="${MAP_EXPORT_FONT}" fill="#656d76">${escapeXml(text)}</text></g>`;
+      x += Math.min(160, Math.max(56, text.length * (fs * 0.52) + sw + 10));
+    });
+    return out;
+  }
+
+  function buildBenefitLegendSvg(yBase) {
+    const slice = currentBenefitSlice();
+    const vals = (slice.countries || []).map(r => r.benefit_pct).filter(v => v != null);
+    const extent = benefitExtent(vals);
+    const barX = 24;
+    const barW = MAP_EXPORT_LEGEND_BAR_W;
+    const barH = MAP_EXPORT_LEGEND_BAR_H;
+    const labelY = exportLegendBaselineY(yBase);
+    return `
+      <defs>
+        <linearGradient id="export-benefit-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#d95f02"/>
+          <stop offset="25%" stop-color="#c4a574"/>
+          <stop offset="50%" stop-color="#9eb4c8"/>
+          <stop offset="75%" stop-color="#92c5de"/>
+          <stop offset="100%" stop-color="#2166ac"/>
+        </linearGradient>
+      </defs>
+      <rect x="${barX}" y="${yBase}" width="${barW}" height="${barH}" fill="url(#export-benefit-grad)" stroke="#c8d0d8" stroke-width="0.75"/>
+      <line x1="${barX}" y1="${yBase + barH}" x2="${barX}" y2="${yBase + barH + MAP_EXPORT_LEGEND_TICK}" stroke="#656d76" stroke-width="0.75"/>
+      <line x1="${barX + barW / 2}" y1="${yBase + barH}" x2="${barX + barW / 2}" y2="${yBase + barH + MAP_EXPORT_LEGEND_TICK}" stroke="#656d76" stroke-width="0.75"/>
+      <line x1="${barX + barW}" y1="${yBase + barH}" x2="${barX + barW}" y2="${yBase + barH + MAP_EXPORT_LEGEND_TICK}" stroke="#656d76" stroke-width="0.75"/>
+      ${exportLegendMarkup(barX, labelY, `-${extent}%`, "start")}
+      ${exportLegendMarkup(barX + barW / 2, labelY, "0%", "middle")}
+      ${exportLegendMarkup(barX + barW, labelY, `+${extent}%`, "end")}`;
+  }
+
+  function buildMapExportSvgString(exportScale = MAP_EXPORT_SCALE) {
+    const mapNode = mapWrap && mapWrap.querySelector("svg");
+    if (!mapNode || !worldFeatures) return null;
+    const padT = 12;
+    const padB = MAP_EXPORT_PAD_B;
+    const totalH = MAP_HEIGHT + padT + padB;
+    const legendY = padT + MAP_HEIGHT + 6;
+    const legendSvg = mapMode === "benefit"
+      ? buildBenefitLegendSvg(legendY)
+      : buildWinnerLegendSvg(legendY);
+    const mapContent = mapNode.innerHTML;
+    const exportW = MAP_WIDTH * exportScale;
+    const exportH = totalH * exportScale;
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MAP_WIDTH} ${totalH}" width="${exportW}" height="${exportH}" font-family="${MAP_EXPORT_FONT}">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <svg x="0" y="${padT}" width="${MAP_WIDTH}" height="${MAP_HEIGHT}" viewBox="0 0 ${MAP_WIDTH} ${MAP_HEIGHT}">
+    ${mapContent}
+  </svg>
+  ${legendSvg}
+</svg>`;
+  }
+
+  function triggerBlobDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  function downloadFamilyMapSvg() {
+    ensureExportFont().then(() => {
+      const svg = buildMapExportSvgString();
+      if (!svg) return;
+      triggerBlobDownload(
+        new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
+        mapExportFilename("svg"),
+      );
+    });
+  }
+
+  if (mapExportSvgBtn) {
+    mapExportSvgBtn.addEventListener("click", downloadFamilyMapSvg);
+  }
+  ensureExportFont();
+
   function loadMap() {
     if (!DATA.geojson_href) {
+      setMapExportEnabled(false);
       mapWrap.innerHTML = '<p class="muted">Map geometry not available.</p>';
       return;
     }
@@ -312,7 +632,11 @@
         { type: "FeatureCollection", features: worldFeatures },
       );
       mapPath = d3.geoPath(mapProjection);
+      setMapExportEnabled(true);
       renderFamilyMap();
+    }).catch(() => {
+      setMapExportEnabled(false);
+      mapWrap.innerHTML = '<p class="muted">Could not load map geometry.</p>';
     });
   }
 
