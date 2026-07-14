@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 
 from cybench.runs.analysis.index_map_lib import map_iso_for_cybencH
+from cybench.util.benchmark_scope import is_benchmark_evaluation_crop_country
 
 _PAPER_DIR_RE = re.compile(
     r"^paper_walk_forward_(?P<country>[a-z]{2})_(?P<horizon>eos|mid|qtr|early)_v(?P<version>\d+)$"
@@ -335,7 +336,11 @@ def matrix_axes_payload() -> list[dict[str, Any]]:
     return out
 
 
-def load_summary_frame(summary_paths: list[Path]) -> pd.DataFrame:
+def load_summary_frame(
+    summary_paths: list[Path],
+    *,
+    data_dir: Path | None = None,
+) -> pd.DataFrame:
     """Load and tag rows from multiple country/horizon summary CSVs."""
     frames: list[pd.DataFrame] = []
     for path in summary_paths:
@@ -355,6 +360,14 @@ def load_summary_frame(summary_paths: list[Path]) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
     out = pd.concat(frames, ignore_index=True)
+    if not out.empty and "crop" in out.columns and "country" in out.columns:
+        keep = out.apply(
+            lambda row: is_benchmark_evaluation_crop_country(
+                str(row["crop"]), str(row["country"]), data_dir=data_dir
+            ),
+            axis=1,
+        )
+        out = out.loc[keep].reset_index(drop=True)
     for col in _NUMERIC_SUMMARY_COLS:
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce")

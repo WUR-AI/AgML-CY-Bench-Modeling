@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 from cybench.runs.analysis.benchmark_run_catalog import discover_benchmark_runs
 from cybench.runs.slurm.benchmark_completion_lib import JobRow, walk_forward_complete
+from cybench.util.benchmark_scope import is_benchmark_evaluation_crop_country
 from cybench.runs.analysis.publish_dashboard_bundle import (
     _COUNTRY_NAMES,
     discover_index_entries,
@@ -163,6 +164,10 @@ def _complete_walk_forward_runs(
             allow_missing=True,
         ):
             if cc and run.country.upper() != cc:
+                continue
+            if not is_benchmark_evaluation_crop_country(
+                run.crop, run.country, data_dir=repo_root / "cybench" / "data"
+            ):
                 continue
             key = (run.crop, run.country, run.model)
             if key in seen:

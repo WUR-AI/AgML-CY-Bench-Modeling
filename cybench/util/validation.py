@@ -151,6 +151,37 @@ def get_screening_pre_test_years(
     return _as_python_years(list(train_years) + list(val_years))
 
 
+def check_screening_years(years: set[Any]) -> tuple[bool, str]:
+    if not years:
+        return False, "no yield years in dataset window"
+    try:
+        train, val, test = get_screening_partitions(
+            default_screening_validation_cfg(), years, seed=42
+        )
+    except (AssertionError, ValueError) as exc:
+        return False, str(exc)
+    if not train:
+        return False, "no train years after screening split"
+    return True, f"train={len(train)} val={len(val)} test={len(test)}"
+
+
+def check_full_benchmark_screening_years(years: set[Any]) -> tuple[bool, str]:
+    """Require the intended 5-last test + 2-last val + ≥1 train screening layout."""
+    ok, reason = check_screening_years(years)
+    if not ok:
+        return ok, reason
+    train, val, test = get_screening_partitions(
+        default_screening_validation_cfg(), years, seed=42
+    )
+    if len(test) < 5:
+        return False, f"only {len(test)} screening test years (need 5)"
+    if len(val) < 2:
+        return False, f"only {len(val)} validation years (need 2)"
+    if not train:
+        return False, "no train years after screening split"
+    return True, f"train={len(train)} val={len(val)} test={len(test)}"
+
+
 @lru_cache(maxsize=1)
 def default_screening_validation_cfg() -> DictConfig:
     """Load ``cybench/conf/validation/screening.yaml`` (benchmark screening split)."""

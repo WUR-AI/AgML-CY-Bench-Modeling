@@ -44,6 +44,10 @@ from omegaconf import OmegaConf
 
 from cybench.config import KEY_COUNTRY, KEY_LOC, KEY_TARGET, KEY_YEAR, PATH_DATA_DIR, REPO_DIR
 from cybench.datasets.yield_quality import apply_yield_quality_filter, filter_samples_from_target
+from cybench.util.benchmark_scope import (
+    benchmark_evaluation_exclusion_reason,
+    is_benchmark_evaluation_crop_country,
+)
 from cybench.evaluation.aggregated_metrics import compute_report_metrics
 from cybench.runs.analysis.benchmark_run_catalog import (
     METRIC_KEYS,
@@ -760,6 +764,17 @@ def main() -> None:
             print("[QC] No target.filter_samples configured — keeping all rows")
 
     for run in runs:
+        if not is_benchmark_evaluation_crop_country(
+            run.crop, run.country, data_dir=args.data_dir
+        ):
+            reason = benchmark_evaluation_exclusion_reason(
+                run.crop, run.country, data_dir=args.data_dir
+            )
+            print(
+                f"[SKIP] {run.path.name}: excluded crop-country "
+                f"({run.crop}/{run.country}: {reason})"
+            )
+            continue
         collected = collect_walk_forward_run(
             run,
             data_dir=args.data_dir,

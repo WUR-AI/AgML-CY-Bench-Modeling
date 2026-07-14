@@ -57,6 +57,42 @@ def test_build_dashboard_hrefs(tmp_path: Path):
     assert hrefs["DE"]["mid"] == "de_walk_forward_mid_v1/dashboard.html"
 
 
+def test_load_summary_frame_excludes_short_test_crop_countries(
+    tmp_path: Path, monkeypatch
+):
+    data = tmp_path / "data"
+    lines_long = ["crop_name,country_code,adm_id,harvest_year,yield"]
+    for year in range(2000, 2025):
+        lines_long.append(f"maize,DE,R1,{year},10.0")
+    (data / "maize" / "DE").mkdir(parents=True)
+    (data / "maize" / "DE" / "yield_maize_DE.csv").write_text(
+        "\n".join(lines_long) + "\n", encoding="utf-8"
+    )
+    lines_short = ["crop_name,country_code,adm_id,harvest_year,yield"]
+    for year in range(2019, 2025):
+        lines_short.append(f"maize,MW,R1,{year},10.0")
+    (data / "maize" / "MW").mkdir(parents=True)
+    (data / "maize" / "MW" / "yield_maize_MW.csv").write_text(
+        "\n".join(lines_short) + "\n", encoding="utf-8"
+    )
+
+    import cybench.config as cfg
+
+    monkeypatch.setattr(cfg, "PATH_DATA_DIR", str(data))
+
+    for cc, crop in [("mw", "maize"), ("de", "maize")]:
+        d = tmp_path / f"paper_walk_forward_{cc}_eos_v2"
+        d.mkdir(parents=True)
+        pd.DataFrame(
+            [{"crop": crop, "model": "ridge", "nrmse": 0.1, "r2": 0.9}]
+        ).to_csv(d / "walk_forward_summary.csv", index=False)
+    df = load_summary_frame(
+        list(tmp_path.glob("paper_walk_forward_*_eos_v2/walk_forward_summary.csv")),
+        data_dir=data,
+    )
+    assert set(zip(df["country"], df["crop"])) == {("DE", "maize")}
+
+
 def test_is_baseline_model():
     assert is_baseline_model("average")
     assert is_baseline_model("AverageYieldModel")

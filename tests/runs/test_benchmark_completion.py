@@ -7,7 +7,6 @@ from pathlib import Path
 from cybench.runs.slurm.benchmark_completion_lib import (
     JobRow,
     assess_job,
-    check_screening_years,
     filter_jobs_by_models,
     filter_jobs_cpu_only,
     jobs_for_phase,
@@ -15,6 +14,7 @@ from cybench.runs.slurm.benchmark_completion_lib import (
     screening_complete,
     write_manifest,
 )
+from cybench.util.validation import check_screening_years
 
 
 def _write_yield(path: Path, crop: str, country: str, years: list[int]) -> None:
@@ -29,6 +29,18 @@ def test_check_screening_years_blocks_short_series():
     ok, reason = check_screening_years({2018, 2019, 2020})
     assert not ok
     assert reason
+
+
+def test_check_full_benchmark_screening_years_requires_five_test_years():
+    from cybench.util.validation import check_full_benchmark_screening_years
+
+    ok, reason = check_full_benchmark_screening_years(set(range(2000, 2025)))
+    assert ok
+    assert "test=5" in reason
+
+    ok_short, reason_short = check_full_benchmark_screening_years(set(range(2019, 2025)))
+    assert not ok_short
+    assert "only 3 screening test years" in reason_short
 
 
 def test_check_screening_years_accepts_long_series():

@@ -156,3 +156,24 @@ def test_skips_twso_without_screening_overlap_when_horizon_set(
         horizon="eos",
     )
     assert with_horizon == []
+
+
+def test_skips_crop_country_with_shrunken_screening_test_block(
+    tmp_path: Path, monkeypatch
+):
+    data = tmp_path / "data"
+    _write_yield(
+        data / "maize" / "MW" / "yield_maize_MW.csv",
+        "maize",
+        "MW",
+        list(range(2019, 2025)),
+    )
+    models = tmp_path / "models.txt"
+    models.write_text("ridge pandas yes yes no\n", encoding="utf-8")
+
+    import cybench.config as cfg
+
+    monkeypatch.setattr(cfg, "PATH_DATA_DIR", str(data))
+
+    jobs = build_jobs(crops=["maize"], countries=["MW"], models_path=models)
+    assert jobs == []

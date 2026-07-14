@@ -33,6 +33,8 @@ from cybench.util.validation import (
     default_screening_validation_cfg,
     expected_walk_forward_test_years,
     get_screening_partitions,
+    check_screening_years,
+    check_full_benchmark_screening_years,
 )
 
 DEFAULT_MIN_YEAR = 2000
@@ -290,20 +292,6 @@ def load_yield_years(
     return years
 
 
-def check_screening_years(years: set[int]) -> tuple[bool, str]:
-    if not years:
-        return False, "no yield years in dataset window"
-    try:
-        train, val, test = get_screening_partitions(
-            default_screening_validation_cfg(), years, seed=42
-        )
-    except (AssertionError, ValueError) as exc:
-        return False, str(exc)
-    if not train:
-        return False, "no train years after screening split"
-    return True, f"train={len(train)} val={len(val)} test={len(test)}"
-
-
 def _latest_run(
     baselines_dir: Path,
     *,
@@ -443,7 +431,7 @@ def assess_job(
         min_year=min_year,
         max_year=max_year,
     )
-    ok_years, years_reason = check_screening_years(years)
+    ok_years, years_reason = check_full_benchmark_screening_years(years)
     if not ok_years:
         return JobAssessment(
             job=job,

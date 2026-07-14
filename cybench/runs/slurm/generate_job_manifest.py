@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Build benchmark_jobs.txt from DATASETS × models.
 
-Skips crop/country pairs when the data directory is missing or when yield years
-cannot support the fixed screening split (5-last test + 2-last val).
+Skips crop/country pairs when the data directory is missing, when yield years
+cannot support screening at all, or when the full benchmark split is unavailable
+(5-last test + 2-last val + ≥1 train).
 """
 
 from __future__ import annotations
@@ -16,9 +17,9 @@ from cybench.models.baseline_csv_paths import lpjml_csv_path, twso_csv_path
 from cybench.models.twso_model import twso_screening_viable
 from cybench.runs.slurm.benchmark_completion_lib import (
     JobRow,
-    check_screening_years,
     load_yield_years,
 )
+from cybench.util.validation import check_full_benchmark_screening_years
 from cybench.runs.slurm.benchmark_submit_lib import normalize_horizon
 
 SLURM_DIR = Path(__file__).resolve().parent
@@ -70,7 +71,7 @@ def build_jobs(
             if not (root / crop / country).is_dir():
                 continue
             years = load_yield_years(crop, country, data_dir=root)
-            ok_years, _years_reason = check_screening_years(years)
+            ok_years, _years_reason = check_full_benchmark_screening_years(years)
             if not ok_years:
                 continue
             for model, framework, hp_search, feature_design, needs_gpu in models:
