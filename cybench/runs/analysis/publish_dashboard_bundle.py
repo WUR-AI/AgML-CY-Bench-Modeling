@@ -3,13 +3,13 @@
 
 Takes output from ``collect_walk_forward_results.py`` (``compare_models.html`` +
 ``assets/``) or a standalone ``dashboard.html`` + ``assets/`` tree and copies
-them into a publish directory (e.g. a clone of CY-Bench-dashboard).
+them into a publish directory (e.g. a clone of AgML-CY-Bench-dashboard).
 
 Example::
 
     poetry run python cybench/runs/analysis/publish_dashboard_bundle.py \\
         --source-dir ../output/paper_walk_forward_de_mid_v1 \\
-        --publish-root ~/CY-Bench-dashboard \\
+        --publish-root ~/AgML-CY-Bench-dashboard \\
         --slug de_walk_forward_mid_v1 \\
         --update-index
 """
@@ -163,8 +163,8 @@ def prune_obsolete_dashboard_dirs(
             print(
                 "[WARN] No folders matching "
                 "'{cc}_walk_forward_{eos|mid|qtr|early}_vN'. "
-                "Use the CY-Bench-dashboard git clone as --publish-root "
-                "(e.g. /lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard), "
+                "Use the AgML-CY-Bench-dashboard git clone as --publish-root "
+                "(e.g. /lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-dashboard), "
                 "not the AgML-CY-Bench-AAAI source tree."
             )
         elif all(len(e) == 1 for e in by_key.values()):

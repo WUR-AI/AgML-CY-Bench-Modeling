@@ -7,7 +7,7 @@ Example::
 
     poetry run python cybench/runs/analysis/refresh_dashboard_views.py \\
         --output-root /lustre/backup/SHARED/AIN/agml/output \\
-        --publish-root /lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard
+        --publish-root /lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-dashboard
 """
 
 from __future__ import annotations

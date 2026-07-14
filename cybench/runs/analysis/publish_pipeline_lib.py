@@ -59,7 +59,7 @@ class PipelineDefaults:
     version: int = 2
     output_root: Path = Path("/lustre/backup/SHARED/AIN/agml/output")
     repo_root: Path = Path("/lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-AAAI")
-    publish_root: Path = Path("/lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard")
+    publish_root: Path = Path("/lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-dashboard")
     min_run_fraction: float = 1.0
 
 

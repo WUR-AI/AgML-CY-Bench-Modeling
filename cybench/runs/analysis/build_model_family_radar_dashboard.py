@@ -8,7 +8,7 @@ Example::
 
     poetry run python cybench/runs/analysis/build_model_family_radar_dashboard.py \\
         --output-root /lustre/backup/SHARED/AIN/agml/output \\
-        --dest /lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard/model_families.html
+        --dest /lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-dashboard/model_families.html
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def main() -> int:
     parser.add_argument(
         "--publish-root",
         type=Path,
-        default=Path("/lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard"),
+        default=Path("/lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-dashboard"),
         help="GitHub Pages clone root (used when --dest is omitted)",
     )
     parser.add_argument("--version", type=int, default=2, help="Batch version tag (default: 2)")

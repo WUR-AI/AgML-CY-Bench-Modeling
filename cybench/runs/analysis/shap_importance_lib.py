@@ -446,10 +446,11 @@ def compute_shap_pandas(
     seed: int,
 ) -> dict[str, Any]:
     import shap
+    from shap.maskers import Independent
 
     X_train, _ = train_dataset.xy
     X_test, _ = test_dataset.xy
-    feature_names = list(X_train.columns)
+    feature_names: list[str] = [str(c) for c in X_train.columns]
     rng = np.random.default_rng(seed)
     bg_idx = _subsample_indices(len(X_train), max_background, rng)
     eval_idx = _subsample_indices(len(X_test), max_eval_samples, rng)
@@ -476,7 +477,7 @@ def compute_shap_pandas(
         return out
 
     def predict_matrix(x_matrix: npt.NDArray[Any]) -> npt.NDArray[Any]:
-        frame = pd.DataFrame(x_matrix, columns=feature_names)
+        frame = pd.DataFrame(x_matrix, columns=pd.Index(feature_names))
         y_dummy = pd.DataFrame({KEY_TARGET: np.zeros(len(frame), dtype=np.float32)})
         ds = PandasDataset(
             cfg=test_dataset.cfg,
@@ -489,7 +490,7 @@ def compute_shap_pandas(
 
     background = X_bg.to_numpy(dtype=float)
     eval_matrix = X_eval.to_numpy(dtype=float)
-    masker = shap.maskers.Independent(background)
+    masker = Independent(background)
     explainer = shap.Explainer(predict_matrix, masker, algorithm="permutation")
     explanation = explainer(eval_matrix)
     values = np.asarray(explanation.values, dtype=float)
@@ -515,9 +516,13 @@ def compute_shap_torch(
     import shap
     import torch
     import torch.nn as nn
+    from cybench.models.torch.trainer import TorchTrainer
 
-    trainer = model
-    device = trainer.device
+    if not isinstance(model, TorchTrainer):
+        raise TypeError(
+            f"compute_shap_torch expects TorchTrainer, got {type(model).__name__}"
+        )
+    device = model.device
     rng = np.random.default_rng(seed)
     bg_idx = _subsample_indices(len(train_dataset), max_background, rng)
     eval_idx = _subsample_indices(len(test_dataset), max_eval_samples, rng)
@@ -550,7 +555,7 @@ def compute_shap_torch(
                 pred = pred.squeeze(-1)
             return pred.unsqueeze(-1)
 
-    predictor = _TorchPredictor(trainer.model).eval()
+    predictor = _TorchPredictor(model.model).eval()
     background = [bg_ctx, bg_ts, bg_doy]
     explainer = shap.GradientExplainer(predictor, background)
     shap_values = explainer.shap_values([eval_ctx, eval_ts, eval_doy])
@@ -766,15 +771,14 @@ def aggregate_feature_importance(records: Sequence[dict[str, Any]]) -> pd.DataFr
     if not rows:
         return pd.DataFrame()
     frame = pd.DataFrame(rows)
-    agg = (
-        frame.groupby(["model", "feature"], as_index=False)
-        .agg(
+    agg = cast(
+        pd.DataFrame,
+        frame.groupby(["model", "feature"], as_index=False).agg(
             median_mean_abs_shap=("mean_abs_shap", "median"),
             mean_rank=("rank", "mean"),
             n_origins=("origin", "nunique"),
-        )
-        .sort_values(["model", "median_mean_abs_shap"], ascending=[True, False])
-    )
+        ),
+    ).sort_values(["model", "median_mean_abs_shap"], ascending=[True, False])
     agg["aggregate_rank"] = (
         agg.groupby("model")["median_mean_abs_shap"]
         .rank(ascending=False, method="dense")

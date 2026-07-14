@@ -1,5 +1,8 @@
 # Dashboard publish pipeline — paths only (anunna / lustre).
 #
+# GitHub Pages clone: WUR-AI/AgML-CY-Bench-dashboard
+#   https://wur-ai.github.io/AgML-CY-Bench-dashboard/
+#
 # Targets are discovered from:
 #   {output_root}/baselines_{CC}_{eos|mid|qtr}_v{N}/   (per-country SLURM batches)
 # and, when present, walk-forward runs under:
@@ -12,7 +15,7 @@ defaults:
   version: 2
   output_root: /lustre/backup/SHARED/AIN/agml/output
   repo_root: /lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-AAAI
-  publish_root: /lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard
+  publish_root: /lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-dashboard
   min_run_fraction: 1.0
 
 # include:
