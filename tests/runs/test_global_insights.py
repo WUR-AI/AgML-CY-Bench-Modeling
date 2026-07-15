@@ -470,6 +470,8 @@ def test_build_insights_payload_structure(tmp_path: Path):
 
     payload = build_insights_payload(tmp_path, version=1)
     assert "leaderboards" in payload
+    assert "country_bootstrap" in payload
+    assert payload["country_bootstrap"].get("n_bootstrap") == 10_000
     assert payload["dashboard_hrefs"]["DE"]["eos"] == "de_walk_forward_eos_v1/dashboard.html"
     assert payload["dashboard_hrefs"]["DE"]["mid"] == "de_walk_forward_mid_v1/dashboard.html"
     assert len(payload["leaderboards"]["eos"]["all"]) == 2

@@ -389,8 +389,10 @@
       qtr: "Late season (~75% observed, 25% left)",
     };
     const horizonOrder = ["eos", "early", "mid", "qtr"];
+    const bootstrapHorizons = (DATA.country_bootstrap || {}).by_horizon || {};
     horizonOrder
-      .filter(hz => Object.prototype.hasOwnProperty.call(DATA.by_horizon || {}, hz))
+      .filter(hz => Object.prototype.hasOwnProperty.call(DATA.by_horizon || {}, hz)
+        || Object.prototype.hasOwnProperty.call(bootstrapHorizons, hz))
       .forEach(hz => {
         const opt = document.createElement("option");
         opt.value = hz;
@@ -399,11 +401,16 @@
       });
     if (DATA.by_horizon && DATA.by_horizon.eos) {
       horizonSelect.value = "eos";
+    } else if (bootstrapHorizons.eos) {
+      horizonSelect.value = "eos";
     }
 
     function populateCropOptions() {
       const hz = horizonSelect.value;
-      const crops = Object.keys(DATA.by_horizon[hz] || {});
+      let crops = Object.keys((DATA.by_horizon || {})[hz] || {});
+      if (!crops.length) {
+        crops = Object.keys(((DATA.country_bootstrap || {}).by_horizon || {})[hz] || {});
+      }
       cropSelect.innerHTML = "";
       const order = ["all", ...DATA.crops.filter(c => crops.includes(c))];
       order.filter(c => crops.includes(c)).forEach(crop => {

@@ -1732,6 +1732,7 @@ def build_insights_payload(output_root: Path, *, version: int = 2) -> dict[str, 
 
     country_map_cc = {str(cc): map_iso_for_cybencH(str(cc)) for cc in countries}
     benchmark_map_isos = sorted(set(country_map_cc.values()))
+    family_dashboard = build_radar_payload(output_root, version=version)
     return {
         "output_root": str(output_root.resolve()),
         "dashboard_hrefs": build_dashboard_hrefs(output_root, version=version),
@@ -1756,7 +1757,8 @@ def build_insights_payload(output_root: Path, *, version: int = 2) -> dict[str, 
         "map_coverage_note": MAP_COVERAGE_NOTE,
         "metric_map_scales": METRIC_MAP_SCALES,
         "horizon_delta_scales": HORIZON_DELTA_SCALES,
-        "family_dashboard": build_radar_payload(output_root, version=version),
+        "country_bootstrap": family_dashboard.get("country_bootstrap", {}),
+        "family_dashboard": family_dashboard,
     }
 
 

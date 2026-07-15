@@ -349,7 +349,7 @@
   <div class="page">
     <h1>CY-Bench global insights</h1>
     <p class="lead">Cross-country model comparison and walk-forward results across forecast horizons (early-, quarter-, mid-, and end-of-season).</p>
-    <p class="muted">Every model in the benchmark. Family-level summaries (training size, bootstrap) are in <a href="model_families.html">Model families</a>.</p>
+    <p class="muted">Every model in the benchmark. Training-set scaling is on <a href="model_families.html">Model families</a>.</p>
     <p class="muted" id="meta"></p>
 
     <div class="card">
@@ -635,6 +635,32 @@
       </div>
       <div class="table-scroll" id="crop-pair-detail-wrap"></div>
       <p class="muted note" id="crop-pair-delta-note"></p>
+    </div>
+
+    <div class="card" id="country-bootstrap-card">
+      <h2>Country-level AI advantage (bootstrap)</h2>
+      <p class="muted" id="bootstrap-note"></p>
+      <div class="table-scroll">
+        <table id="bootstrap-table">
+          <thead>
+            <tr>
+              <th>Crop</th>
+              <th>Countries</th>
+              <th>Traditional NRMSE (%)</th>
+              <th>Data-driven NRMSE (%)</th>
+              <th>Median improvement (%)</th>
+              <th>95% CI</th>
+              <th>AI win rate</th>
+              <th>95% CI</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="export-toolbar">
+        <button type="button" id="bootstrap-export-latex">Download table (LaTeX)</button>
+        <button type="button" id="bootstrap-export-latex-copy">Copy LaTeX</button>
+      </div>
     </div>
 
     <p class="muted">
@@ -1041,6 +1067,7 @@
     initHorizonToolbar(rq1HorizonToolbar, rq1Horizon, (hz) => {
       rq1Horizon = hz;
       renderRq1();
+      renderCountryBootstrapTable();
     });
 
     rq1MatrixCropFilter.addEventListener("change", () => {
@@ -1078,6 +1105,146 @@
     rq1ModelFilter.addEventListener("input", renderRq1);
     syncMatrixMetricControl();
     renderRq1();
+
+    const countryBootstrapCard = document.getElementById("country-bootstrap-card");
+    const bootstrapNote = document.getElementById("bootstrap-note");
+    const bootstrapTable = document.getElementById("bootstrap-table");
+    const bootstrapExportLatexBtn = document.getElementById("bootstrap-export-latex");
+    const bootstrapExportLatexCopyBtn = document.getElementById("bootstrap-export-latex-copy");
+    let bootstrapExportRows = [];
+
+    function bootstrapPayloadRoot() {
+      return DATA.country_bootstrap || (DATA.family_dashboard || {}).country_bootstrap || {};
+    }
+
+    function formatBootstrapNrmsePct(value) {
+      if (value == null || !Number.isFinite(value)) return "—";
+      return (100 * Number(value)).toFixed(1);
+    }
+
+    function formatBootstrapNum(value, digits = 1) {
+      if (value == null || !Number.isFinite(value)) return "—";
+      return Number(value).toFixed(digits);
+    }
+
+    function formatBootstrapCi(lo, hi, { digits = 1, percent = false } = {}) {
+      if (lo == null || hi == null || !Number.isFinite(lo) || !Number.isFinite(hi)) return "—";
+      if (percent) return `[${Math.round(100 * lo)}, ${Math.round(100 * hi)}]`;
+      return `[${Number(lo).toFixed(digits)}, ${Number(hi).toFixed(digits)}]`;
+    }
+
+    function currentBootstrapRows() {
+      const root = bootstrapPayloadRoot();
+      const byHz = (root.by_horizon || {})[rq1Horizon] || {};
+      return Object.keys(byHz).sort().map(crop => ({ crop, ...byHz[crop] }));
+    }
+
+    function renderCountryBootstrapTable() {
+      const root = bootstrapPayloadRoot();
+      const nBoot = root.n_bootstrap;
+      if (bootstrapNote) {
+        const note = root.note || (
+          "Best data-driven vs best traditional baseline per country; seed-averaged NRMSE."
+        );
+        bootstrapNote.textContent = nBoot
+          ? `${note} Bootstrap replicates: ${nBoot.toLocaleString()}.`
+          : note;
+      }
+      bootstrapExportRows = currentBootstrapRows();
+      if (countryBootstrapCard) {
+        countryBootstrapCard.style.display = bootstrapExportRows.length ? "" : "none";
+      }
+      if (!bootstrapTable) return;
+      const tbody = bootstrapTable.querySelector("tbody");
+      if (!bootstrapExportRows.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="muted">No bootstrap summary for horizon ${rq1Horizon}.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = bootstrapExportRows.map(row => {
+        const wr = row.win_rate;
+        return `<tr>
+          <td>${row.crop.charAt(0).toUpperCase() + row.crop.slice(1)}</td>
+          <td>${row.n_ai_wins ?? "—"}/${row.n_countries ?? "—"}</td>
+          <td>${formatBootstrapNrmsePct(row.median_nrmse_trad)}</td>
+          <td>${formatBootstrapNrmsePct(row.median_nrmse_ai)}</td>
+          <td>${formatBootstrapNum(row.median_delta_pct)}</td>
+          <td>${formatBootstrapCi(row.delta_pct_ci_lo, row.delta_pct_ci_hi)}</td>
+          <td>${wr == null ? "—" : `${Math.round(100 * wr)}%`}</td>
+          <td>${formatBootstrapCi(row.win_rate_ci_lo, row.win_rate_ci_hi, { percent: true })}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function escapeLatex(text) {
+      return String(text)
+        .replace(/\\/g, "\\textbackslash{}")
+        .replace(/[&%$#_{}]/g, ch => `\\${ch}`)
+        .replace(/~/g, "\\textasciitilde{}")
+        .replace(/\^/g, "\\textasciicircum{}");
+    }
+
+    function buildBootstrapTableLatex(rows) {
+      if (!rows.length) return "";
+      const hzLabel = (DATA.horizon_labels || {})[rq1Horizon] || rq1Horizon;
+      const nBoot = (bootstrapPayloadRoot().n_bootstrap || 10000).toLocaleString();
+      const bodyRows = rows.map(row => {
+        const trad = formatBootstrapNrmsePct(row.median_nrmse_trad);
+        const ai = formatBootstrapNrmsePct(row.median_nrmse_ai);
+        const wr = row.win_rate == null ? "---" : `${Math.round(100 * row.win_rate)}\\%`;
+        const wrCi = formatBootstrapCi(row.win_rate_ci_lo, row.win_rate_ci_hi, { percent: true });
+        const pctCi = formatBootstrapCi(row.delta_pct_ci_lo, row.delta_pct_ci_hi);
+        return `${row.crop.charAt(0).toUpperCase() + row.crop.slice(1)} & ${trad} & ${ai} & `
+          + `${formatBootstrapNum(row.median_delta_pct)} & ${pctCi} & ${wr} & ${wrCi} \\\\`;
+      }).join("\n");
+      return `% CY-Bench country-level AI bootstrap table (generated from dashboard)
+% Requires: \\usepackage{booktabs}
+\\begin{table}[t]
+\\centering
+\\caption{Country-level bootstrap summary of AI advantage over traditional baselines. Traditional and data-driven NRMSE are medians across countries of the best traditional (Average, Trend, LPJmL) and best data-driven model per country. Median improvement (\\%) is the median of $100\\times(\\mathrm{NRMSE}_{\\mathrm{trad}}-\\mathrm{NRMSE}_{\\mathrm{AI}})/\\mathrm{NRMSE}_{\\mathrm{trad}}$ per country. Horizon: ${escapeLatex(hzLabel)}. Bootstrap resamples countries ($B=${nBoot}$).}
+\\label{tab:ai_country_bootstrap}
+\\begin{tabular}{lcccccc}
+\\toprule
+Crop & Trad.\\ NRMSE (\\%) & AI NRMSE (\\%) & Median impr. (\\%) & 95\\% CI & AI win rate & 95\\% CI \\\\
+\\midrule
+${bodyRows}
+\\bottomrule
+\\end{tabular}
+\\end{table}
+`;
+    }
+
+    function downloadBootstrapTableLatex() {
+      const latex = buildBootstrapTableLatex(bootstrapExportRows);
+      if (!latex) return;
+      const blob = new Blob([latex], { type: "application/x-tex;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ai_country_bootstrap_${rq1Horizon}.tex`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    async function copyBootstrapTableLatex() {
+      const latex = buildBootstrapTableLatex(bootstrapExportRows);
+      if (!latex || !bootstrapExportLatexCopyBtn) return;
+      const original = bootstrapExportLatexCopyBtn.textContent;
+      try {
+        await navigator.clipboard.writeText(latex);
+        bootstrapExportLatexCopyBtn.textContent = "Copied!";
+        setTimeout(() => { bootstrapExportLatexCopyBtn.textContent = original; }, 1600);
+      } catch (_err) {
+        downloadBootstrapTableLatex();
+        bootstrapExportLatexCopyBtn.textContent = "Downloaded instead";
+        setTimeout(() => { bootstrapExportLatexCopyBtn.textContent = original; }, 1600);
+      }
+    }
+
+    if (bootstrapExportLatexBtn) bootstrapExportLatexBtn.addEventListener("click", downloadBootstrapTableLatex);
+    if (bootstrapExportLatexCopyBtn) bootstrapExportLatexCopyBtn.addEventListener("click", copyBootstrapTableLatex);
+    renderCountryBootstrapTable();
 
     // World map — per-country evaluation metrics
     let mapHorizon = rq1Horizon;
