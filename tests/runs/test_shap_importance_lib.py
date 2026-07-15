@@ -13,6 +13,7 @@ from cybench.runs.analysis.shap_importance_lib import (
     _aggregate_shapiq_first_order,
     _mean_abs_feature_importance,
     _rank_features,
+    MODEL_MANIFEST,
     aggregate_feature_importance,
     find_saved_model_artifact,
     find_screening_split_dir,
@@ -67,6 +68,8 @@ def test_interpretability_for_model_families():
     assert interpretability_for_model("tabpfn")["explainer_label"] == "TabPFNShapley"
     assert interpretability_for_model("transformer_lf")["method"] == "gradient_shap"
     assert interpretability_for_model("tabicl")["method"] == "sklearn_permutation"
+    assert interpretability_for_model("tabicl")["explainer_label"] == "PermutationImportance"
+    assert interpretability_for_model("tabdpt")["method"] == "sklearn_permutation"
     unknown = interpretability_for_model("xgboost")
     assert unknown["method"] == "permutation_shap"
 
@@ -82,6 +85,23 @@ def test_resolve_shap_sample_limits_tabpfn():
     )
     assert bg_rf == 50
     assert ev_rf == 80
+
+
+def test_model_manifest_includes_tabular_foundation_models():
+    for slug in ("tabpfn", "tabicl", "tabdpt"):
+        entry = MODEL_MANIFEST[slug]
+        assert entry["framework"] == "pandas"
+        assert entry["feature_design"] is True
+        assert entry["needs_gpu"] is True
+
+
+def test_resolve_shap_sample_limits_tabicl_and_tabdpt():
+    for slug in ("tabicl", "tabdpt"):
+        bg, ev = resolve_shap_sample_limits(
+            slug, max_background=50, max_eval_samples=80
+        )
+        assert bg == 25
+        assert ev == 20
 
 
 def test_model_run_name_random_forest():

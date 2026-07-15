@@ -203,6 +203,16 @@ MODEL_MANIFEST: dict[str, ModelManifestEntry] = {
         "feature_design": True,
         "needs_gpu": True,
     },
+    "tabicl": {
+        "framework": "pandas",
+        "feature_design": True,
+        "needs_gpu": True,
+    },
+    "tabdpt": {
+        "framework": "pandas",
+        "feature_design": True,
+        "needs_gpu": True,
+    },
     "transformer_lf": {
         "framework": "torch",
         "feature_design": False,

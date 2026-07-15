@@ -50,6 +50,8 @@ BASE_TO_META: dict[str, str] = {
 MODEL_LABELS: dict[str, str] = {
     "random_forest": "Random Forest",
     "tabpfn": "TabPFN",
+    "tabicl": "TabICL",
+    "tabdpt": "TabDPT",
     "transformer_lf": "Transformer",
 }
 
