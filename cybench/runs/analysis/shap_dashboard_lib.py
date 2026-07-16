@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import Any, TypedDict
 
 import pandas as pd
 
@@ -52,30 +53,102 @@ def _dashboard_key(dataset: str, model: str) -> str:
     return f"{dataset}|||{model}"
 
 
+def _batch_dir_name(*, crop: str, country: str, horizon: str) -> str:
+    return f"{crop}_{country.upper()}_{horizon}"
+
+
+def resolve_shap_input_dirs(
+    *,
+    shap_dir: Path | None,
+    output_root: Path | None,
+    summary_rows: list[dict[str, Any]],
+) -> list[Path]:
+    """Return SHAP batch dirs for every crop×country×horizon in ``summary_rows``.
+
+    Layout on disk is one directory per crop::
+
+        <output_root>/shap_importance/<crop>_<CC>_<horizon>/<crop>_<CC>/<model>/shap_summary.yaml
+
+    An explicit ``shap_dir`` (single batch or parent) is kept as-is when it exists.
+    Auto-discovery scans *all* crops in the summary — not only the first row.
+    """
+    if shap_dir is not None:
+        resolved = shap_dir.resolve()
+        return [resolved] if resolved.is_dir() else []
+    if output_root is None or not summary_rows:
+        return []
+
+    shap_root = output_root.resolve() / "shap_importance"
+    found: list[Path] = []
+    seen: set[str] = set()
+    for row in summary_rows:
+        crop = str(row.get("crop", ""))
+        country = str(row.get("country", "")).upper()
+        horizon = str(row.get("horizon", "eos"))
+        if not crop or not country:
+            continue
+        batch_name = _batch_dir_name(crop=crop, country=country, horizon=horizon)
+        if batch_name in seen:
+            continue
+        seen.add(batch_name)
+        candidate = shap_root / batch_name
+        if candidate.is_dir():
+            found.append(candidate)
+    return found
+
+
 def resolve_shap_input_dir(
     *,
     shap_dir: Path | None,
     output_root: Path | None,
     summary_rows: list[dict[str, Any]],
 ) -> Path | None:
-    """Return a SHAP output root, preferring an explicit path then auto-discovery."""
-    if shap_dir is not None:
-        resolved = shap_dir.resolve()
-        return resolved if resolved.is_dir() else None
-    if output_root is None or not summary_rows:
-        return None
-    row = summary_rows[0]
-    crop = str(row.get("crop", ""))
-    country = str(row.get("country", "")).upper()
-    horizon = str(row.get("horizon", "eos"))
-    if not crop or not country:
-        return None
-    candidate = output_root.resolve() / "shap_importance" / f"{crop}_{country}_{horizon}"
-    return candidate if candidate.is_dir() else None
+    """Return the first resolved SHAP batch dir (compat wrapper)."""
+    dirs = resolve_shap_input_dirs(
+        shap_dir=shap_dir,
+        output_root=output_root,
+        summary_rows=summary_rows,
+    )
+    return dirs[0] if dirs else None
 
 
 def _summary_path(shap_dir: Path, *, crop: str, country: str, model: str) -> Path:
     return shap_dir / f"{crop}_{country.upper()}" / model / "shap_summary.yaml"
+
+
+def _find_summary_path(
+    shap_dirs: Sequence[Path],
+    *,
+    crop: str,
+    country: str,
+    model: str,
+    horizon: str,
+) -> Path | None:
+    """Locate ``shap_summary.yaml`` for one summary row across batch dirs."""
+    country_u = country.upper()
+    batch_name = _batch_dir_name(crop=crop, country=country_u, horizon=horizon)
+    # Prefer the matching crop batch dir when several are provided.
+    ordered = sorted(
+        shap_dirs,
+        key=lambda path: (0 if path.name == batch_name else 1, path.name),
+    )
+    for shap_dir in ordered:
+        # Explicit parent ``shap_importance`` root: dig into the crop batch.
+        if shap_dir.name == "shap_importance":
+            candidate = (
+                shap_dir
+                / batch_name
+                / f"{crop}_{country_u}"
+                / model
+                / "shap_summary.yaml"
+            )
+            if candidate.is_file():
+                return candidate
+            continue
+        candidate = _summary_path(shap_dir, crop=crop, country=country_u, model=model)
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def _aggregate_top_features(summary: dict[str, Any], *, top_n: int = 15) -> list[ShapFeatureEntry]:
@@ -127,18 +200,37 @@ def _explainer_from_summary(summary: dict[str, Any]) -> str:
 
 
 def build_shap_dashboard_payload(
-    shap_dir: Path,
+    shap_dir: Path | Sequence[Path],
     summary_rows: list[dict[str, Any]],
     *,
     top_features: int = 15,
 ) -> ShapDashboardPayload:
-    """Build dashboard JSON keyed by ``dataset|||model`` from SHAP summaries."""
+    """Build dashboard JSON keyed by ``dataset|||model`` from SHAP summaries.
+
+    ``shap_dir`` may be one batch directory or several (one per crop). Summary
+    paths are resolved per row so maize and wheat for the same country both load.
+    """
+    shap_dirs = (
+        [shap_dir]
+        if isinstance(shap_dir, Path)
+        else [Path(path) for path in shap_dir]
+    )
+    shap_dirs = [path for path in shap_dirs if path.is_dir()]
+    shap_dir_label = (
+        None
+        if not shap_dirs
+        else (
+            str(shap_dirs[0])
+            if len(shap_dirs) == 1
+            else ",".join(str(path) for path in shap_dirs)
+        )
+    )
     empty: ShapDashboardPayload = {
         "available": False,
-        "shap_dir": str(shap_dir),
+        "shap_dir": shap_dir_label,
         "by_key": {},
     }
-    if not shap_dir.is_dir() or not summary_rows:
+    if not shap_dirs or not summary_rows:
         return empty
 
     summary_paths: list[Path] = []
@@ -151,8 +243,14 @@ def build_shap_dashboard_payload(
         horizon = str(row.get("horizon", "eos"))
         if not crop or not country or not model or not dataset:
             continue
-        summary_path = _summary_path(shap_dir, crop=crop, country=country, model=model)
-        if not summary_path.is_file():
+        summary_path = _find_summary_path(
+            shap_dirs,
+            crop=crop,
+            country=country,
+            model=model,
+            horizon=horizon,
+        )
+        if summary_path is None:
             continue
         summary_paths.append(summary_path)
         summary = load_shap_summary(summary_path)
@@ -199,7 +297,7 @@ def build_shap_dashboard_payload(
 
     return ShapDashboardPayload(
         available=True,
-        shap_dir=str(shap_dir),
+        shap_dir=shap_dir_label,
         by_key=by_key,
     )
 

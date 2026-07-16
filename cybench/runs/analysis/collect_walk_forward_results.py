@@ -58,7 +58,7 @@ from cybench.runs.analysis.benchmark_run_catalog import (
 from cybench.runs.analysis.shap_dashboard_lib import (
     ShapDashboardPayload,
     build_shap_dashboard_payload,
-    resolve_shap_input_dir,
+    resolve_shap_input_dirs,
     write_shap_sidecar,
 )
 from cybench.runs.viz.build_results_dashboard import (
@@ -491,14 +491,14 @@ def write_model_comparison_dashboard(
     if not records:
         raise ValueError("No summary rows available for dashboard.")
     map_payload = build_region_map_payload(output_dir, summary_rows)
-    resolved_shap_dir = resolve_shap_input_dir(
+    resolved_shap_dirs = resolve_shap_input_dirs(
         shap_dir=shap_dir,
         output_root=output_root,
         summary_rows=summary_rows,
     )
     shap_payload: ShapDashboardPayload = (
-        build_shap_dashboard_payload(resolved_shap_dir, summary_rows)
-        if resolved_shap_dir is not None
+        build_shap_dashboard_payload(resolved_shap_dirs, summary_rows)
+        if resolved_shap_dirs
         else ShapDashboardPayload(available=False, shap_dir=None, by_key={})
     )
     write_shap_sidecar(output_dir, shap_payload)
