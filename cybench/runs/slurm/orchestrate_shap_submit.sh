@@ -63,12 +63,26 @@ shap_model_tag() {
   esac
 }
 
+shap_origins_tag() {
+  local origins_list=$1
+  local -a years=()
+  read -r -a years <<< "${origins_list}"
+  if [[ ${#years[@]} -eq 0 ]]; then
+    echo "na"
+  elif [[ ${#years[@]} -eq 1 ]]; then
+    echo "${years[0]}"
+  else
+    echo "${years[0]}-${years[${#years[@]} - 1]}"
+  fi
+}
+
 shap_job_name() {
-  local crop=$1 country=$2 model=$3
-  local tag
+  local crop=$1 country=$2 model=$3 origins_list=$4
+  local tag years_tag
   tag="$(shap_model_tag "${model}")"
-  # Slurm job names are limited; crop×country×model slug is enough to grep sacct/squeue.
-  echo "shap_${crop}_${country}_${tag}"
+  years_tag="$(shap_origins_tag "${origins_list}")"
+  # crop×country×model×years; keep under Slurm's ~64-char job-name limit.
+  echo "shap_${crop}_${country}_${tag}_${years_tag}"
 }
 
 LIST_ONLY=false
@@ -192,7 +206,7 @@ for line in "${PLAN_LINES[@]}"; do
     break
   fi
 
-  job_name="$(shap_job_name "${CROP}" "${CC}" "${MODEL}")"
+  job_name="$(shap_job_name "${CROP}" "${CC}" "${MODEL}" "${ORIGINS_LIST}")"
   mem="${SLURM_MEM:-32G}"
   sbatch_args=(
     --job-name="${job_name}"
