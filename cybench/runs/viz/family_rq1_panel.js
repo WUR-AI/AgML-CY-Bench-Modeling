@@ -438,17 +438,13 @@
   function mapExportMeta() {
     const hzLabel = horizonLabels[famHorizon] || famHorizon;
     const cropLabel = famCrop === "all" ? "all crops" : famCrop;
-    const modeLabel = mapMode === "benefit"
-      ? "AI error reduction vs naive baselines / LPJmL"
-      : `Winning family · ${winnerAspect}`;
+    const modeLabel = `Winning family · ${winnerAspect}`;
     return { hz: famHorizon, crop: famCrop, hzLabel, cropLabel, modeLabel };
   }
 
   function mapExportFilename(ext) {
     const { hz, crop } = mapExportMeta();
-    const modeSlug = mapMode === "benefit"
-      ? "ai-benefit"
-      : `winner-${winnerAspect.toLowerCase().replace(/\s+/g, "-")}`;
+    const modeSlug = `winner-${winnerAspect.toLowerCase().replace(/\s+/g, "-")}`;
     return `cybench-map_${hz}_${crop}_${modeSlug}.${ext}`;
   }
 
@@ -580,9 +576,7 @@
     const padB = MAP_EXPORT_PAD_B;
     const totalH = MAP_HEIGHT + padT + padB;
     const legendY = padT + MAP_HEIGHT + 6;
-    const legendSvg = mapMode === "benefit"
-      ? buildBenefitLegendSvg(legendY)
-      : buildWinnerLegendSvg(legendY);
+    const legendSvg = buildWinnerLegendSvg(legendY);
     const mapContent = mapNode.innerHTML;
     const exportW = MAP_WIDTH * exportScale;
     const exportH = totalH * exportScale;

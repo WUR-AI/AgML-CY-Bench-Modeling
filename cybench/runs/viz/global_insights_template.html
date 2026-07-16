@@ -641,15 +641,7 @@
         <div class="table-scroll" id="horizon-models-table-wrap"></div>
         <p class="muted note" id="horizon-models-metric-note"></p>
         <h3 style="font-size:1rem;margin:1.5rem 0 0.5rem;">By family (median across countries)</h3>
-        <p class="muted" id="horizon-curves-note" style="display:none"></p>
-        <div class="controls" style="display:none">
-          <label>Crop <select id="horizon-curves-crop"></select></label>
-          <select id="horizon-curves-metric"><option value="nrmse">NRMSE</option></select>
-          <div class="toolbar" id="horizon-curves-axis-toolbar"></div>
-        </div>
-        <p class="muted" id="horizon-curves-meta" style="display:none"></p>
-        <div class="curve-chart-wrap" id="horizon-curves-chart" style="display:none"></div>
-        <div class="curve-legend" id="horizon-curves-legend" style="display:none"></div>
+        <p class="muted" id="horizon-curves-meta"></p>
         <div class="table-scroll" id="horizon-curves-table-wrap"></div>
         <p class="muted note" id="horizon-curves-metric-note"></p>
         <h3 style="font-size:1rem;margin:1.5rem 0 0.5rem;">By region (median across countries)</h3>
@@ -696,31 +688,6 @@
           <label>Crop <select id="rq4-crop"></select></label>
         </div>
         <div class="scatter-panel" id="rq4-scatter-panel"></div>
-      </div>
-    </div>
-
-    <p class="muted">
-      <a href="index.html">← Back to country dashboards</a>
-    </p>
-  </div>
-
->
-                <th>Countries</th>
-                <th>Traditional NRMSE (%)</th>
-                <th>Data-driven NRMSE (%)</th>
-                <th>Median improvement (%)</th>
-                <th>95% CI</th>
-                <th>AI win rate</th>
-                <th>95% CI</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div class="export-toolbar">
-          <button type="button" id="bootstrap-export-latex">Download table (LaTeX)</button>
-          <button type="button" id="bootstrap-export-latex-copy">Copy LaTeX</button>
-        </div>
       </div>
     </div>
 
@@ -2331,16 +2298,9 @@
     }
 
     const HSC = DATA.horizon_skill_curves || {};
-    const hscNote = document.getElementById("horizon-curves-note");
     const hscMeta = document.getElementById("horizon-curves-meta");
-    const hscChart = document.getElementById("horizon-curves-chart");
-    const hscLegend = document.getElementById("horizon-curves-legend");
     const hscTableWrap = document.getElementById("horizon-curves-table-wrap");
     const hscMetricNote = document.getElementById("horizon-curves-metric-note");
-    const hscCropSelect = document.getElementById("horizon-curves-crop");
-    const hscAxisToolbar = document.getElementById("horizon-curves-axis-toolbar");
-    const hscMetricWrap = document.getElementById("horizon-curves-metric-wrap");
-    const hscMetricSelect = document.getElementById("horizon-curves-metric");
     const hscContinentNote = document.getElementById("horizon-continent-note");
     const hscContinentMeta = document.getElementById("horizon-continent-meta");
     const hscContinentTableWrap = document.getElementById("horizon-continent-table-wrap");
@@ -2381,22 +2341,6 @@
       const axis = hscAxisDef(hscAxis);
       const spec = (axis.metrics || []).find(m => m.id === metricId);
       return spec?.column || metricId;
-    }
-
-    function syncHscMetricControl() {
-      const axis = hscAxisDef(hscAxis);
-      const metrics = axis.metrics || [];
-      const showPicker = metrics.length > 1;
-      hscMetricWrap.style.display = showPicker ? "" : "none";
-      if (!showPicker) {
-        hscMetric = metrics[0]?.id || "nrmse";
-        return;
-      }
-      const options = metrics.map(m => `<option value="${m.id}">${m.label} (median)</option>`).join("");
-      const prev = hscMetric;
-      hscMetricSelect.innerHTML = options;
-      hscMetric = metrics.some(m => m.id === prev) ? prev : metrics[0].id;
-      hscMetricSelect.value = hscMetric;
     }
 
     function hscMetricValue(point, metricId) {
@@ -2473,7 +2417,6 @@
       renderSortableTable(container, tableCols, sortedRows, sortKey, sortDir, onSort);
     }
 
-    hscNote.textContent = HSC.note || "Horizon skill curves require at least two collected horizons.";
     if (hscContinentNote) {
       hscContinentNote.textContent = (DATA.continent_horizons || {}).note || (
         "Family representatives by continent (median across countries in each region)."
@@ -2481,31 +2424,19 @@
     }
 
     const hscCropKeys = Object.keys(HSC.by_crop || {});
-    if (hscCropKeys.length) {
-      hscCropSelect.innerHTML = hscCropKeys.map(c => {
-        const label = c === "all" ? "All crops" : c.charAt(0).toUpperCase() + c.slice(1);
-        return `<option value="${c}">${label}</option>`;
-      }).join("");
-      hscCrop = hscCropKeys.includes("all") ? "all" : hscCropKeys[0];
-      hscCropSelect.value = hscCrop;
-    } else {
-      hscCropSelect.innerHTML = `<option value="all">All crops</option>`;
-    }
 
-    function renderHorizonSkillCurves() {
+    function renderHorizonFamilyTable() {
       const slice = (HSC.by_crop || {})[hscCrop] || { families: [], n_countries: 0, countries: [] };
       const horizons = HSC.horizons || [];
       const metricNotes = HSC.metric_notes || {};
       const metricCol = hscMetricColumn(hscMetric);
       const axisDef = hscAxisDef(hscAxis);
-      const metricDef = hscMetricSpec();
-      const plotFamilies = (slice.families || []).filter(fam => fam.plot !== false);
       const tableFamilies = slice.families || [];
       let metricNote = metricNotes[metricCol] || metricNotes[hscMetric] || axisDef.note || "";
       if (HSC.plot_excluded_note && (slice.families || []).some(fam => fam.eos_only)) {
         metricNote = metricNote ? `${metricNote} ${HSC.plot_excluded_note}` : HSC.plot_excluded_note;
       }
-      hscMetricNote.textContent = metricNote;
+      if (hscMetricNote) hscMetricNote.textContent = metricNote;
 
       const reps = HSC.representatives_summary || "";
       const excluded = slice.excluded_countries || [];
@@ -2515,37 +2446,16 @@
         meta += ` · Excluded (incomplete horizons): ${excluded.slice(0, 8).join(", ")}`;
         if (excluded.length > 8) meta += ` +${excluded.length - 8} more`;
       }
-      hscMeta.textContent = meta;
+      if (hscMeta) hscMeta.textContent = meta;
 
-      if (!tableFamilies.length || horizons.length < 2) {
-        hscChart.innerHTML = `<p class="muted">Not enough paired horizon data for this crop.</p>`;
-        hscLegend.innerHTML = "";
-        hscTableWrap.innerHTML = `<p class="muted">No horizon table for this crop.</p>`;
+      if (!hscTableWrap) {
         renderHorizonContinentTable();
         return;
       }
-
-      if (!plotFamilies.length) {
-        hscChart.innerHTML = `<p class="muted">No multi-horizon families to plot for this crop.</p>`;
-        hscLegend.innerHTML = "";
-      } else {
-        const chart = buildHorizonCurvesSvg({
-          series: plotFamilies,
-          horizons,
-          metricId: hscMetric,
-          metricValueFn: hscMetricValue,
-          metricIqrFn: hscMetricIqr,
-          metricLabel: metricDef.label || hscMetric,
-          colorFn: (fam) => fam.color || "#457b9d",
-          labelFn: (fam) => `${fam.family} (${fam.display})`,
-        });
-        if (!chart) {
-          hscChart.innerHTML = `<p class="muted">No metric values for this selection.</p>`;
-          hscLegend.innerHTML = "";
-        } else {
-          hscChart.innerHTML = chart.svg;
-          hscLegend.innerHTML = chart.legend;
-        }
+      if (!tableFamilies.length || horizons.length < 2) {
+        hscTableWrap.innerHTML = `<p class="muted">No horizon table for this crop.</p>`;
+        renderHorizonContinentTable();
+        return;
       }
 
       renderHorizonPointsTable({
@@ -2565,7 +2475,7 @@
             hscTableSort = key;
             hscTableDir = key === "family" || key === "model" ? "asc" : "desc";
           }
-          renderHorizonSkillCurves();
+          renderHorizonFamilyTable();
         },
         metricId: hscMetric,
         metricCol,
@@ -2623,27 +2533,7 @@
       });
     }
 
-    if (hscCropSelect) hscCropSelect.addEventListener("change", () => {
-      hscCrop = hscCropSelect.value || "all";
-      renderHorizonSkillCurves();
-    });
-    if (hscAxisToolbar) hscAxisToolbar.querySelectorAll("button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        hscAxisToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        hscAxis = btn.dataset.axis || "overall";
-        syncHscMetricControl();
-        renderHorizonSkillCurves();
-      });
-    });
-    hscMetricSelect.addEventListener("change", () => {
-      hscMetric = hscMetricSelect.value || "nrmse";
-      renderHorizonSkillCurves();
-    });
-    syncHscMetricControl();
-    renderHorizonSkillCurves();
-
-    // All models horizon plot + table
+    // All models horizon plot + table (shared crop/axis/metric with family & region tables)
     const hmNote = document.getElementById("horizon-models-note");
     const hmPlotNote = document.getElementById("horizon-models-plot-note");
     const hmPlotMeta = document.getElementById("horizon-models-plot-meta");
@@ -2670,23 +2560,30 @@
     const hmSelectedByCrop = {};
     let hmPickerFilterText = "";
 
-    hmNote.textContent = HSC.models_table_note || (
-      "Median per metric across countries at each forecast horizon."
-    );
-    hmPlotNote.textContent = HSC.models_plot_note || (
-      "Select models below to compare horizon curves. Default: EOS family representatives."
-    );
-
-    if (hscCropKeys.length) {
-      hmCropSelect.innerHTML = hscCropKeys.map(c => {
-        const label = c === "all" ? "All crops" : c.charAt(0).toUpperCase() + c.slice(1);
-        return `<option value="${c}">${label}</option>`;
-      }).join("");
-      hmCrop = hscCropKeys.includes("all") ? "all" : hscCropKeys[0];
-      hmCropSelect.value = hmCrop;
-    } else {
-      hmCropSelect.innerHTML = `<option value="all">All crops</option>`;
+    if (hmNote) {
+      hmNote.textContent = HSC.models_table_note || (
+        "Median per metric across countries at each forecast horizon."
+      );
     }
+    if (hmPlotNote) {
+      hmPlotNote.textContent = HSC.models_plot_note || (
+        "Select models below to compare horizon curves. Default: EOS family representatives."
+      );
+    }
+
+    if (hmCropSelect) {
+      if (hscCropKeys.length) {
+        hmCropSelect.innerHTML = hscCropKeys.map(c => {
+          const label = c === "all" ? "All crops" : c.charAt(0).toUpperCase() + c.slice(1);
+          return `<option value="${c}">${label}</option>`;
+        }).join("");
+        hmCrop = hscCropKeys.includes("all") ? "all" : hscCropKeys[0];
+        hmCropSelect.value = hmCrop;
+      } else {
+        hmCropSelect.innerHTML = `<option value="all">All crops</option>`;
+      }
+    }
+    hscCrop = hmCrop;
 
     function hmMetricColumn(metricId) {
       const axis = hscAxisDef(hmAxis);
@@ -2729,6 +2626,7 @@
     }
 
     function renderHorizonModelsPicker(allModels) {
+      if (!hmPicker) return;
       const selected = hmSelectedSet(hmCrop, allModels);
       const fq = hmPickerFilterText.trim().toLowerCase();
       const byFamily = new Map();
@@ -2781,10 +2679,10 @@
       const metricDef = hscMetricSpec();
       const allModels = slice.models || [];
       const selected = hmSelectedSet(hmCrop, allModels);
-      renderHorizonModelsPicker(allModels);
+      if (hmPicker) renderHorizonModelsPicker(allModels);
 
       let models = allModels;
-      const mq = hmModelFilter.value.trim().toLowerCase();
+      const mq = (hmModelFilter?.value || "").trim().toLowerCase();
       if (mq) {
         models = models.filter(m =>
           m.model.toLowerCase().includes(mq) || String(m.display || "").toLowerCase().includes(mq)
@@ -2795,43 +2693,48 @@
       if (HSC.plot_excluded_note && allModels.some(m => m.eos_only)) {
         metricNote = metricNote ? `${metricNote} ${HSC.plot_excluded_note}` : HSC.plot_excluded_note;
       }
-      hmMetricNote.textContent = metricNote;
+      if (hmMetricNote) hmMetricNote.textContent = metricNote;
 
       const plotModels = allModels.filter(m => selected.has(m.model));
-      hmPlotMeta.textContent = horizons.length < 2
-        ? "Need at least two horizons to plot curves."
-        : `${plotModels.length} model${plotModels.length === 1 ? "" : "s"} selected · * = EOS family representative`;
+      if (hmPlotMeta) {
+        hmPlotMeta.textContent = horizons.length < 2
+          ? "Need at least two horizons to plot curves."
+          : `${plotModels.length} model${plotModels.length === 1 ? "" : "s"} selected · * = EOS family representative`;
+      }
 
-      if (horizons.length < 2) {
-        hmChart.innerHTML = `<p class="muted">Not enough horizon data to plot.</p>`;
-        hmLegend.innerHTML = "";
-      } else if (!plotModels.length) {
-        hmChart.innerHTML = `<p class="muted">Select one or more models to plot.</p>`;
-        hmLegend.innerHTML = "";
-      } else {
-        const chart = buildHorizonCurvesSvg({
-          series: plotModels,
-          horizons,
-          metricId: hmMetric,
-          metricValueFn: hmMetricValue,
-          metricIqrFn: hmMetricIqr,
-          metricLabel: metricDef.label || hmMetric,
-          colorFn: modelPlotColor,
-          labelFn: (m) => m.display || m.model,
-        });
-        if (!chart) {
-          hmChart.innerHTML = `<p class="muted">No metric values for selected models.</p>`;
-          hmLegend.innerHTML = "";
+      if (hmChart) {
+        if (horizons.length < 2) {
+          hmChart.innerHTML = `<p class="muted">Not enough horizon data to plot.</p>`;
+          if (hmLegend) hmLegend.innerHTML = "";
+        } else if (!plotModels.length) {
+          hmChart.innerHTML = `<p class="muted">Select one or more models to plot.</p>`;
+          if (hmLegend) hmLegend.innerHTML = "";
         } else {
-          hmChart.innerHTML = chart.svg;
-          hmLegend.innerHTML = chart.legend;
+          const chart = buildHorizonCurvesSvg({
+            series: plotModels,
+            horizons,
+            metricId: hmMetric,
+            metricValueFn: hmMetricValue,
+            metricIqrFn: hmMetricIqr,
+            metricLabel: metricDef.label || hmMetric,
+            colorFn: modelPlotColor,
+            labelFn: (m) => m.display || m.model,
+          });
+          if (!chart) {
+            hmChart.innerHTML = `<p class="muted">No metric values for selected models.</p>`;
+            if (hmLegend) hmLegend.innerHTML = "";
+          } else {
+            hmChart.innerHTML = chart.svg;
+            if (hmLegend) hmLegend.innerHTML = chart.legend;
+          }
         }
       }
 
       let meta = `${allModels.length} model${allModels.length === 1 ? "" : "s"} in table`;
       if (mq) meta += ` · ${models.length} after table filter`;
-      hmMeta.textContent = meta;
+      if (hmMeta) hmMeta.textContent = meta;
 
+      if (!hmTableWrap) return;
       if (!models.length || horizons.length < 2) {
         hmTableWrap.innerHTML = `<p class="muted">No horizon model table for this crop.</p>`;
         return;
@@ -2867,16 +2770,27 @@
       const axis = hscAxisDef(hmAxis);
       const metrics = axis.metrics || [];
       const showPicker = metrics.length > 1;
-      hmMetricWrap.style.display = showPicker ? "" : "none";
+      if (hmMetricWrap) hmMetricWrap.style.display = showPicker ? "" : "none";
       if (!showPicker) {
         hmMetric = metrics[0]?.id || "nrmse";
+        hscMetric = hmMetric;
         return;
       }
+      if (!hmMetricSelect) return;
       const options = metrics.map(m => `<option value="${m.id}">${m.label} (median)</option>`).join("");
       const prev = hmMetric;
       hmMetricSelect.innerHTML = options;
       hmMetric = metrics.some(m => m.id === prev) ? prev : metrics[0].id;
       hmMetricSelect.value = hmMetric;
+      hscMetric = hmMetric;
+    }
+
+    function renderHorizonSharedViews() {
+      hscCrop = hmCrop;
+      hscAxis = hmAxis;
+      hscMetric = hmMetric;
+      renderHorizonModelsView();
+      renderHorizonFamilyTable();
     }
 
     if (hmSelectReps) hmSelectReps.addEventListener("click", () => {
@@ -2905,26 +2819,24 @@
       hmAxisSelect.addEventListener("change", () => {
         hmAxis = hmAxisSelect.value || "overall";
         syncHmMetricControl();
-        renderHorizonModelsView();
+        renderHorizonSharedViews();
       });
     }
     if (hmCropSelect) {
       hmCropSelect.addEventListener("change", () => {
         hmCrop = hmCropSelect.value || "all";
-        renderHorizonModelsView();
+        renderHorizonSharedViews();
       });
     }
     if (hmMetricSelect) {
       hmMetricSelect.addEventListener("change", () => {
         hmMetric = hmMetricSelect.value || "nrmse";
-        renderHorizonModelsView();
+        renderHorizonSharedViews();
       });
     }
     if (hmModelFilter) hmModelFilter.addEventListener("input", renderHorizonModelsView);
-    if (hmChart || hmTableWrap) {
-      syncHmMetricControl();
-      renderHorizonModelsView();
-    }
+    syncHmMetricControl();
+    renderHorizonSharedViews();
 
     } // end PAGE === horizon
 
