@@ -15,7 +15,7 @@
 #SBATCH --job-name=cybench_shap_o
 #SBATCH --output=output/shap_importance/out_%A_%a.txt
 #SBATCH --error=output/shap_importance/err_%A_%a.txt
-#SBATCH --mem-per-cpu=4G
+#SBATCH --mem=32G
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --time=04:00:00

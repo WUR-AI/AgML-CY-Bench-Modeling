@@ -52,6 +52,25 @@ fi
 SHAP_ARRAY="${SLURM_DIR}/shap_importance_array.sh"
 PLAN_PY="${SLURM_DIR}/shap_submit_lib.py"
 
+shap_model_tag() {
+  case "$1" in
+    random_forest) echo "rf" ;;
+    transformer_lf) echo "trf" ;;
+    tabpfn) echo "tabpfn" ;;
+    tabicl) echo "tabicl" ;;
+    tabdpt) echo "tabdpt" ;;
+    *) echo "${1//_/-}" ;;
+  esac
+}
+
+shap_job_name() {
+  local crop=$1 country=$2 model=$3
+  local tag
+  tag="$(shap_model_tag "${model}")"
+  # Slurm job names are limited; crop×country×model slug is enough to grep sacct/squeue.
+  echo "shap_${crop}_${country}_${tag}"
+}
+
 LIST_ONLY=false
 DRY_RUN=false
 FORCE=false
@@ -173,10 +192,13 @@ for line in "${PLAN_LINES[@]}"; do
     break
   fi
 
-  sbatch_args=(--array="${ARRAY_SPEC}")
-  if [[ -n "${SLURM_MEM}" ]]; then
-    sbatch_args+=(--mem="${SLURM_MEM}")
-  fi
+  job_name="$(shap_job_name "${CROP}" "${CC}" "${MODEL}")"
+  mem="${SLURM_MEM:-32G}"
+  sbatch_args=(
+    --job-name="${job_name}"
+    --array="${ARRAY_SPEC}"
+    --mem="${mem}"
+  )
 
   export CROP="${CROP}"
   export COUNTRY="${CC}"
@@ -200,7 +222,11 @@ for line in "${PLAN_LINES[@]}"; do
 done
 
 echo ""
-echo "[DONE] Submitted ${submitted} SHAP array job(s)"
+if [[ "${DRY_RUN}" == true ]]; then
+  echo "[DONE] Would submit ${submitted} SHAP array job(s)"
+else
+  echo "[DONE] Submitted ${submitted} SHAP array job(s)"
+fi
 
 if [[ "${COLLECT}" == true && ${#COLLECT_PAIRS[@]} -gt 0 ]]; then
   echo ""

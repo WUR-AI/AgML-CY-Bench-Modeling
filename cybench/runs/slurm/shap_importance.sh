@@ -13,7 +13,7 @@
 #SBATCH --job-name=cybench_shap
 #SBATCH --output=output/shap_importance/out_%j.txt
 #SBATCH --error=output/shap_importance/err_%j.txt
-#SBATCH --mem-per-cpu=4G
+#SBATCH --mem=32G
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --time=1-00:00:00
