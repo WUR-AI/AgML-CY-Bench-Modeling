@@ -13,6 +13,10 @@ from cybench.config import DATASETS, PATH_DATA_DIR
 
 # Countries with at least this many regions use the gpu SLURM partition for torch/TabPFN.
 DEFAULT_GPU_REGION_THRESHOLD = 350
+# Very large countries (BR, US) need more host RAM for tabular-foundation / big panels.
+VERY_LARGE_REGION_THRESHOLD = 2000
+DEFAULT_SLURM_MEM_LARGE_REGIONS = "64G"
+DEFAULT_SLURM_MEM_VERY_LARGE_REGIONS = "96G"
 
 _BATCH_RE = re.compile(
     r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid|qtr|early)_v(?P<version>\d+)$"
@@ -141,6 +145,63 @@ def gpu_partition_for_batch(
         data_dir=data_dir,
     )
     return use_gpu, n_regions, country
+
+
+def slurm_memory_for_country(
+    country: str,
+    *,
+    region_threshold: int = DEFAULT_GPU_REGION_THRESHOLD,
+    very_large_threshold: int = VERY_LARGE_REGION_THRESHOLD,
+    data_dir: Path | None = None,
+) -> str | None:
+    """Host RAM for GPU jobs; None keeps walk_forward.sh mem-per-cpu defaults."""
+    n_regions = count_regions(country, data_dir)
+    if n_regions >= very_large_threshold:
+        return DEFAULT_SLURM_MEM_VERY_LARGE_REGIONS
+    if n_regions >= region_threshold:
+        return DEFAULT_SLURM_MEM_LARGE_REGIONS
+    return None
+
+
+def countries_in_manifest(path: Path) -> set[str]:
+    countries: set[str] = set()
+    if not path.is_file():
+        return countries
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) >= 2:
+            countries.add(parts[1].upper())
+    return countries
+
+
+def slurm_memory_for_manifest(
+    manifest_path: Path,
+    *,
+    region_threshold: int = DEFAULT_GPU_REGION_THRESHOLD,
+    very_large_threshold: int = VERY_LARGE_REGION_THRESHOLD,
+    data_dir: Path | None = None,
+) -> str | None:
+    """Pick the largest memory tier required by any country in a manifest."""
+    tiers = (
+        DEFAULT_SLURM_MEM_VERY_LARGE_REGIONS,
+        DEFAULT_SLURM_MEM_LARGE_REGIONS,
+    )
+    best: str | None = None
+    for country in sorted(countries_in_manifest(manifest_path)):
+        mem = slurm_memory_for_country(
+            country,
+            region_threshold=region_threshold,
+            very_large_threshold=very_large_threshold,
+            data_dir=data_dir,
+        )
+        if mem is None:
+            continue
+        if best is None or tiers.index(mem) < tiers.index(best):
+            best = mem
+    return best
 
 
 def count_regions(country: str, data_dir: Path | None = None) -> int:

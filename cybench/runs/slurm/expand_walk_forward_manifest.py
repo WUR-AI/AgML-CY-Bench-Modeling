@@ -32,6 +32,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--output-root", type=Path)
     parser.add_argument("--repo-root", type=Path, default=_REPO_ROOT)
+    parser.add_argument(
+        "--per-year-large",
+        action="store_true",
+        help="For countries with many regions, one SLURM task per seed and forecast year",
+    )
+    parser.add_argument(
+        "--region-threshold",
+        type=int,
+        default=350,
+        help="Region count at which per-year walk-forward expansion applies",
+    )
     args = parser.parse_args(argv)
 
     repo_root = args.repo_root.resolve()
@@ -47,10 +58,12 @@ def main(argv: list[str] | None = None) -> int:
         total_repetitions=args.repetitions,
         resume=args.resume,
         per_seed_for_gpu=args.per_seed,
+        per_year_for_large_countries=args.per_year_large,
+        region_threshold=args.region_threshold,
     )
     header = (
-        "# crop country model framework hp_search feature_design needs_gpu [seed]\n"
-        "# GPU rows: one SLURM task per seed. CPU/naive: bundled (no seed column)."
+        "# crop country model framework hp_search feature_design needs_gpu [seed] [origin_year]\n"
+        "# GPU rows: one SLURM task per seed (× forecast year for large countries)."
     )
     args.output.write_text(
         header + ("\n" + "\n".join(lines) if lines else "") + "\n",

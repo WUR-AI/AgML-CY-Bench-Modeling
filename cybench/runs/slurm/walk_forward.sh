@@ -5,6 +5,7 @@
 #   ../output/<batch>/<crop>_<country>_<model>_screening_<horizon>_<timestamp>/<test_years>/optimal_model.yaml
 #
 # GPU manifest rows with an 8th column (seed) run one seed per SLURM task.
+# Large countries (≥350 regions): optional 9th column (forecast year) for parallel origins.
 # CPU/naive manifests bundle seeds in one task (experiment.n_repetitions).
 #
 # Submit after screening jobs finished:
@@ -54,7 +55,7 @@ WF_START_SEED="${WF_BASE_SEED}"
 WF_RUN_REPS="${WF_REPETITIONS}"
 
 if [[ -n "${WF_SEED:-}" ]]; then
-  plan_walk_forward_single_seed "${CROP}" "${COUNTRY}" "${MODEL}" "${WF_SEED}"
+  plan_walk_forward_single_seed "${CROP}" "${COUNTRY}" "${MODEL}" "${WF_SEED}" "${WF_ORIGIN:-}"
   wf_plan_rc=$?
   case "${wf_plan_rc}" in
     0) ;;
@@ -72,6 +73,9 @@ fi
 seed_note=" | seed=${WF_START_SEED}"
 if [[ -n "${WF_SEED:-}" ]]; then
   seed_note=" | task_seed=${WF_SEED}"
+  if [[ -n "${WF_ORIGIN:-}" ]]; then
+    seed_note+=" | origin=${WF_ORIGIN}"
+  fi
 elif [[ "${WF_RUN_REPS}" != "1" ]]; then
   seed_note=" | seeds=${WF_START_SEED}..$((WF_START_SEED + WF_RUN_REPS - 1))"
 fi
@@ -92,6 +96,9 @@ COMMON=(
 
 configure_parallelism COMMON
 EXTRA=()
+if [[ -n "${WF_ORIGIN:-}" ]]; then
+  EXTRA+=("validation.test_years=[${WF_ORIGIN}]")
+fi
 if [[ -n "${WF_RUN_DIR}" ]]; then
   EXTRA+=("hydra.run.dir=${WF_RUN_DIR}")
 fi

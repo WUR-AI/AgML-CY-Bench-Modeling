@@ -9,6 +9,8 @@ SLURM_GPU_PARTITION="${SLURM_GPU_PARTITION:-gpu}"
 SLURM_GPU_REQUEST="${SLURM_GPU_REQUEST:---gpus=1}"
 # GPU partition on WUR lustre: max walltime is often 2 days (screening.sh defaults to 4d).
 SLURM_GPU_TIME_LIMIT="${SLURM_GPU_TIME_LIMIT:-2-00:00:00}"
+# Optional total job memory for large countries (submit_array.sh sets from manifest).
+SLURM_JOB_MEM="${SLURM_JOB_MEM:-}"
 
 append_gpu_sbatch_args() {
   local -n _extra=$1
@@ -21,6 +23,9 @@ append_gpu_sbatch_args() {
   if [[ -n "${SLURM_GPU_TIME_LIMIT}" ]]; then
     _extra+=(--time="${SLURM_GPU_TIME_LIMIT}")
   fi
+  if [[ -n "${SLURM_JOB_MEM}" ]]; then
+    _extra+=(--mem="${SLURM_JOB_MEM}")
+  fi
 }
 
 gpu_sbatch_summary() {
@@ -31,6 +36,9 @@ gpu_sbatch_summary() {
   parts+=("${SLURM_GPU_REQUEST}")
   if [[ -n "${SLURM_GPU_TIME_LIMIT}" ]]; then
     parts+=("--time=${SLURM_GPU_TIME_LIMIT}")
+  fi
+  if [[ -n "${SLURM_JOB_MEM}" ]]; then
+    parts+=("--mem=${SLURM_JOB_MEM}")
   fi
   echo "${parts[*]}"
 }
@@ -308,10 +316,16 @@ read_benchmark_job() {
   fi
   read -r CROP COUNTRY MODEL FRAMEWORK HP_SEARCH FEATURE_DESIGN NEEDS_GPU _extra <<< "${line}"
   WF_SEED=""
-  if [[ $(awk '{print NF}' <<< "${line}") -ge 8 ]]; then
+  WF_ORIGIN=""
+  local nfields
+  nfields=$(awk '{print NF}' <<< "${line}")
+  if [[ "${nfields}" -ge 9 ]]; then
+    WF_ORIGIN=$(awk '{print $NF}' <<< "${line}")
+    WF_SEED=$(awk '{print $(NF-1)}' <<< "${line}")
+  elif [[ "${nfields}" -ge 8 ]]; then
     WF_SEED=$(awk '{print $NF}' <<< "${line}")
   fi
-  export WF_SEED
+  export WF_SEED WF_ORIGIN
 }
 
 # CPU tabular: one Optuna trial at a time, sklearn uses all SLURM CPUs.
@@ -490,9 +504,11 @@ plan_walk_forward_seeds() {
 }
 
 # Single-seed walk-forward task (GPU manifest with 8th column). Sets WF_RUN_DIR, WF_START_SEED, WF_RUN_REPS=1.
+# Optional 5th arg: forecast origin year (9th manifest column) for per-year parallel tasks.
 # Returns 0 run, 1 skip (seed present), 2 error (timed out waiting for base-seed run dir).
 plan_walk_forward_single_seed() {
   local crop=$1 country=$2 model_slug=$3 seed=$4
+  local origin="${5:-}"
   local base=${WF_BASE_SEED:-42}
   local resume=${WF_RESUME:-no}
   local run_dir=""
@@ -526,15 +542,21 @@ plan_walk_forward_single_seed() {
   done
 
   if [[ -n "${run_dir}" && -d "${run_dir}" ]]; then
-    local -a existing=()
-    mapfile -t existing < <(discover_run_seeds_py "${run_dir}")
-    local e
-    for e in "${existing[@]}"; do
-      if [[ "${e}" == "${seed}" ]]; then
-        echo "[SKIP] Walk-forward seed ${seed} already in ${run_dir}" >&2
-        return 1
-      fi
-    done
+    if [[ -n "${origin}" && -f "${run_dir}/${origin}/${seed}/test_preds.csv" ]]; then
+      echo "[SKIP] Walk-forward seed ${seed} year ${origin} already in ${run_dir}" >&2
+      return 1
+    fi
+    if [[ -z "${origin}" ]]; then
+      local -a existing=()
+      mapfile -t existing < <(discover_run_seeds_py "${run_dir}")
+      local e
+      for e in "${existing[@]}"; do
+        if [[ "${e}" == "${seed}" ]]; then
+          echo "[SKIP] Walk-forward seed ${seed} already in ${run_dir}" >&2
+          return 1
+        fi
+      done
+    fi
     WF_RUN_DIR="$(cd "${run_dir}" && pwd)"
   else
     WF_RUN_DIR=""

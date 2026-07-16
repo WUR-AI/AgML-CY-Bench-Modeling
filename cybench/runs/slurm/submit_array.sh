@@ -143,6 +143,7 @@ fi
 
 SUBMIT_MANIFEST="${MANIFEST}"
 EXPANDED_MANIFEST=""
+PER_YEAR_LARGE=no
 should_expand_wf_per_seed() {
   [[ "${PHASE}" == walk_forward ]] || return 1
   [[ "$(basename "${MANIFEST}" .txt)" == *gpu* ]] || return 1
@@ -152,6 +153,15 @@ should_expand_wf_per_seed() {
 
 if should_expand_wf_per_seed; then
   EXPANDED_MANIFEST=$(mktemp "${TMPDIR:-/tmp}/cybench_wf_manifest.XXXXXX")
+  PER_YEAR_LARGE=no
+  if poetry run python -c "
+from pathlib import Path
+from cybench.runs.slurm.benchmark_completion_lib import manifest_wants_per_year_wf
+import sys
+sys.exit(0 if manifest_wants_per_year_wf(Path('${MANIFEST}')) else 1)
+" 2>/dev/null; then
+    PER_YEAR_LARGE=yes
+  fi
   EXPAND_ARGS=(
     poetry run python "${SLURM_DIR}/expand_walk_forward_manifest.py"
     --input "${MANIFEST}"
@@ -161,6 +171,9 @@ if should_expand_wf_per_seed; then
     --repetitions "${WF_REPETITIONS}"
     --per-seed
   )
+  if [[ "${PER_YEAR_LARGE}" == yes ]]; then
+    EXPAND_ARGS+=(--per-year-large)
+  fi
   if [[ "${WF_RESUME}" == yes ]]; then
     EXPAND_ARGS+=(--resume)
   fi
@@ -191,6 +204,14 @@ elif [[ "${GPU_MODE}" == auto ]]; then
   fi
 fi
 if [[ "${GPU_MODE}" == yes ]]; then
+  SLURM_JOB_MEM=$(poetry run python -c "
+from pathlib import Path
+from cybench.runs.slurm.benchmark_submit_lib import slurm_memory_for_manifest
+print(slurm_memory_for_manifest(Path('${SUBMIT_MANIFEST}')) or '')
+" 2>/dev/null || true)
+  if [[ -n "${SLURM_JOB_MEM}" ]]; then
+    export SLURM_JOB_MEM
+  fi
   # shellcheck source=/dev/null
   source "${SLURM_DIR}/slurm_common.sh"
   append_gpu_sbatch_args SBATCH_EXTRA
@@ -224,7 +245,11 @@ echo "  batch:    ${CYBENCH_EXPERIMENT_NAME} (../output/${CYBENCH_EXPERIMENT_NAM
 if [[ "${PHASE}" == walk_forward ]]; then
   echo "  repetitions: ${WF_REPETITIONS} (target seeds 42..$((42 + WF_REPETITIONS - 1)))"
   if [[ "$(basename "${MANIFEST}" .txt)" == *gpu* ]]; then
-    echo "  gpu seeds:  one SLURM task per seed (${N} tasks from $(basename "${MANIFEST}"))"
+    if [[ "${PER_YEAR_LARGE:-no}" == yes ]]; then
+      echo "  gpu seeds:  one SLURM task per seed×year for large countries (${N} tasks)"
+    else
+      echo "  gpu seeds:  one SLURM task per seed (${N} tasks from $(basename "${MANIFEST}"))"
+    fi
   fi
   if [[ "${WF_RESUME}" == yes ]]; then
     echo "  resume:     yes (skip seeds already on disk)"

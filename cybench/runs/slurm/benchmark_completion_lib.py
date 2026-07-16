@@ -19,9 +19,11 @@ from cybench.runs.analysis.collect_walk_forward_results import (
     walk_forward_missing_years,
 )
 from cybench.runs.slurm.benchmark_submit_lib import (
+    DEFAULT_GPU_REGION_THRESHOLD,
     batch_name,
     batch_suffix_to_horizon,
     countries_with_data,
+    count_regions,
     horizon_batch_suffix,
     normalize_horizon,
     parse_batch_name,
@@ -155,6 +157,96 @@ def walk_forward_seeds_for_job(
     return [seed for seed in targets if seed not in existing]
 
 
+def country_uses_per_year_wf(
+    country: str,
+    *,
+    region_threshold: int = DEFAULT_GPU_REGION_THRESHOLD,
+    data_dir: Path | None = None,
+) -> bool:
+    """Large countries run one SLURM task per walk-forward seed × forecast year."""
+    return count_regions(country, data_dir) >= region_threshold
+
+
+def manifest_wants_per_year_wf(
+    manifest_path: Path,
+    *,
+    region_threshold: int = DEFAULT_GPU_REGION_THRESHOLD,
+    data_dir: Path | None = None,
+) -> bool:
+    from cybench.runs.slurm.benchmark_submit_lib import countries_in_manifest
+
+    return any(
+        country_uses_per_year_wf(
+            country,
+            region_threshold=region_threshold,
+            data_dir=data_dir,
+        )
+        for country in countries_in_manifest(manifest_path)
+    )
+
+
+def walk_forward_tasks_for_job(
+    job: JobRow,
+    *,
+    baselines_dir: Path,
+    horizon_tag_value: str,
+    repo_root: Path,
+    base_seed: int,
+    total_repetitions: int,
+    resume: bool,
+    per_year: bool,
+    data_dir: Path | None = None,
+) -> list[tuple[int, int | None]]:
+    """(seed, origin_year) tasks; origin_year is None when not using per-year expansion."""
+    targets = target_walk_forward_seeds(
+        base_seed=base_seed, total_repetitions=total_repetitions
+    )
+    if not per_year:
+        if resume:
+            targets = walk_forward_seeds_for_job(
+                job,
+                baselines_dir=baselines_dir,
+                horizon_tag_value=horizon_tag_value,
+                repo_root=repo_root,
+                base_seed=base_seed,
+                total_repetitions=total_repetitions,
+                resume=True,
+            )
+        return [(seed, None) for seed in targets]
+
+    years = resolve_expected_walk_forward_test_years(
+        job,
+        baselines_dir=baselines_dir,
+        horizon_tag_value=horizon_tag_value,
+        repo_root=repo_root,
+        data_dir=data_dir,
+    )
+    run_dir = (
+        _latest_run(
+            baselines_dir,
+            crop=job.crop,
+            country=job.country,
+            model_slug=job.model,
+            phase="walk_forward",
+            horizon_tag_value=horizon_tag_value,
+            repo_root=repo_root,
+        )
+        if resume
+        else None
+    )
+    if run_dir is None:
+        return [(seed, year) for seed in targets for year in years]
+
+    missing = walk_forward_missing_years(
+        run_dir, expected_years=years, seeds=targets
+    )
+    tasks: list[tuple[int, int | None]] = []
+    for seed, miss_years in sorted(missing.items()):
+        for year in miss_years:
+            tasks.append((seed, year))
+    return tasks
+
+
 def expand_walk_forward_manifest_lines(
     jobs: list[JobRow],
     *,
@@ -165,13 +257,21 @@ def expand_walk_forward_manifest_lines(
     total_repetitions: int = 1,
     resume: bool = False,
     per_seed_for_gpu: bool = True,
+    per_year_for_large_countries: bool = False,
+    region_threshold: int = DEFAULT_GPU_REGION_THRESHOLD,
+    data_dir: Path | None = None,
 ) -> list[str]:
-    """Expand manifest lines. GPU rows become one SLURM task per seed; CPU/naive stay bundled."""
+    """Expand manifest lines. GPU rows become one SLURM task per seed (× year for large countries)."""
     hz_tag = horizon_tag(horizon)
     lines: list[str] = []
     for job in jobs:
         if per_seed_for_gpu and job.needs_gpu == "yes":
-            seeds = walk_forward_seeds_for_job(
+            per_year = per_year_for_large_countries and country_uses_per_year_wf(
+                job.country,
+                region_threshold=region_threshold,
+                data_dir=data_dir,
+            )
+            tasks = walk_forward_tasks_for_job(
                 job,
                 baselines_dir=baselines_dir,
                 horizon_tag_value=hz_tag,
@@ -179,9 +279,14 @@ def expand_walk_forward_manifest_lines(
                 base_seed=base_seed,
                 total_repetitions=total_repetitions,
                 resume=resume,
+                per_year=per_year,
+                data_dir=data_dir,
             )
-            for seed in seeds:
-                lines.append(f"{job.to_line()} {seed}")
+            for seed, origin in tasks:
+                if origin is not None:
+                    lines.append(f"{job.to_line()} {seed} {origin}")
+                else:
+                    lines.append(f"{job.to_line()} {seed}")
             continue
 
         if resume:

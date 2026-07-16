@@ -373,6 +373,8 @@ PREDICTION_HORIZON=middle-of-season cybench/runs/slurm/submit_array.sh walk_forw
 
 # Multi-seed walk-forward:
 #   GPU manifest  → one SLURM task per seed (parallel; seeds 42..46 with --repetitions 5)
+#   Large countries (≥350 regions, e.g. BR/US) → one task per seed × forecast year
+#   Large countries also get higher host RAM (--mem 64G/96G) on GPU submits
 #   CPU/naive     → one task runs all seeds sequentially in run_experiments.py
 # Non-base GPU seeds wait until seed 42 has started in the latest run dir (<year>/42/).
 # Logs show [WAIT] Seed N waiting for walk-forward run dir from seed 42... until then.

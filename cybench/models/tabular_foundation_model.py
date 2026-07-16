@@ -302,6 +302,7 @@ class TabularFoundationModel(BaseModel):
             log.warning("%s GPU fit failed (%s); falling back to CPU", self.name, exc)
             self.device = "cpu"
             self.estimator = self._make_estimator(device="cpu")
+            assert self.estimator is not None
             self.estimator.fit(X, y)
         return self, {}
 

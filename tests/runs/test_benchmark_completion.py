@@ -325,6 +325,65 @@ def test_expand_walk_forward_gpu_per_seed(tmp_path: Path):
     assert all("ridge" not in line or line.count(" ") == 6 for line in lines if "ridge" in line)
 
 
+def test_expand_walk_forward_per_year_large_country(tmp_path: Path, monkeypatch):
+    from cybench.runs.slurm.benchmark_completion_lib import (
+        JobRow,
+        expand_walk_forward_manifest_lines,
+    )
+
+    repo = tmp_path / "repo"
+    baselines = tmp_path / "output" / "baselines_BR_eos_v4"
+    run_dir = baselines / "maize_BR_tabicl_walk_forward_eos_20260716_120000"
+    pred = "adm_id,year,targets,preds\nBR-01,2019,10,9\n"
+    (run_dir / "2019" / "42").mkdir(parents=True)
+    (run_dir / "2019" / "42" / "test_preds.csv").write_text(pred, encoding="utf-8")
+
+    import cybench.runs.slurm.benchmark_completion_lib as bcl
+
+    monkeypatch.setattr(bcl, "count_regions", lambda _cc, data_dir=None: 5547)
+    monkeypatch.setattr(
+        bcl,
+        "resolve_expected_walk_forward_test_years",
+        lambda *a, **k: [2019, 2020, 2021],
+    )
+
+    gpu_job = JobRow("maize", "BR", "tabicl", "pandas", "yes", "yes", "yes")
+    lines = expand_walk_forward_manifest_lines(
+        [gpu_job],
+        baselines_dir=baselines,
+        horizon="eos",
+        repo_root=repo,
+        base_seed=42,
+        total_repetitions=2,
+        resume=True,
+        per_seed_for_gpu=True,
+        per_year_for_large_countries=True,
+    )
+    assert "maize BR tabicl pandas yes yes yes 42 2020" in lines
+    assert "maize BR tabicl pandas yes yes yes 42 2021" in lines
+    assert "maize BR tabicl pandas yes yes yes 43 2019" in lines
+    assert not any(line.endswith(" 42 2019") for line in lines)
+
+
+def test_slurm_memory_for_large_countries(monkeypatch):
+    from cybench.runs.slurm.benchmark_submit_lib import (
+        DEFAULT_SLURM_MEM_LARGE_REGIONS,
+        DEFAULT_SLURM_MEM_VERY_LARGE_REGIONS,
+        slurm_memory_for_country,
+    )
+
+    import cybench.runs.slurm.benchmark_submit_lib as bsl
+
+    monkeypatch.setattr(
+        bsl,
+        "count_regions",
+        lambda cc, data_dir=None: {"EL": 100, "US": 2509, "BR": 5547}[cc],
+    )
+    assert slurm_memory_for_country("EL") is None
+    assert slurm_memory_for_country("US") == DEFAULT_SLURM_MEM_VERY_LARGE_REGIONS
+    assert slurm_memory_for_country("BR") == DEFAULT_SLURM_MEM_VERY_LARGE_REGIONS
+
+
 def test_walk_forward_complete_requires_all_repetitions(tmp_path: Path, monkeypatch):
     from cybench.runs.slurm.benchmark_completion_lib import (
         JobRow,
