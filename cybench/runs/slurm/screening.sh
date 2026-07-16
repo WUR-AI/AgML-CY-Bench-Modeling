@@ -21,10 +21,10 @@
 #SBATCH --job-name=cybench_screen
 #SBATCH --output=output/screening/out_%A_%a.txt
 #SBATCH --error=output/screening/err_%A_%a.txt
-#SBATCH --mem-per-cpu=4G
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --time=4-00:00:00
+## Memory: submit_array.sh sets --mem (default 32G; 64G/96G for large countries)
 ## GPU submits via submit_array.sh override this with --time=2-00:00:00 (partition limit)
 ##SBATCH --mail-user=michiel.kallenberg@wur.nl
 ##SBATCH --mail-type=ALL

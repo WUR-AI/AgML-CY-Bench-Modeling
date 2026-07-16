@@ -9,8 +9,14 @@ SLURM_GPU_PARTITION="${SLURM_GPU_PARTITION:-gpu}"
 SLURM_GPU_REQUEST="${SLURM_GPU_REQUEST:---gpus=1}"
 # GPU partition on WUR lustre: max walltime is often 2 days (screening.sh defaults to 4d).
 SLURM_GPU_TIME_LIMIT="${SLURM_GPU_TIME_LIMIT:-2-00:00:00}"
-# Optional total job memory for large countries (submit_array.sh sets from manifest).
+# Total job memory (submit_array.sh). Do not use #SBATCH --mem-per-cpu in job scripts — conflicts with --mem.
+DEFAULT_SLURM_JOB_MEM="${DEFAULT_SLURM_JOB_MEM:-32G}"
 SLURM_JOB_MEM="${SLURM_JOB_MEM:-}"
+
+append_job_mem_sbatch_args() {
+  local -n _extra=$1
+  _extra+=(--mem="${SLURM_JOB_MEM:-${DEFAULT_SLURM_JOB_MEM}}")
+}
 
 append_gpu_sbatch_args() {
   local -n _extra=$1
@@ -23,9 +29,6 @@ append_gpu_sbatch_args() {
   if [[ -n "${SLURM_GPU_TIME_LIMIT}" ]]; then
     _extra+=(--time="${SLURM_GPU_TIME_LIMIT}")
   fi
-  if [[ -n "${SLURM_JOB_MEM}" ]]; then
-    _extra+=(--mem="${SLURM_JOB_MEM}")
-  fi
 }
 
 gpu_sbatch_summary() {
@@ -37,9 +40,7 @@ gpu_sbatch_summary() {
   if [[ -n "${SLURM_GPU_TIME_LIMIT}" ]]; then
     parts+=("--time=${SLURM_GPU_TIME_LIMIT}")
   fi
-  if [[ -n "${SLURM_JOB_MEM}" ]]; then
-    parts+=("--mem=${SLURM_JOB_MEM}")
-  fi
+  parts+=("--mem=${SLURM_JOB_MEM:-${DEFAULT_SLURM_JOB_MEM}}")
   echo "${parts[*]}"
 }
 

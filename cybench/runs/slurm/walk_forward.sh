@@ -14,10 +14,10 @@
 #SBATCH --job-name=cybench_wf
 #SBATCH --output=output/walk_forward/out_%A_%a.txt
 #SBATCH --error=output/walk_forward/err_%A_%a.txt
-#SBATCH --mem-per-cpu=4G
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --time=2-00:00:00
+## Memory: submit_array.sh sets --mem (default 32G; 64G/96G for large countries)
 ##SBATCH --array=0-99
 #SBATCH --array=0
 ## GPU: added by submit_array.sh when using benchmark_jobs_gpu.txt

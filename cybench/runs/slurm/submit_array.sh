@@ -203,19 +203,20 @@ elif [[ "${GPU_MODE}" == auto ]]; then
     GPU_MODE=no
   fi
 fi
-if [[ "${GPU_MODE}" == yes ]]; then
-  SLURM_JOB_MEM=$(poetry run python -c "
+resolved_mem=$(poetry run python -c "
 from pathlib import Path
 from cybench.runs.slurm.benchmark_submit_lib import slurm_memory_for_manifest
 print(slurm_memory_for_manifest(Path('${SUBMIT_MANIFEST}')) or '')
 " 2>/dev/null || true)
-  if [[ -n "${SLURM_JOB_MEM}" ]]; then
-    export SLURM_JOB_MEM
-  fi
-  # shellcheck source=/dev/null
-  source "${SLURM_DIR}/slurm_common.sh"
+if [[ -n "${resolved_mem}" ]]; then
+  SLURM_JOB_MEM="${resolved_mem}"
+fi
+if [[ "${GPU_MODE}" == yes ]]; then
   append_gpu_sbatch_args SBATCH_EXTRA
 fi
+SLURM_JOB_MEM="${SLURM_JOB_MEM:-${DEFAULT_SLURM_JOB_MEM}}"
+export SLURM_JOB_MEM
+append_job_mem_sbatch_args SBATCH_EXTRA
 if [[ -n "${DEPENDENCY}" ]]; then
   SBATCH_EXTRA+=(--dependency="${DEPENDENCY}")
 fi
