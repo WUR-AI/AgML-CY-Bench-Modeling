@@ -444,10 +444,13 @@ def summary_rows_to_dashboard_records(
     ]
     records: list[dict[str, Any]] = []
     for row in summary_rows:
+        model = str(row.get("model", ""))
+        if model.lower().replace("-", "_") in {"twso_bc", "twso"}:
+            continue
         dataset = str(row["dataset"])
         images = _panel_images_for_dataset(output_dir, row, dataset)
         common = {
-            "model": str(row["model"]),
+            "model": model,
             "dataset": dataset,
             "n_regions": row.get("n_regions"),
             "n_years": row.get("n_years"),

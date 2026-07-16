@@ -172,6 +172,13 @@
     }
     .img-grid { display: grid; grid-template-columns: 1fr; gap: 0.6rem; }
     .img-grid.two { grid-template-columns: 1fr 1fr; }
+    .img-grid img {
+      width: 100%;
+      max-width: 720px;
+      margin: 0 auto;
+      display: block;
+      background: #fff;
+    }
     .map-caption {
       font-size: 0.82rem;
       margin-bottom: 0.35rem;
@@ -1018,8 +1025,8 @@
       <th rowspan="2" class="sortable" data-sort="n_years">Years ${sortMark("n_years")}</th>
       <th rowspan="2" class="sortable" data-sort="n_samples">Samples ${sortMark("n_samples")}</th>
       <th colspan="2" class="group-head">Region-Year</th>
-      <th colspan="2" class="group-head" title="Spatial pattern recovery">Spatial<span class="group-hint">slice by year → r across regions → median</span></th>
-      <th colspan="2" class="group-head" title="Temporal dynamics recovery">Temporal<span class="group-hint">slice by region → r across years → median</span></th>
+      <th colspan="2" class="group-head" title="Spatial pattern recovery">Spatial</th>
+      <th colspan="2" class="group-head" title="Temporal dynamics recovery">Temporal</th>
       <th colspan="2" class="group-head">Anomaly</th>
     </tr>
     <tr>`;

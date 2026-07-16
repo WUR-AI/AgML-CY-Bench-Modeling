@@ -391,7 +391,7 @@ DEFAULT_PANEL_DPI = 160
 SCATTER_HEX_THRESHOLD = 500
 SCATTER_HEX_GRIDSIZE = 50
 # Padding around per-panel PNG exports (inches). Union bbox avoids clipping labels.
-PANEL_EXPORT_PAD_INCHES = 0.2
+PANEL_EXPORT_PAD_INCHES = 0.45
 
 
 def parse_panels(raw: str) -> tuple[str, ...]:
@@ -658,6 +658,7 @@ def _plot_scatter_panel(
     ax.set_ylim(lim)
     ax.set_aspect("equal")
     ax.set_box_aspect(1)
+    ax.set_clip_on(False)
 
     n = len(y_true)
     if n > SCATTER_HEX_THRESHOLD:
@@ -813,7 +814,7 @@ def process_dataset(
 
     n_panels = len(panels)
     fig, axes_arr = plt.subplots(
-        1, n_panels, figsize=(6.5 * n_panels, 6.5), constrained_layout=True
+        1, n_panels, figsize=(7.2 * n_panels, 7.0), constrained_layout=True
     )
     if n_panels == 1:
         axes_list = [cast(Axes, axes_arr)]

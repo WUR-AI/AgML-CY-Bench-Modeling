@@ -2,7 +2,7 @@
 """Build a cross-country insights dashboard from collected walk-forward summaries.
 
 Scans ``paper_walk_forward_*`` directories under an output root and writes
-``insights.html`` for GitHub Pages (model leaderboard, horizon skill curves, eos vs mid-season).
+``insights.html`` plus related section pages for GitHub Pages.
 
 Example::
 
@@ -20,8 +20,15 @@ from pathlib import Path
 from cybench.runs.analysis.global_insights_lib import build_insights_payload
 from cybench.runs.analysis.index_map_lib import ensure_world_geojson
 
+INSIGHTS_PAGES: tuple[tuple[str, str], ...] = (
+    ("performance", "insights.html"),
+    ("horizon", "insights-horizon.html"),
+    ("crops", "insights-crops.html"),
+    ("sample_size", "insights-sample-size.html"),
+)
 
-def build_insights_html(payload: dict) -> str:
+
+def build_insights_html(payload: dict, *, page: str = "performance") -> str:
     template_path = (
         Path(__file__).resolve().parent.parent / "viz" / "global_insights_template.html"
     )
@@ -35,7 +42,9 @@ def build_insights_html(payload: dict) -> str:
         panel_js = panel_path.read_text(encoding="utf-8") if panel_path.is_file() else ""
         template = template.replace(placeholder, panel_js)
     data_json = json.dumps(payload)
-    return template.replace("__DATA_JSON__", data_json)
+    return (
+        template.replace("__PAGE__", page).replace("__DATA_JSON__", data_json)
+    )
 
 
 def write_insights_dashboard(
@@ -49,8 +58,13 @@ def write_insights_dashboard(
         raise RuntimeError(f"No walk_forward_summary.csv files found under {output_root}")
     dest.parent.mkdir(parents=True, exist_ok=True)
     payload["geojson_href"] = ensure_world_geojson(dest.parent)
-    dest.write_text(build_insights_html(payload), encoding="utf-8")
-    return dest
+    primary = None
+    for page, filename in INSIGHTS_PAGES:
+        out = dest if filename == "insights.html" else dest.parent / filename
+        out.write_text(build_insights_html(payload, page=page), encoding="utf-8")
+        if filename == "insights.html":
+            primary = out
+    return primary or dest
 
 
 def main() -> int:
@@ -83,6 +97,9 @@ def main() -> int:
     )
     payload = build_insights_payload(args.output_root.resolve(), version=args.version)
     print(f"[DONE] Insights dashboard: {path}")
+    for _page, filename in INSIGHTS_PAGES:
+        if filename != "insights.html":
+            print(f"[DONE]   also wrote {path.parent / filename}")
     n_eos = len(payload["leaderboards"].get("eos", {}).get("all") or [])
     n_mid = len(payload["leaderboards"].get("mid", {}).get("all") or [])
     print(

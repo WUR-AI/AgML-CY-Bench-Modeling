@@ -70,7 +70,7 @@ PAPER_FAMILY_TABLE_COLUMNS: tuple[dict[str, str], ...] = (
 
 MODEL_FAMILIES: dict[str, list[str]] = {
     "Naive baselines": ["average", "average_yield", "trend"],
-    "Process-Based": ["lpjml_bc", "twso_bc"],
+    "Process-Based": ["lpjml_bc"],
     "Feature-Engineered ML": ["lightgbm", "xgboost", "random_forest", "ridge"],
     "Sequence / Deep TS": [
         "transformer_lf",
@@ -120,7 +120,7 @@ MODEL_DISPLAY_NAMES: dict[str, str] = {
     "average": "Average",
     "average_yield": "Average",
     "lpjml_bc": "LPJmL",
-    "twso_bc": "TWSO",
+    "twso_bc": "TWSO",  # excluded from published dashboards; kept for legacy labels
     "lightgbm": "LightGBM",
     "xgboost": "XGBoost",
     "random_forest": "Random Forest",
@@ -1059,7 +1059,7 @@ def build_paper_family_table_latex(
 def build_radar_payload(
     output_root: Path,
     *,
-    version: int = 2,
+    version: int = 4,
     representatives: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """JSON payload for the model-family radar dashboard."""

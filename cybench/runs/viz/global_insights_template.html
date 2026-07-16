@@ -343,341 +343,339 @@
     .model-picker-item.representative {
       font-weight: 600;
     }
-    .scatter-panel {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.75rem;
-      background: #fcfcfd;
+
+    .top-links { display: flex; flex-wrap: wrap; gap: 0.65rem; margin: 0 0 1rem; }
+    .top-links a {
+      display: inline-flex; align-items: center; padding: 0.4rem 0.75rem;
+      border-radius: 999px; border: 1px solid var(--border); background: var(--card);
+      color: var(--text); text-decoration: none; font-size: 0.88rem;
     }
-    .scatter-panel svg { display: block; width: 100%; height: auto; max-width: 720px; margin: 0 auto; }
-    .scatter-legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.35rem 0.65rem;
-      margin-top: 0.35rem;
-      font-size: 0.78rem;
-      color: var(--muted);
+    .top-links a:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .top-links a.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+    .map-pair {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start;
     }
-    .scatter-legend span::before {
-      content: "";
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      margin-right: 0.25rem;
-      background: currentColor;
-      vertical-align: middle;
-    }
-  </style>
-</head>
-<body>
-  <div class="page">
-    <h1>CY-Bench global insights</h1>
-    <p class="lead">Cross-country model comparison and walk-forward results across forecast horizons (early-, quarter-, mid-, and end-of-season).</p>
+    @media (max-width: 900px) { .ma  <div class="page">
+    <h1 id="page-title">CY-Bench global insights</h1>
+    <p class="lead" id="page-lead">Cross-country model comparison for mid-season and end-of-season forecasts.</p>
+    <nav class="top-links" id="insights-nav" aria-label="Insights sections"></nav>
     <p class="muted" id="meta"></p>
 
-    <div class="card">
-      <h2>Research Q1 — Model performance across countries</h2>
-      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">Model × country</h3>
-      <div class="controls">
-        <span class="muted">Horizon</span>
-        <div class="toolbar" id="rq1-horizon-toolbar"></div>
-        <span class="muted">Axis</span>
-        <div class="toolbar" id="rq1-matrix-axis-toolbar">
-          <button type="button" data-axis="overall" class="active">Overall</button>
-          <button type="button" data-axis="spatial">Spatial</button>
-          <button type="button" data-axis="temporal">Temporal</button>
-          <button type="button" data-axis="anomaly">Anomaly</button>
+    <div data-page="performance">
+      <div class="card">
+        <h2>Median across countries (family representatives)</h2>
+        <p class="muted" id="family-metrics-note">Five paradigms — one best-NRMSE representative per family; median [IQR] across countries.</p>
+        <div class="controls" id="family-metrics-controls">
+          <label>Horizon <select id="family-metrics-horizon"></select></label>
+          <label>Crop <select id="family-metrics-crop"></select></label>
         </div>
-        <label>Crop
-          <select id="rq1-matrix-crop-filter">
-            <option value="all">All crops</option>
-          </select>
-        </label>
-        <label id="rq1-matrix-metric-wrap">Metric
-          <select id="rq1-matrix-metric">
-            <option value="nrmse" selected>NRMSE (median)</option>
-            <option value="r2">R² (median)</option>
-          </select>
-        </label>
-        <span class="muted">Palette</span>
-        <div class="toolbar" id="rq1-matrix-palette-toolbar">
-          <button type="button" data-palette="intensity" class="active">Intensity</button>
-          <button type="button" data-palette="semantic">Semantic</button>
-        </div>
-        <label>
-          Model
-          <input type="search" id="rq1-model-filter" placeholder="Filter…" />
-        </label>
+        <div class="table-scroll" id="family-metrics-table-wrap"></div>
       </div>
-      <p class="muted" style="margin-top:0;" id="matrix-metric-note">
-        Median column = median across countries per model (click column headers to sort).
-        Pattern axes (spatial, temporal, anomaly) show Pearson r; overall shows R²/NRMSE.
-        Country cells link to the matching country dashboard with that model pre-selected.
-      </p>
-      <div class="table-scroll" id="model-country-wrap"></div>
 
-      <h3 style="font-size:1rem;margin:1.5rem 0 0.5rem;">Median across countries (family representatives)</h3>
-      <p class="muted" id="family-metrics-note">Five paradigms — one best-NRMSE representative per family; median [IQR] across countries.</p>
-      <div class="controls" id="family-metrics-controls">
-        <label>Horizon <select id="family-metrics-horizon"></select></label>
-        <label>Crop <select id="family-metrics-crop"></select></label>
-      </div>
-      <div class="table-scroll" id="family-metrics-table-wrap"></div>
-
-      <h3 style="font-size:1rem;margin:1.5rem 0 0.5rem;">World map — winning model family</h3>
-      <p class="muted" id="family-map-note">Which modeling paradigm wins per country for the selected evaluation aspect.</p>
-      <div class="controls" id="family-map-controls">
-        <label>Horizon <select id="family-map-horizon"></select></label>
-        <label>Crop <select id="family-map-crop"></select></label>
-        <span class="muted">Map</span>
-        <div class="toolbar" id="family-map-mode-toolbar">
-          <button type="button" data-mode="winner" class="active">Winning family</button>
-          <button type="button" data-mode="benefit">AI error reduction</button>
+      <div class="card">
+        <h2>World map — evaluation metrics</h2>
+        <p class="muted">
+          Choropleth of per-country metrics for the selected model (same values as the model×country heatmap below).
+          Darker blue = better by default; optional semantic red–green palette for exploration.
+        </p>
+        <div class="controls">
+          <label>Horizon <select id="metric-map-horizon"></select></label>
+          <label>Crop
+            <select id="metric-map-crop-filter">
+              <option value="all">All crops</option>
+            </select>
+          </label>
+          <label>Model <select id="metric-map-model"></select></label>
+          <label>Axis
+            <select id="metric-map-axis">
+              <option value="overall" selected>Overall</option>
+              <option value="spatial">Spatial</option>
+              <option value="temporal">Temporal</option>
+              <option value="anomaly">Anomaly</option>
+            </select>
+          </label>
+          <label id="metric-map-metric-wrap">Metric
+            <select id="metric-map-metric">
+              <option value="nrmse" selected>NRMSE</option>
+              <option value="r2">R²</option>
+            </select>
+          </label>
+          <label>Palette
+            <select id="metric-map-palette">
+              <option value="intensity" selected>Intensity</option>
+              <option value="semantic">Semantic</option>
+            </select>
+          </label>
         </div>
-        <span class="muted" id="family-winner-aspect-label">Aspect</span>
-        <div class="toolbar" id="family-winner-aspect-toolbar"></div>
+        <p class="muted" id="metric-map-note"></p>
+        <p class="muted" id="metric-map-coverage-note"></p>
+        <div class="world-map-wrap" id="metric-map-wrap"><p class="muted">Loading map…</p></div>
+        <div class="metric-map-legend" id="metric-map-legend">
+          <span class="metric-map-gradient" aria-hidden="true"></span>
+          <span id="metric-map-legend-label">—</span>
+        </div>
+        <div class="export-toolbar">
+          <button type="button" id="metric-map-export-svg" disabled>Download map (SVG)</button>
+          <button type="button" id="metric-map-export-png" disabled>Download map (PNG)</button>
+        </div>
+        <p class="muted" id="metric-map-summary"></p>
       </div>
-      <div class="world-map-wrap" id="family-winner-map-wrap"><p class="muted">Loading map…</p></div>
-      <div class="winner-legend" id="family-winner-legend"></div>
-      <div class="benefit-legend" id="family-benefit-legend" style="display:none">
-        <span class="benefit-gradient" aria-hidden="true"></span>
-        <span id="family-benefit-legend-label">—</span>
+
+      <div class="card">
+        <h2>Model × country</h2>
+        <div class="controls">
+          <label>Horizon <select id="rq1-horizon"></select></label>
+          <label>Axis
+            <select id="rq1-matrix-axis">
+              <option value="overall" selected>Overall</option>
+              <option value="spatial">Spatial</option>
+              <option value="temporal">Temporal</option>
+              <option value="anomaly">Anomaly</option>
+            </select>
+          </label>
+          <label>Crop
+            <select id="rq1-matrix-crop-filter">
+              <option value="all">All crops</option>
+            </select>
+          </label>
+          <label id="rq1-matrix-metric-wrap">Metric
+            <select id="rq1-matrix-metric">
+              <option value="nrmse" selected>NRMSE (median)</option>
+              <option value="r2">R² (median)</option>
+            </select>
+          </label>
+          <label>Palette
+            <select id="rq1-matrix-palette">
+              <option value="intensity" selected>Intensity</option>
+              <option value="semantic">Semantic</option>
+            </select>
+          </label>
+          <label>
+            Model
+            <input type="search" id="rq1-model-filter" placeholder="Filter…" />
+          </label>
+        </div>
+        <p class="muted" style="margin-top:0;" id="matrix-metric-note">
+          Overall shows both NRMSE and R². Pattern axes show Pearson r.
+          Median column = median across countries. Country cells link to the matching country dashboard.
+        </p>
+        <div class="table-scroll" id="model-country-wrap"></div>
       </div>
-      <p class="muted" id="family-winner-summary"></p>
-      <div class="export-toolbar">
-        <button type="button" id="family-map-export-svg" disabled>Download map (SVG)</button>
+
+      <div class="card">
+        <h2>World map — winning model family &amp; AI error reduction</h2>
+        <p class="muted" id="family-map-note">Which modeling paradigm wins per country, and how much AI reduces error vs traditional approaches.</p>
+        <div class="controls" id="family-map-controls">
+          <label>Horizon <select id="family-map-horizon"></select></label>
+          <label>Crop <select id="family-map-crop"></select></label>
+          <label id="family-winner-aspect-label">Aspect
+            <select id="family-winner-aspect"></select>
+          </label>
+        </div>
+        <div class="map-pair">
+          <div>
+            <h3 style="font-size:0.95rem;margin:0 0 0.5rem;">Winning family</h3>
+            <div class="world-map-wrap" id="family-winner-map-wrap"><p class="muted">Loading map…</p></div>
+            <div class="winner-legend" id="family-winner-legend"></div>
+            <p class="muted" id="family-winner-summary"></p>
+          </div>
+          <div>
+            <h3 style="font-size:0.95rem;margin:0 0 0.5rem;">AI error reduction</h3>
+            <div class="world-map-wrap" id="family-benefit-map-wrap"><p class="muted">Loading map…</p></div>
+            <div class="benefit-legend" id="family-benefit-legend">
+              <span class="benefit-gradient" aria-hidden="true"></span>
+              <span id="family-benefit-legend-label">—</span>
+            </div>
+            <p class="muted" id="family-benefit-summary"></p>
+          </div>
+        </div>
+        <div class="export-toolbar">
+          <button type="button" id="family-map-export-svg" disabled>Download winning-family map (SVG)</button>
+        </div>
+
+        <div id="country-bootstrap-section" style="margin-top:1.25rem">
+          <h3 style="font-size:1rem;margin:0 0 0.75rem;">Country-level AI advantage (bootstrap)</h3>
+          <p class="muted" id="bootstrap-note"></p>
+          <div class="table-scroll">
+            <table id="bootstrap-table">
+              <thead>
+                <tr>
+                  <th>Crop</th>
+                  <th>Countries</th>
+                  <th>Traditional NRMSE (%)</th>
+                  <th>Data-driven NRMSE (%)</th>
+                  <th>Median improvement (%)</th>
+                  <th>95% CI</th>
+                  <th>AI win rate</th>
+                  <th>95% CI</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="export-toolbar">
+            <button type="button" id="bootstrap-export-latex">Download table (LaTeX)</button>
+            <button type="button" id="bootstrap-export-latex-copy">Copy LaTeX</button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="card">
-      <h2>World map — evaluation metrics</h2>
-      <p class="muted">
-        Choropleth of per-country metrics for the selected model (same values as the model×country heatmap above).
-        Darker blue = better by default; optional semantic red–green palette for exploration.
-      </p>
-      <div class="controls">
-        <span class="muted">Horizon</span>
-        <div class="toolbar" id="metric-map-horizon-toolbar"></div>
-        <label>Crop
-          <select id="metric-map-crop-filter">
-            <option value="all">All crops</option>
-          </select>
-        </label>
-        <label>Model
-          <select id="metric-map-model"></select>
-        </label>
-        <span class="muted">Axis</span>
-        <div class="toolbar" id="metric-map-axis-toolbar">
-          <button type="button" data-axis="overall" class="active">Overall</button>
-          <button type="button" data-axis="spatial">Spatial</button>
-          <button type="button" data-axis="temporal">Temporal</button>
-          <button type="button" data-axis="anomaly">Anomaly</button>
+    <div data-page="horizon">
+      <div class="card">
+        <h2>World map — horizon improvement</h2>
+        <p class="muted">
+          Choropleth of per-country metric change from mid-season to end-of-season
+          (same model and crop as the evaluation map). Positive values mean better performance at the
+          later horizon. Green = improved by default.
+        </p>
+        <div class="controls">
+          <label>From horizon <select id="delta-map-from-horizon"></select></label>
+          <label>To horizon <select id="delta-map-to-horizon"></select></label>
+          <label>Crop
+            <select id="delta-map-crop-filter">
+              <option value="all">All crops</option>
+            </select>
+          </label>
+          <label>
+            <input type="checkbox" id="delta-map-skilled-only" />
+            Skilful datasets only
+          </label>
+          <label>Model <select id="delta-map-model"></select></label>
+          <label>Axis
+            <select id="delta-map-axis">
+              <option value="overall" selected>Overall</option>
+              <option value="spatial">Spatial</option>
+              <option value="temporal">Temporal</option>
+              <option value="anomaly">Anomaly</option>
+            </select>
+          </label>
+          <label id="delta-map-metric-wrap">Metric
+            <select id="delta-map-metric">
+              <option value="nrmse" selected>NRMSE</option>
+              <option value="r2">R²</option>
+            </select>
+          </label>
+          <label>Palette
+            <select id="delta-map-palette">
+              <option value="semantic" selected>Semantic</option>
+              <option value="intensity">Intensity</option>
+            </select>
+          </label>
         </div>
-        <label id="metric-map-metric-wrap">Metric
-          <select id="metric-map-metric">
-            <option value="nrmse" selected>NRMSE</option>
-            <option value="r2">R²</option>
-          </select>
-        </label>
-        <span class="muted">Palette</span>
-        <div class="toolbar" id="metric-map-palette-toolbar">
-          <button type="button" data-palette="intensity" class="active">Intensity</button>
-          <button type="button" data-palette="semantic">Semantic</button>
+        <p class="muted" id="delta-map-note"></p>
+        <div class="world-map-wrap" id="delta-map-wrap"><p class="muted">Loading map…</p></div>
+        <div class="metric-map-legend" id="delta-map-legend">
+          <span class="metric-map-gradient semantic" aria-hidden="true"></span>
+          <span id="delta-map-legend-label">—</span>
         </div>
+        <p class="muted" id="delta-map-summary"></p>
       </div>
-      <p class="muted" id="metric-map-note"></p>
-      <p class="muted" id="metric-map-coverage-note"></p>
-      <div class="world-map-wrap" id="metric-map-wrap"><p class="muted">Loading map…</p></div>
-      <div class="metric-map-legend" id="metric-map-legend">
-        <span class="metric-map-gradient" aria-hidden="true"></span>
-        <span id="metric-map-legend-label">—</span>
+
+      <div class="card">
+        <h2>Forecast horizon vs performance</h2>
+        <p class="muted" id="horizon-models-note"></p>
+        <div class="controls">
+          <label>Crop <select id="horizon-models-crop"></select></label>
+          <label>Axis
+            <select id="horizon-models-axis">
+              <option value="overall" selected>Overall</option>
+              <option value="spatial">Spatial</option>
+              <option value="temporal">Temporal</option>
+              <option value="anomaly">Anomaly</option>
+            </select>
+          </label>
+          <label id="horizon-models-metric-wrap">Metric
+            <select id="horizon-models-metric">
+              <option value="nrmse" selected>NRMSE (median)</option>
+              <option value="r2">R² (median)</option>
+              <option value="skill_vs_trend">Skill vs trend</option>
+            </select>
+          </label>
+          <label>Model <input type="search" id="horizon-models-filter" placeholder="Filter table…" /></label>
+        </div>
+        <p class="muted" id="horizon-models-plot-note"></p>
+        <div class="model-picker" id="horizon-models-picker-wrap">
+          <div class="model-picker-toolbar">
+            <span class="muted">Plot</span>
+            <button type="button" id="horizon-models-select-reps">Family reps</button>
+            <button type="button" id="horizon-models-select-all">All</button>
+            <button type="button" id="horizon-models-select-none">None</button>
+            <input type="search" id="horizon-models-picker-filter" placeholder="Filter checkboxes…" />
+          </div>
+          <div class="model-picker-grid" id="horizon-models-picker"></div>
+        </div>
+        <p class="muted" id="horizon-models-plot-meta"></p>
+        <div class="curve-chart-wrap" id="horizon-models-chart"></div>
+        <div class="curve-legend" id="horizon-models-legend"></div>
+        <p class="muted" id="horizon-models-meta"></p>
+        <div class="table-scroll" id="horizon-models-table-wrap"></div>
+        <p class="muted note" id="horizon-models-metric-note"></p>
+        <h3 style="font-size:1rem;margin:1.5rem 0 0.5rem;">By family (median across countries)</h3>
+        <p class="muted" id="horizon-curves-note" style="display:none"></p>
+        <div class="controls" style="display:none">
+          <label>Crop <select id="horizon-curves-crop"></select></label>
+          <select id="horizon-curves-metric"><option value="nrmse">NRMSE</option></select>
+          <div class="toolbar" id="horizon-curves-axis-toolbar"></div>
+        </div>
+        <p class="muted" id="horizon-curves-meta" style="display:none"></p>
+        <div class="curve-chart-wrap" id="horizon-curves-chart" style="display:none"></div>
+        <div class="curve-legend" id="horizon-curves-legend" style="display:none"></div>
+        <div class="table-scroll" id="horizon-curves-table-wrap"></div>
+        <p class="muted note" id="horizon-curves-metric-note"></p>
+        <h3 style="font-size:1rem;margin:1.5rem 0 0.5rem;">By region (median across countries)</h3>
+        <p class="muted" id="horizon-continent-note"></p>
+        <p class="muted" id="horizon-continent-meta"></p>
+        <div class="table-scroll" id="horizon-continent-table-wrap"></div>
       </div>
-      <div class="export-toolbar">
-        <button type="button" id="metric-map-export-svg" disabled>Download map (SVG)</button>
-        <button type="button" id="metric-map-export-png" disabled>Download map (PNG)</button>
-      </div>
-      <p class="muted" id="metric-map-summary"></p>
     </div>
 
-    <div class="card">
-      <h2>Research Q2 — Forecast horizon</h2>
-      <h3 style="font-size:1rem;margin:0 0 0.75rem;">World map — horizon improvement</h3>
-      <p class="muted">
-        Choropleth of per-country metric change from an earlier forecast horizon to a later one
-        (same model and crop as the evaluation map). Positive values mean better performance at the
-        later horizon (e.g. lower NRMSE or higher R²). Green = improved by default; optional
-        intensity palette for exploration.
-      </p>
-      <div class="controls">
-        <label>From horizon
-          <select id="delta-map-from-horizon"></select>
-        </label>
-        <label>To horizon
-          <select id="delta-map-to-horizon"></select>
-        </label>
-        <label>Crop
-          <select id="delta-map-crop-filter">
-            <option value="all">All crops</option>
-          </select>
-        </label>
-        <label>
-          <input type="checkbox" id="delta-map-skilled-only" />
-          Skilful datasets only
-        </label>
-        <label>Model
-          <select id="delta-map-model"></select>
-        </label>
-        <span class="muted">Axis</span>
-        <div class="toolbar" id="delta-map-axis-toolbar">
-          <button type="button" data-axis="overall" class="active">Overall</button>
-          <button type="button" data-axis="spatial">Spatial</button>
-          <button type="button" data-axis="temporal">Temporal</button>
-          <button type="button" data-axis="anomaly">Anomaly</button>
+    <div data-page="crops">
+      <div class="card">
+        <h2>Which crop is easier to predict (fair comparison)?</h2>
+        <p class="muted">
+          Pooling all countries biases crop rankings (e.g. maize-heavy regions may be harder).
+          Here we keep only <strong>countries with both crops</strong> and compare NRMSE within the same
+          country and model — a paired crop×country comparison.
+        </p>
+        <div class="controls">
+          <label>Horizon <select id="rq3-horizon"></select></label>
+          <label>Crop pair <select id="rq3-pair-filter"></select></label>
         </div>
-        <label id="delta-map-metric-wrap">Metric
-          <select id="delta-map-metric">
-            <option value="nrmse" selected>NRMSE</option>
-            <option value="r2">R²</option>
-          </select>
-        </label>
-        <span class="muted">Palette</span>
-        <div class="toolbar" id="delta-map-palette-toolbar">
-          <button type="button" data-palette="semantic" class="active">Semantic</button>
-          <button type="button" data-palette="intensity">Intensity</button>
+        <p class="muted" id="crop-pair-note"></p>
+        <div class="stat-grid" id="crop-pair-stats"></div>
+        <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">By model (paired countries only)</h3>
+        <div class="table-scroll" id="crop-pair-summary-wrap"></div>
+        <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">Detail per country × model</h3>
+        <div class="controls">
+          <label>Model <input type="search" id="crop-detail-model-filter" placeholder="Filter…" /></label>
+          <label>Country
+            <select id="crop-detail-country-filter"><option value="">All</option></select>
+          </label>
         </div>
+        <div class="table-scroll" id="crop-pair-detail-wrap"></div>
+        <p class="muted note" id="crop-pair-delta-note"></p>
       </div>
-      <p class="muted" id="delta-map-note"></p>
-      <div class="world-map-wrap" id="delta-map-wrap"><p class="muted">Loading map…</p></div>
-      <div class="metric-map-legend" id="delta-map-legend">
-        <span class="metric-map-gradient semantic" aria-hidden="true"></span>
-        <span id="delta-map-legend-label">—</span>
-      </div>
-      <p class="muted" id="delta-map-summary"></p>
     </div>
 
-    <div class="card">
-      <h3 style="font-size:1rem;margin:0 0 0.75rem;">Forecast horizon vs performance</h3>
-      <p class="muted" id="horizon-curves-note"></p>
-      <div class="controls">
-        <label>Crop
-          <select id="horizon-curves-crop"></select>
-        </label>
-        <span class="muted">Axis</span>
-        <div class="toolbar" id="horizon-curves-axis-toolbar">
-          <button type="button" data-axis="overall" class="active">Overall</button>
-          <button type="button" data-axis="spatial">Spatial</button>
-          <button type="button" data-axis="temporal">Temporal</button>
-          <button type="button" data-axis="anomaly">Anomaly</button>
+    <div data-page="sample_size">
+      <div class="card" id="rq4-card">
+        <h2>Performance vs training set size</h2>
+        <p class="muted" id="rq4-scatter-note">Each point is one crop×country dataset for the family representative. Y-axis: model NRMSE ÷ average yield NRMSE (1.0 = baseline; lower is better). X-axis: log₁₀(mean training rows).</p>
+        <div class="controls">
+          <label>Horizon <select id="rq4-horizon"></select></label>
+          <label>Crop <select id="rq4-crop"></select></label>
         </div>
-        <label id="horizon-curves-metric-wrap">Metric
-          <select id="horizon-curves-metric">
-            <option value="nrmse" selected>NRMSE (median)</option>
-            <option value="r2">R² (median)</option>
-            <option value="skill_vs_trend">Skill vs trend</option>
-          </select>
-        </label>
+        <div class="scatter-panel" id="rq4-scatter-panel"></div>
       </div>
-      <p class="muted" id="horizon-curves-meta"></p>
-      <div class="curve-chart-wrap" id="horizon-curves-chart"></div>
-      <div class="curve-legend" id="horizon-curves-legend"></div>
-      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">By family (median across countries)</h3>
-      <div class="table-scroll" id="horizon-curves-table-wrap"></div>
-      <p class="muted note" id="horizon-curves-metric-note"></p>
-      <h3 style="font-size:1rem;margin:1.5rem 0 0.5rem;">By region (median across countries)</h3>
-      <p class="muted" id="horizon-continent-note"></p>
-      <p class="muted" id="horizon-continent-meta"></p>
-      <div class="table-scroll" id="horizon-continent-table-wrap"></div>
     </div>
 
-    <div class="card">
-      <h3 style="font-size:1rem;margin:0 0 0.75rem;">By model (median across countries)</h3>
-      <p class="muted" id="horizon-models-note"></p>
-      <div class="controls">
-        <label>Crop
-          <select id="horizon-models-crop"></select>
-        </label>
-        <span class="muted">Axis</span>
-        <div class="toolbar" id="horizon-models-axis-toolbar">
-          <button type="button" data-axis="overall" class="active">Overall</button>
-          <button type="button" data-axis="spatial">Spatial</button>
-          <button type="button" data-axis="temporal">Temporal</button>
-          <button type="button" data-axis="anomaly">Anomaly</button>
-        </div>
-        <label id="horizon-models-metric-wrap">Metric
-          <select id="horizon-models-metric">
-            <option value="nrmse" selected>NRMSE (median)</option>
-            <option value="r2">R² (median)</option>
-            <option value="skill_vs_trend">Skill vs trend</option>
-          </select>
-        </label>
-        <label>Model <input type="search" id="horizon-models-filter" placeholder="Filter table…" /></label>
-      </div>
-      <p class="muted" id="horizon-models-plot-note"></p>
-      <div class="model-picker" id="horizon-models-picker-wrap">
-        <div class="model-picker-toolbar">
-          <span class="muted">Plot</span>
-          <button type="button" id="horizon-models-select-reps">Family reps</button>
-          <button type="button" id="horizon-models-select-all">All</button>
-          <button type="button" id="horizon-models-select-none">None</button>
-          <input type="search" id="horizon-models-picker-filter" placeholder="Filter checkboxes…" />
-        </div>
-        <div class="model-picker-grid" id="horizon-models-picker"></div>
-      </div>
-      <p class="muted" id="horizon-models-plot-meta"></p>
-      <div class="curve-chart-wrap" id="horizon-models-chart"></div>
-      <div class="curve-legend" id="horizon-models-legend"></div>
-      <p class="muted" id="horizon-models-meta"></p>
-      <div class="table-scroll" id="horizon-models-table-wrap"></div>
-      <p class="muted note" id="horizon-models-metric-note"></p>
-    </div>
+    <p class="muted">
+      <a href="index.html">← Back to country dashboards</a>
+    </p>
+  </div>
 
-    <div class="card">
-      <h2>Research Q3 — Which crop is easier to predict (fair comparison)?</h2>
-      <p class="muted">
-        Pooling all countries biases crop rankings (e.g. maize-heavy regions may be harder).
-        Here we keep only <strong>countries with both crops</strong> and compare NRMSE within the same
-        country and model — a paired crop×country comparison.
-      </p>
-      <div class="controls">
-        <span class="muted">Horizon</span>
-        <div class="toolbar" id="rq3-horizon-toolbar"></div>
-        <label>Crop pair
-          <select id="rq3-pair-filter"></select>
-        </label>
-      </div>
-      <p class="muted" id="crop-pair-note"></p>
-      <div class="stat-grid" id="crop-pair-stats"></div>
-      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">By model (paired countries only)</h3>
-      <div class="table-scroll" id="crop-pair-summary-wrap"></div>
-      <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">Detail per country × model</h3>
-      <div class="controls">
-        <label>Model <input type="search" id="crop-detail-model-filter" placeholder="Filter…" /></label>
-        <label>Country
-          <select id="crop-detail-country-filter"><option value="">All</option></select>
-        </label>
-      </div>
-      <div class="table-scroll" id="crop-pair-detail-wrap"></div>
-      <p class="muted note" id="crop-pair-delta-note"></p>
-    </div>
-
-    <div class="card" id="rq4-card">
-      <h2>Research Q4 — Performance vs training set size</h2>
-      <p class="muted" id="rq4-scatter-note">Each point is one crop×country dataset for the family representative. Y-axis: model NRMSE ÷ average yield NRMSE (1.0 = baseline; lower is better). X-axis: log₁₀(mean training rows).</p>
-      <div class="controls">
-        <label>Horizon <select id="rq4-horizon"></select></label>
-        <label>Crop <select id="rq4-crop"></select></label>
-      </div>
-      <div class="scatter-panel" id="rq4-scatter-panel"></div>
-
-      <div id="country-bootstrap-section" style="margin-top:1.25rem">
-        <h3 style="font-size:1rem;margin:0 0 0.75rem;">Country-level AI advantage (bootstrap)</h3>
-        <p class="muted" id="bootstrap-note"></p>
-        <div class="table-scroll">
-          <table id="bootstrap-table">
-            <thead>
-              <tr>
-                <th>Crop</th>
+>
                 <th>Countries</th>
                 <th>Traditional NRMSE (%)</th>
                 <th>Data-driven NRMSE (%)</th>
@@ -704,6 +702,50 @@
 
   <script>
     const DATA = __DATA_JSON__;
+    const PAGE = "__PAGE__";
+    const PAGE_META = {
+      performance: {
+        title: "CY-Bench global insights",
+        lead: "Cross-country model comparison for mid-season and end-of-season forecasts.",
+      },
+      horizon: {
+        title: "Forecast horizon",
+        lead: "How skill changes from mid-season to end-of-season across countries and models.",
+      },
+      crops: {
+        title: "Crop comparison",
+        lead: "Paired crop×country comparison: which crop is easier to predict within the same country and model.",
+      },
+      sample_size: {
+        title: "Training set size",
+        lead: "How relative model error relates to the number of training samples.",
+      },
+    };
+    const PAGE_LINKS = [
+      { id: "performance", href: "insights.html", label: "Model performance" },
+      { id: "horizon", href: "insights-horizon.html", label: "Forecast horizon" },
+      { id: "crops", href: "insights-crops.html", label: "Crop comparison" },
+      { id: "sample_size", href: "insights-sample-size.html", label: "Training set size" },
+    ];
+
+    (function initPageShell() {
+      const meta = PAGE_META[PAGE] || PAGE_META.performance;
+      const titleEl = document.getElementById("page-title");
+      const leadEl = document.getElementById("page-lead");
+      if (titleEl) titleEl.textContent = meta.title;
+      if (leadEl) leadEl.textContent = meta.lead;
+      document.title = meta.title;
+      const nav = document.getElementById("insights-nav");
+      if (nav) {
+        nav.innerHTML = PAGE_LINKS.map(link => {
+          const cls = link.id === PAGE ? "active" : "";
+          return `<a class="${cls}" href="${link.href}">${link.label}</a>`;
+        }).join("");
+      }
+      document.querySelectorAll("[data-page]").forEach(el => {
+        if (el.dataset.page !== PAGE) el.remove();
+      });
+    })();
 
     function fmt(v, digits = 3) {
       if (v === null || v === undefined) return "—";
@@ -819,7 +861,25 @@
       ? DATA.available_horizons
       : Object.keys(DATA.leaderboards || {}).sort();
 
+    function fillHorizonSelect(select, current, onChange) {
+      if (!select) return current;
+      const horizons = AVAILABLE_HORIZONS.length ? AVAILABLE_HORIZONS : ["eos"];
+      select.innerHTML = horizons.map(hz => {
+        const label = HORIZON_LABELS[hz] || hz;
+        return `<option value="${hz}">${label}</option>`;
+      }).join("");
+      const value = horizons.includes(current) ? current : horizons[0];
+      select.value = value;
+      select.addEventListener("change", () => onChange(select.value));
+      if (horizons.length <= 1) {
+        const label = select.closest("label");
+        if (label) label.style.display = "none";
+      }
+      return value;
+    }
+
     function initHorizonToolbar(toolbar, defaultHz, onChange) {
+      if (!toolbar) return;
       const horizons = AVAILABLE_HORIZONS.length ? AVAILABLE_HORIZONS : ["eos"];
       toolbar.innerHTML = horizons.map(hz => {
         const label = HORIZON_LABELS[hz] || hz;
@@ -838,6 +898,7 @@
       }
     }
 
+
     document.getElementById("meta").textContent =
       `${DATA.n_countries} countries · ${DATA.n_rows} dataset×model rows · ${DATA.n_summary_files} collected summaries`;
 
@@ -852,12 +913,12 @@
     let mcDir = "asc";
     const mcWrap = document.getElementById("model-country-wrap");
     const rq1ModelFilter = document.getElementById("rq1-model-filter");
-    const rq1HorizonToolbar = document.getElementById("rq1-horizon-toolbar");
-    const rq1MatrixAxisToolbar = document.getElementById("rq1-matrix-axis-toolbar");
+    const rq1HorizonSelect = document.getElementById("rq1-horizon");
+    const rq1MatrixAxisSelect = document.getElementById("rq1-matrix-axis");
     const rq1MatrixMetricWrap = document.getElementById("rq1-matrix-metric-wrap");
     const rq1MatrixMetricSelect = document.getElementById("rq1-matrix-metric");
     const rq1MatrixCropFilter = document.getElementById("rq1-matrix-crop-filter");
-    const rq1MatrixPaletteToolbar = document.getElementById("rq1-matrix-palette-toolbar");
+    const rq1MatrixPaletteSelect = document.getElementById("rq1-matrix-palette");
     const matrixMetricNote = document.getElementById("matrix-metric-note");
     const MATRIX_AXES = DATA.matrix_axes || [
       {
@@ -1010,45 +1071,165 @@
         ? `<span class="sort-mark">${mcDir === "asc" ? "▲" : "▼"}</span>`
         : `<span class="sort-mark"></span>`;
 
+      const overallBoth = rq1MatrixAxis === "overall";
+      const nrmseSpec = (() => {
+        const axis = matrixAxisDef("overall");
+        const metric = (axis.metrics || []).find(m => m.id === "nrmse") || { id: "nrmse", higher_better: false, label: "NRMSE" };
+        return {
+          metricId: "nrmse",
+          label: "NRMSE",
+          higherBetter: false,
+          bg: fixedNrmseBg,
+          cellValue(cell) {
+            if (!cell) return null;
+            const bucket = (cell.axes || {}).overall || {};
+            if (bucket.nrmse != null) return bucket.nrmse;
+            return cell.median_nrmse ?? null;
+          },
+          totalValue(totals) {
+            if (!totals) return null;
+            const bucket = totals.overall || totals;
+            if (bucket && bucket.nrmse != null) return bucket.nrmse;
+            return totals.median_nrmse ?? null;
+          },
+        };
+      })();
+      const r2Spec = (() => {
+        return {
+          metricId: "r2",
+          label: "R²",
+          higherBetter: true,
+          bg: fixedR2Bg,
+          cellValue(cell) {
+            if (!cell) return null;
+            const bucket = (cell.axes || {}).overall || {};
+            if (bucket.r2 != null) return bucket.r2;
+            return cell.median_r2 ?? null;
+          },
+          totalValue(totals) {
+            if (!totals) return null;
+            const bucket = totals.overall || totals;
+            if (bucket && bucket.r2 != null) return bucket.r2;
+            return totals.median_r2 ?? null;
+          },
+        };
+      })();
+
       let html = '<table class="heatmap-matrix"><thead><tr>';
       html += `<th class="model-col sortable" data-sort="model">Model ${sortMark("model")}</th>`;
-      html += `<th class="median-col sortable" data-sort="median">Median ${spec.label} ${sortMark("median")}</th>`;
-      for (const cc of countries) {
-        html += `<th class="country-col sortable" data-sort="${cc}">${cc} ${sortMark(cc)}</th>`;
+      if (overallBoth) {
+        html += `<th class="median-col sortable" data-sort="median_nrmse">Median NRMSE ${sortMark("median_nrmse")}</th>`;
+        html += `<th class="median-col sortable" data-sort="median_r2">Median R² ${sortMark("median_r2")}</th>`;
+        for (const cc of countries) {
+          html += `<th class="country-col sortable" data-sort="${cc}">${cc} ${sortMark(cc)}</th>`;
+        }
+      } else {
+        html += `<th class="median-col sortable" data-sort="median">Median ${spec.label} ${sortMark("median")}</th>`;
+        for (const cc of countries) {
+          html += `<th class="country-col sortable" data-sort="${cc}">${cc} ${sortMark(cc)}</th>`;
+        }
       }
       html += "</tr></thead><tbody>";
 
-      const rows = sortMatrixRows(
-        buildMatrixRows(models, countries, cellMap, spec, matrix.model_totals || {}),
-        mcSort,
-        mcDir,
-      );
+      const modelTotals = matrix.model_totals || {};
+      let rows;
+      if (overallBoth) {
+        rows = models.map(model => {
+          const byCountry = {};
+          for (const cc of countries) {
+            const cell = cellMap.get(`${model}|||${cc}`);
+            byCountry[cc] = {
+              nrmse: nrmseSpec.cellValue(cell),
+              r2: r2Spec.cellValue(cell),
+              cell,
+            };
+          }
+          return {
+            model,
+            median_nrmse: nrmseSpec.totalValue(modelTotals[model]),
+            median_r2: r2Spec.totalValue(modelTotals[model]),
+            byCountry,
+          };
+        });
+        const d = mcDir === "asc" ? 1 : -1;
+        rows.sort((a, b) => {
+          if (mcSort === "model") return d * a.model.localeCompare(b.model);
+          const key = mcSort === "median_r2" ? "median_r2" : (mcSort === "median_nrmse" || mcSort === "median" ? "median_nrmse" : null);
+          if (key) {
+            const cmp = compareSortValues({ v: a[key] }, { v: b[key] }, "v");
+            if (cmp !== 0) return d * cmp;
+            return a.model.localeCompare(b.model);
+          }
+          const cmp = compareSortValues(
+            { v: a.byCountry[mcSort]?.nrmse },
+            { v: b.byCountry[mcSort]?.nrmse },
+            "v",
+          );
+          if (cmp !== 0) return d * cmp;
+          return a.model.localeCompare(b.model);
+        });
+      } else {
+        rows = sortMatrixRows(
+          buildMatrixRows(models, countries, cellMap, spec, modelTotals),
+          mcSort,
+          mcDir,
+        );
+      }
 
       for (const row of rows) {
         html += `<tr><td class="model-col">${row.model}</td>`;
-        const medBg = row.median !== null ? spec.bg(row.median) : null;
-        const medStyle = medBg ? ` style="background-color:${medBg}"` : "";
-        html += `<td class="metric-cell median-col"${medStyle}>${fmt(row.median)}</td>`;
-
-        for (const cc of countries) {
-          const entry = row.byCountry[cc];
-          const raw = entry?.raw;
-          if (raw === null || raw === undefined) {
-            html += '<td class="metric-cell">—</td>';
-            continue;
+        if (overallBoth) {
+          for (const [val, bgFn] of [[row.median_nrmse, fixedNrmseBg], [row.median_r2, fixedR2Bg]]) {
+            const medBg = val !== null && val !== undefined ? bgFn(val) : null;
+            const medStyle = medBg ? ` style="background-color:${medBg}"` : "";
+            html += `<td class="metric-cell median-col"${medStyle}>${fmt(val)}</td>`;
           }
-          const bg = spec.bg(raw);
-          const style = bg ? ` style="background-color:${bg}"` : "";
-          const cell = entry.cell;
-          const title = cell?.beat_baseline_rate != null
-            ? ` title="Beat baseline: ${pct(cell.beat_baseline_rate)}"`
-            : "";
-          const dashUrl = cellDashboardUrl(cc, row.model);
-          const value = fmt(raw);
-          const inner = dashUrl
-            ? `<a href="${dashUrl}"${title}>${value}</a>`
-            : value;
-          html += `<td class="metric-cell"${style}${dashUrl ? "" : title}>${inner}</td>`;
+          for (const cc of countries) {
+            const entry = row.byCountry[cc];
+            const nrmse = entry?.nrmse;
+            const r2 = entry?.r2;
+            if ((nrmse === null || nrmse === undefined) && (r2 === null || r2 === undefined)) {
+              html += '<td class="metric-cell">—</td>';
+              continue;
+            }
+            const bg = nrmse != null ? fixedNrmseBg(nrmse) : null;
+            const style = bg ? ` style="background-color:${bg}"` : "";
+            const cell = entry.cell;
+            const title = cell?.beat_baseline_rate != null
+              ? ` title="Beat baseline: ${pct(cell.beat_baseline_rate)}"`
+              : "";
+            const dashUrl = cellDashboardUrl(cc, row.model);
+            const value = `${fmt(nrmse)} · ${fmt(r2)}`;
+            const inner = dashUrl
+              ? `<a href="${dashUrl}"${title}>${value}</a>`
+              : value;
+            html += `<td class="metric-cell"${style}${dashUrl ? "" : title}>${inner}</td>`;
+          }
+        } else {
+          const medBg = row.median !== null ? spec.bg(row.median) : null;
+          const medStyle = medBg ? ` style="background-color:${medBg}"` : "";
+          html += `<td class="metric-cell median-col"${medStyle}>${fmt(row.median)}</td>`;
+
+          for (const cc of countries) {
+            const entry = row.byCountry[cc];
+            const raw = entry?.raw;
+            if (raw === null || raw === undefined) {
+              html += '<td class="metric-cell">—</td>';
+              continue;
+            }
+            const bg = spec.bg(raw);
+            const style = bg ? ` style="background-color:${bg}"` : "";
+            const cell = entry.cell;
+            const title = cell?.beat_baseline_rate != null
+              ? ` title="Beat baseline: ${pct(cell.beat_baseline_rate)}"`
+              : "";
+            const dashUrl = cellDashboardUrl(cc, row.model);
+            const value = fmt(raw);
+            const inner = dashUrl
+              ? `<a href="${dashUrl}"${title}>${value}</a>`
+              : value;
+            html += `<td class="metric-cell"${style}${dashUrl ? "" : title}>${inner}</td>`;
+          }
         }
         html += "</tr>";
       }
@@ -1070,9 +1251,11 @@
     }
 
     function syncMatrixMetricControl() {
+      if (!rq1MatrixMetricWrap) return;
       const axis = matrixAxisDef(rq1MatrixAxis);
       const metrics = axis.metrics || [];
-      const showPicker = metrics.length > 1;
+      // Overall always shows both NRMSE and R² — no metric picker.
+      const showPicker = axis.id !== "overall" && metrics.length > 1;
       rq1MatrixMetricWrap.style.display = showPicker ? "" : "none";
       if (!showPicker) {
         rq1MatrixMetric = metrics[0]?.id || "r2";
@@ -1089,54 +1272,54 @@
       renderModelCountryHeatmap();
     }
 
-    for (const crop of DATA.crops || []) {
-      const opt = document.createElement("option");
-      opt.value = crop;
-      opt.textContent = crop.charAt(0).toUpperCase() + crop.slice(1);
-      rq1MatrixCropFilter.appendChild(opt);
+    if (rq1MatrixCropFilter) {
+      for (const crop of DATA.crops || []) {
+        const opt = document.createElement("option");
+        opt.value = crop;
+        opt.textContent = crop.charAt(0).toUpperCase() + crop.slice(1);
+        rq1MatrixCropFilter.appendChild(opt);
+      }
     }
 
-    rq1HorizonToolbar.innerHTML = "";
-    initHorizonToolbar(rq1HorizonToolbar, rq1Horizon, (hz) => {
-      rq1Horizon = hz;
-      renderRq1();
-    });
-
-    rq1MatrixCropFilter.addEventListener("change", () => {
-      rq1Crop = rq1MatrixCropFilter.value || "all";
-      renderRq1();
-    });
-    rq1MatrixAxisToolbar.querySelectorAll("button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        rq1MatrixAxisToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        rq1MatrixAxis = btn.dataset.axis || "overall";
-        syncMatrixMetricControl();
-        mcSort = "median";
-        mcDir = defaultMatrixSortDir(matrixMetricSpec(), "median");
-        renderModelCountryHeatmap();
+    if (rq1HorizonSelect || mcWrap) {
+      rq1Horizon = fillHorizonSelect(rq1HorizonSelect, rq1Horizon, (hz) => {
+        rq1Horizon = hz;
+        renderRq1();
       });
-    });
-    rq1MatrixMetricSelect.addEventListener("change", () => {
-      rq1MatrixMetric = rq1MatrixMetricSelect.value || "r2";
-      mcSort = "median";
-      mcDir = defaultMatrixSortDir(matrixMetricSpec(), "median");
-      renderModelCountryHeatmap();
-    });
-    if (rq1MatrixPaletteToolbar) {
-      rq1MatrixPaletteToolbar.addEventListener("click", ev => {
-        const btn = ev.target.closest("button[data-palette]");
-        if (!btn) return;
-        metricDisplayPalette = btn.dataset.palette || "intensity";
-        rq1MatrixPaletteToolbar.querySelectorAll("button").forEach(b => {
-          b.classList.toggle("active", b === btn);
+
+      if (rq1MatrixCropFilter) {
+        rq1MatrixCropFilter.addEventListener("change", () => {
+          rq1Crop = rq1MatrixCropFilter.value || "all";
+          renderRq1();
         });
-        renderModelCountryHeatmap();
-      });
+      }
+      if (rq1MatrixAxisSelect) {
+        rq1MatrixAxisSelect.addEventListener("change", () => {
+          rq1MatrixAxis = rq1MatrixAxisSelect.value || "overall";
+          syncMatrixMetricControl();
+          mcSort = rq1MatrixAxis === "overall" ? "median_nrmse" : "median";
+          mcDir = defaultMatrixSortDir(matrixMetricSpec(), "median");
+          renderModelCountryHeatmap();
+        });
+      }
+      if (rq1MatrixMetricSelect) {
+        rq1MatrixMetricSelect.addEventListener("change", () => {
+          rq1MatrixMetric = rq1MatrixMetricSelect.value || "r2";
+          mcSort = "median";
+          mcDir = defaultMatrixSortDir(matrixMetricSpec(), "median");
+          renderModelCountryHeatmap();
+        });
+      }
+      if (rq1MatrixPaletteSelect) {
+        rq1MatrixPaletteSelect.addEventListener("change", () => {
+          metricDisplayPalette = rq1MatrixPaletteSelect.value || "intensity";
+          renderModelCountryHeatmap();
+        });
+      }
+      if (rq1ModelFilter) rq1ModelFilter.addEventListener("input", renderRq1);
+      syncMatrixMetricControl();
+      renderRq1();
     }
-    rq1ModelFilter.addEventListener("input", renderRq1);
-    syncMatrixMetricControl();
-    renderRq1();
 
     // World map — per-country evaluation metrics
     let mapHorizon = rq1Horizon;
@@ -1144,10 +1327,10 @@
     let mapAxis = "overall";
     let mapMetric = "nrmse";
     let mapModel = "";
-    const metricMapHorizonToolbar = document.getElementById("metric-map-horizon-toolbar");
+    const metricMapHorizonSelect = document.getElementById("metric-map-horizon");
     const metricMapCropFilter = document.getElementById("metric-map-crop-filter");
     const metricMapModelSelect = document.getElementById("metric-map-model");
-    const metricMapAxisToolbar = document.getElementById("metric-map-axis-toolbar");
+    const metricMapAxisSelect = document.getElementById("metric-map-axis");
     const metricMapMetricWrap = document.getElementById("metric-map-metric-wrap");
     const metricMapMetricSelect = document.getElementById("metric-map-metric");
     const metricMapNote = document.getElementById("metric-map-note");
@@ -1155,7 +1338,7 @@
     const metricMapWrap = document.getElementById("metric-map-wrap");
     const metricMapLegendLabel = document.getElementById("metric-map-legend-label");
     const metricMapSummary = document.getElementById("metric-map-summary");
-    const metricMapPaletteToolbar = document.getElementById("metric-map-palette-toolbar");
+    const metricMapPaletteSelect = document.getElementById("metric-map-palette");
     const metricMapExportSvgBtn = document.getElementById("metric-map-export-svg");
     const metricMapExportPngBtn = document.getElementById("metric-map-export-png");
     const COUNTRY_MAP_CC = DATA.country_map_cc || {};
@@ -1256,10 +1439,12 @@
       }
       return exportFontLoading;
     }
-    const mapSvg = d3.select("#metric-map-wrap").html("").append("svg")
-      .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
-      .attr("role", "img")
-      .attr("aria-label", "World map of model evaluation metrics by country");
+    const mapSvg = metricMapWrap
+      ? d3.select("#metric-map-wrap").html("").append("svg")
+          .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
+          .attr("role", "img")
+          .attr("aria-label", "World map of model evaluation metrics by country")
+      : null;
 
     if (metricMapCoverageNote) {
       metricMapCoverageNote.textContent = DATA.map_coverage_note || (
@@ -1267,11 +1452,13 @@
       );
     }
 
-    for (const crop of DATA.crops || []) {
-      const opt = document.createElement("option");
-      opt.value = crop;
-      opt.textContent = crop.charAt(0).toUpperCase() + crop.slice(1);
-      metricMapCropFilter.appendChild(opt);
+    if (metricMapCropFilter) {
+      for (const crop of DATA.crops || []) {
+        const opt = document.createElement("option");
+        opt.value = crop;
+        opt.textContent = crop.charAt(0).toUpperCase() + crop.slice(1);
+        metricMapCropFilter.appendChild(opt);
+      }
     }
 
     function isBenchmarkIso(iso) {
@@ -1634,48 +1821,51 @@
       });
     }
 
-    initHorizonToolbar(metricMapHorizonToolbar, mapHorizon, (hz) => {
-      mapHorizon = hz;
-      renderMetricMapPanel();
-    });
-    metricMapCropFilter.addEventListener("change", () => {
-      mapCrop = metricMapCropFilter.value || "all";
-      renderMetricMapPanel();
-    });
-    metricMapModelSelect.addEventListener("change", () => {
-      mapModel = metricMapModelSelect.value || "";
-      renderMetricMap();
-    });
-    metricMapAxisToolbar.querySelectorAll("button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        metricMapAxisToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        mapAxis = btn.dataset.axis || "overall";
-        syncMapMetricControl();
-        renderMetricMap();
+    if (metricMapWrap) {
+      mapHorizon = fillHorizonSelect(metricMapHorizonSelect, mapHorizon, (hz) => {
+        mapHorizon = hz;
+        renderMetricMapPanel();
       });
-    });
-    metricMapMetricSelect.addEventListener("change", () => {
-      mapMetric = metricMapMetricSelect.value || "nrmse";
-      renderMetricMap();
-    });
-    if (metricMapPaletteToolbar) {
-      metricMapPaletteToolbar.querySelectorAll("button").forEach(btn => {
-        btn.addEventListener("click", () => {
-          metricMapPaletteToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
-          metricDisplayPalette = btn.dataset.palette || "intensity";
-          renderModelCountryHeatmap();
+      if (metricMapCropFilter) {
+        metricMapCropFilter.addEventListener("change", () => {
+          mapCrop = metricMapCropFilter.value || "all";
+          renderMetricMapPanel();
+        });
+      }
+      if (metricMapModelSelect) {
+        metricMapModelSelect.addEventListener("change", () => {
+          mapModel = metricMapModelSelect.value || "";
           renderMetricMap();
         });
-      });
+      }
+      if (metricMapAxisSelect) {
+        metricMapAxisSelect.addEventListener("change", () => {
+          mapAxis = metricMapAxisSelect.value || "overall";
+          syncMapMetricControl();
+          renderMetricMap();
+        });
+      }
+      if (metricMapMetricSelect) {
+        metricMapMetricSelect.addEventListener("change", () => {
+          mapMetric = metricMapMetricSelect.value || "nrmse";
+          renderMetricMap();
+        });
+      }
+      if (metricMapPaletteSelect) {
+        metricMapPaletteSelect.addEventListener("change", () => {
+          metricDisplayPalette = metricMapPaletteSelect.value || "intensity";
+          renderMetricMap();
+        });
+      }
+      if (metricMapExportSvgBtn) metricMapExportSvgBtn.addEventListener("click", downloadMetricMapSvg);
+      if (metricMapExportPngBtn) metricMapExportPngBtn.addEventListener("click", downloadMetricMapPng);
+      syncMapMetricControl();
+      loadMetricMapGeometry();
+      ensureExportFont();
     }
-    if (metricMapExportSvgBtn) metricMapExportSvgBtn.addEventListener("click", downloadMetricMapSvg);
-    if (metricMapExportPngBtn) metricMapExportPngBtn.addEventListener("click", downloadMetricMapPng);
-    loadMetricMapGeometry();
-    ensureExportFont();
 
     // World map — horizon improvement (pairwise delta between forecast horizons)
+    if (PAGE === "horizon") {
     let deltaMapFromHz = AVAILABLE_HORIZONS.includes("mid") ? "mid" : (AVAILABLE_HORIZONS[0] || "eos");
     let deltaMapToHz = AVAILABLE_HORIZONS.includes("eos") ? "eos" : (AVAILABLE_HORIZONS[AVAILABLE_HORIZONS.length - 1] || "eos");
     let deltaMapCrop = "all";
@@ -1689,25 +1879,28 @@
     const deltaMapCropFilter = document.getElementById("delta-map-crop-filter");
     const deltaMapSkilledCheckbox = document.getElementById("delta-map-skilled-only");
     const deltaMapModelSelect = document.getElementById("delta-map-model");
-    const deltaMapAxisToolbar = document.getElementById("delta-map-axis-toolbar");
+    const deltaMapAxisSelect = document.getElementById("delta-map-axis");
     const deltaMapMetricWrap = document.getElementById("delta-map-metric-wrap");
     const deltaMapMetricSelect = document.getElementById("delta-map-metric");
     const deltaMapNote = document.getElementById("delta-map-note");
     const deltaMapWrap = document.getElementById("delta-map-wrap");
     const deltaMapLegendLabel = document.getElementById("delta-map-legend-label");
     const deltaMapSummary = document.getElementById("delta-map-summary");
-    const deltaMapPaletteToolbar = document.getElementById("delta-map-palette-toolbar");
+    const deltaMapPaletteSelect = document.getElementById("delta-map-palette");
     const HORIZON_DELTA_SCALES = DATA.horizon_delta_scales || {
       nrmse: { lo: -0.15, hi: 0.15, higher_better: true, label: "Δ NRMSE" },
       r2: { lo: -0.15, hi: 0.15, higher_better: true, label: "Δ R²" },
       r: { lo: -0.2, hi: 0.2, higher_better: true, label: "Δ r" },
     };
-    const deltaMapSvg = d3.select("#delta-map-wrap").html("").append("svg")
-      .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
-      .attr("role", "img")
-      .attr("aria-label", "World map of horizon improvement by country");
+    const deltaMapSvg = deltaMapWrap
+      ? d3.select("#delta-map-wrap").html("").append("svg")
+          .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
+          .attr("role", "img")
+          .attr("aria-label", "World map of horizon improvement by country")
+      : null;
 
     function populateDeltaHorizonSelects() {
+      if (!deltaMapFromSelect || !deltaMapToSelect) return;
       const horizons = AVAILABLE_HORIZONS.length ? AVAILABLE_HORIZONS : ["eos"];
       const options = horizons.map(hz => {
         const label = HORIZON_LABELS[hz] || hz;
@@ -1721,11 +1914,13 @@
       deltaMapToSelect.value = deltaMapToHz;
     }
 
-    for (const crop of DATA.crops || []) {
-      const opt = document.createElement("option");
-      opt.value = crop;
-      opt.textContent = crop.charAt(0).toUpperCase() + crop.slice(1);
-      deltaMapCropFilter.appendChild(opt);
+    if (deltaMapCropFilter) {
+      for (const crop of DATA.crops || []) {
+        const opt = document.createElement("option");
+        opt.value = crop;
+        opt.textContent = crop.charAt(0).toUpperCase() + crop.slice(1);
+        deltaMapCropFilter.appendChild(opt);
+      }
     }
 
     function deltaMatrixSource(horizon) {
@@ -1936,56 +2131,75 @@
       renderHorizonDeltaMap();
     }
 
-    const _renderMetricMapPanelOrig = renderMetricMapPanel;
-    renderMetricMapPanel = function () {
-      _renderMetricMapPanelOrig();
-      renderHorizonDeltaMapPanel();
-    };
+    const _renderMetricMapPanelOrig = typeof renderMetricMapPanel === "function" ? renderMetricMapPanel : null;
+    if (_renderMetricMapPanelOrig) {
+      renderMetricMapPanel = function () {
+        _renderMetricMapPanelOrig();
+        renderHorizonDeltaMapPanel();
+      };
+    }
 
     populateDeltaHorizonSelects();
-    deltaMapFromSelect.addEventListener("change", () => {
+    if (deltaMapFromSelect) deltaMapFromSelect.addEventListener("change", () => {
       deltaMapFromHz = deltaMapFromSelect.value || deltaMapFromHz;
       renderHorizonDeltaMapPanel();
     });
-    deltaMapToSelect.addEventListener("change", () => {
+    if (deltaMapToSelect) deltaMapToSelect.addEventListener("change", () => {
       deltaMapToHz = deltaMapToSelect.value || deltaMapToHz;
       renderHorizonDeltaMapPanel();
     });
-    deltaMapCropFilter.addEventListener("change", () => {
+    if (deltaMapCropFilter) deltaMapCropFilter.addEventListener("change", () => {
       deltaMapCrop = deltaMapCropFilter.value || "all";
       renderHorizonDeltaMapPanel();
     });
-    deltaMapSkilledCheckbox.addEventListener("change", () => {
+    if (deltaMapSkilledCheckbox) deltaMapSkilledCheckbox.addEventListener("change", () => {
       deltaMapSkilledOnly = deltaMapSkilledCheckbox.checked;
       renderHorizonDeltaMapPanel();
     });
-    deltaMapModelSelect.addEventListener("change", () => {
+    if (deltaMapModelSelect) deltaMapModelSelect.addEventListener("change", () => {
       deltaMapModel = deltaMapModelSelect.value || "";
       renderHorizonDeltaMap();
     });
-    deltaMapAxisToolbar.querySelectorAll("button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        deltaMapAxisToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        deltaMapAxis = btn.dataset.axis || "overall";
+    if (deltaMapAxisSelect) {
+      deltaMapAxisSelect.addEventListener("change", () => {
+        deltaMapAxis = deltaMapAxisSelect.value || "overall";
         syncDeltaMetricControl();
         renderHorizonDeltaMap();
       });
-    });
-    deltaMapMetricSelect.addEventListener("change", () => {
-      deltaMapMetric = deltaMapMetricSelect.value || "nrmse";
-      renderHorizonDeltaMap();
-    });
-    if (deltaMapPaletteToolbar) {
-      deltaMapPaletteToolbar.querySelectorAll("button").forEach(btn => {
-        btn.addEventListener("click", () => {
-          deltaMapPaletteToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
-          deltaMapPalette = btn.dataset.palette || "semantic";
-          renderHorizonDeltaMap();
-        });
+    }
+    if (deltaMapMetricSelect) {
+      deltaMapMetricSelect.addEventListener("change", () => {
+        deltaMapMetric = deltaMapMetricSelect.value || "nrmse";
+        renderHorizonDeltaMap();
       });
     }
+    if (deltaMapPaletteSelect) {
+      deltaMapPaletteSelect.addEventListener("change", () => {
+        deltaMapPalette = deltaMapPaletteSelect.value || "semantic";
+        renderHorizonDeltaMap();
+      });
+    }
+
+    function loadDeltaMapGeometry() {
+      if (worldFeatures) {
+        renderHorizonDeltaMapPanel();
+        return;
+      }
+      if (!DATA.geojson_href || !deltaMapWrap) {
+        if (deltaMapWrap) {
+          deltaMapWrap.innerHTML = '<p class="muted">Map geometry not available.</p>';
+        }
+        return;
+      }
+      d3.json(DATA.geojson_href).then(geo => {
+        worldFeatures = mapFeaturesWithoutAntarctica(geo.features);
+        fitMapProjection(worldFeatures);
+        renderHorizonDeltaMapPanel();
+      }).catch(err => {
+        deltaMapWrap.innerHTML = `<p class="muted">Could not load map (${err}).</p>`;
+      });
+    }
+    loadDeltaMapGeometry();
 
     // Horizon skill curves
     function modelPlotColor(entry) {
@@ -2380,11 +2594,11 @@
       });
     }
 
-    hscCropSelect.addEventListener("change", () => {
+    if (hscCropSelect) hscCropSelect.addEventListener("change", () => {
       hscCrop = hscCropSelect.value || "all";
       renderHorizonSkillCurves();
     });
-    hscAxisToolbar.querySelectorAll("button").forEach(btn => {
+    if (hscAxisToolbar) hscAxisToolbar.querySelectorAll("button").forEach(btn => {
       btn.addEventListener("click", () => {
         hscAxisToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
@@ -2415,7 +2629,7 @@
     const hmTableWrap = document.getElementById("horizon-models-table-wrap");
     const hmMetricNote = document.getElementById("horizon-models-metric-note");
     const hmCropSelect = document.getElementById("horizon-models-crop");
-    const hmAxisToolbar = document.getElementById("horizon-models-axis-toolbar");
+    const hmAxisSelect = document.getElementById("horizon-models-axis");
     const hmMetricWrap = document.getElementById("horizon-models-metric-wrap");
     const hmMetricSelect = document.getElementById("horizon-models-metric");
     const hmModelFilter = document.getElementById("horizon-models-filter");
@@ -2636,53 +2850,60 @@
       hmMetricSelect.value = hmMetric;
     }
 
-    hmSelectReps.addEventListener("click", () => {
+    if (hmSelectReps) hmSelectReps.addEventListener("click", () => {
       const slice = (HSC.by_crop || {})[hmCrop] || { models: [] };
       const set = new Set();
       (slice.models || []).filter(m => m.is_representative).forEach(m => set.add(m.model));
       hmSelectedByCrop[hmCrop] = set;
       renderHorizonModelsView();
     });
-    hmSelectAll.addEventListener("click", () => {
+    if (hmSelectAll) hmSelectAll.addEventListener("click", () => {
       const slice = (HSC.by_crop || {})[hmCrop] || { models: [] };
       hmSelectedByCrop[hmCrop] = new Set((slice.models || []).map(m => m.model));
       renderHorizonModelsView();
     });
-    hmSelectNone.addEventListener("click", () => {
+    if (hmSelectNone) hmSelectNone.addEventListener("click", () => {
       hmSelectedByCrop[hmCrop] = new Set();
       renderHorizonModelsView();
     });
-    hmPickerFilter.addEventListener("input", () => {
+    if (hmPickerFilter) hmPickerFilter.addEventListener("input", () => {
       hmPickerFilterText = hmPickerFilter.value || "";
       const slice = (HSC.by_crop || {})[hmCrop] || { models: [] };
       renderHorizonModelsPicker(slice.models || []);
     });
 
-    hmAxisToolbar.querySelectorAll("button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        hmAxisToolbar.querySelectorAll("button").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        hmAxis = btn.dataset.axis || "overall";
+    if (hmAxisSelect) {
+      hmAxisSelect.addEventListener("change", () => {
+        hmAxis = hmAxisSelect.value || "overall";
         syncHmMetricControl();
         renderHorizonModelsView();
       });
-    });
-    hmCropSelect.addEventListener("change", () => {
-      hmCrop = hmCropSelect.value || "all";
+    }
+    if (hmCropSelect) {
+      hmCropSelect.addEventListener("change", () => {
+        hmCrop = hmCropSelect.value || "all";
+        renderHorizonModelsView();
+      });
+    }
+    if (hmMetricSelect) {
+      hmMetricSelect.addEventListener("change", () => {
+        hmMetric = hmMetricSelect.value || "nrmse";
+        renderHorizonModelsView();
+      });
+    }
+    if (hmModelFilter) hmModelFilter.addEventListener("input", renderHorizonModelsView);
+    if (hmChart || hmTableWrap) {
+      syncHmMetricControl();
       renderHorizonModelsView();
-    });
-    hmMetricSelect.addEventListener("change", () => {
-      hmMetric = hmMetricSelect.value || "nrmse";
-      renderHorizonModelsView();
-    });
-    hmModelFilter.addEventListener("input", renderHorizonModelsView);
-    syncHmMetricControl();
-    renderHorizonModelsView();
+    }
+
+    } // end PAGE === horizon
 
     // Crop pair comparison (RQ3)
+    if (PAGE === "crops") {
     let rq3Horizon = AVAILABLE_HORIZONS.includes("eos") ? "eos" : (AVAILABLE_HORIZONS[0] || "eos");
     let rq3PairKey = "";
-    const rq3HorizonToolbar = document.getElementById("rq3-horizon-toolbar");
+    const rq3HorizonSelect = document.getElementById("rq3-horizon");
     const rq3PairFilter = document.getElementById("rq3-pair-filter");
     const cropPairNote = document.getElementById("crop-pair-note");
     const cropPairStats = document.getElementById("crop-pair-stats");
@@ -2805,11 +3026,12 @@
       });
     }
 
-    initHorizonToolbar(rq3HorizonToolbar, rq3Horizon, (hz) => {
-      rq3Horizon = hz;
-      populateCropPairOptions();
-      renderCropPairComparison();
-    });
+    if (rq3HorizonSelect || document.getElementById("crop-pair-summary-wrap")) {
+      rq3Horizon = fillHorizonSelect(rq3HorizonSelect, rq3Horizon, (hz) => {
+        rq3Horizon = hz;
+        populateCropPairOptions();
+        renderCropPairComparison();
+      });
     rq3PairFilter.addEventListener("change", () => {
       rq3PairKey = rq3PairFilter.value;
       renderCropPairComparison();
@@ -2818,9 +3040,17 @@
     cropDetailModelFilter.addEventListener("input", renderCropPairComparison);
     populateCropPairOptions();
     renderCropPairComparison();
+    }
 
+    } // end PAGE === crops
+
+    if (PAGE === "performance") {
     __FAMILY_PANEL_SCRIPT__
+    }
+    if (PAGE === "performance" || PAGE === "sample_size") {
     __FAMILY_RQ4_PANEL_SCRIPT__
+    }
+
   </script>
 </body>
 </html>

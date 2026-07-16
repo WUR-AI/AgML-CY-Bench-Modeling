@@ -17,9 +17,13 @@ _PAPER_DIR_RE = re.compile(
 
 _BASELINE_MODELS = frozenset({"average", "averageyieldmodel", "average_yield"})
 
+# Hidden from published dashboards / insights (sparse coverage; LPJmL is the process baseline).
+EXCLUDED_DASHBOARD_MODELS: frozenset[str] = frozenset({"twso_bc", "twso"})
+
 # Lead time decreases left → right (less season observed → more observed).
-# Code: early = ~25% observed; mid = 50%; qtr = ~75% observed (25% left); eos = ~100%.
+# Published dashboards currently use mid (~50%) and eos (~100%).
 BATCH_HORIZON_ORDER: tuple[str, ...] = ("early", "mid", "qtr", "eos")
+PUBLISHED_HORIZON_ORDER: tuple[str, ...] = ("mid", "eos")
 
 HORIZON_DISPLAY_LABELS: dict[str, str] = {
     "early": "Early season (~25% observed)",
@@ -58,6 +62,13 @@ def horizons_in_data(df: pd.DataFrame) -> tuple[str, ...]:
         return ()
     present = set(df["batch_horizon"].astype(str))
     return tuple(hz for hz in BATCH_HORIZON_ORDER if hz in present)
+
+
+def published_horizons_in_data(df: pd.DataFrame) -> tuple[str, ...]:
+    """Horizons shown on the published dashboard (mid / eos when available)."""
+    present = set(horizons_in_data(df))
+    published = tuple(hz for hz in PUBLISHED_HORIZON_ORDER if hz in present)
+    return published if published else horizons_in_data(df)
 
 # Evaluation views for the model×country heatmap (aligned with country dashboards / radar).
 MODEL_COUNTRY_AXES: tuple[dict[str, Any], ...] = (
@@ -121,6 +132,10 @@ _NUMERIC_SUMMARY_COLS = (
 
 def is_baseline_model(model: object) -> bool:
     return str(model).lower().replace("-", "_") in _BASELINE_MODELS
+
+
+def is_excluded_dashboard_model(model: object) -> bool:
+    return str(model).lower().replace("-", "_") in EXCLUDED_DASHBOARD_MODELS
 
 
 def parse_paper_dir_name(name: str) -> tuple[str, str, int] | None:
@@ -373,6 +388,8 @@ def load_summary_frame(
     if not frames:
         return pd.DataFrame()
     out = pd.concat(frames, ignore_index=True)
+    if not out.empty and "model" in out.columns:
+        out = out.loc[~out["model"].apply(is_excluded_dashboard_model)].reset_index(drop=True)
     if not out.empty and "crop" in out.columns and "country" in out.columns:
         keep = out.apply(
             lambda row: is_benchmark_evaluation_crop_country(
@@ -1703,14 +1720,14 @@ def build_crop_comparison_payload(df: pd.DataFrame) -> dict[str, dict[str, Any]]
     return out
 
 
-def build_insights_payload(output_root: Path, *, version: int = 2) -> dict[str, Any]:
+def build_insights_payload(output_root: Path, *, version: int = 4) -> dict[str, Any]:
     """Build JSON-serializable payload for the global insights dashboard."""
     from cybench.runs.analysis.model_family_radar_lib import build_radar_payload
 
     paths = discover_summary_tables(output_root, version=version)
     df = load_summary_frame(paths)
 
-    available_horizons = horizons_in_data(df)
+    available_horizons = published_horizons_in_data(df)
     leaderboards: dict[str, dict[str, list[dict[str, Any]]]] = {}
     leaderboards_skilled: dict[str, dict[str, list[dict[str, Any]]]] = {}
     model_country: dict[str, dict[str, dict[str, Any]]] = {}

@@ -761,9 +761,12 @@ def test_horizon_models_include_partial_early_coverage():
 def test_build_insights_payload_includes_qtr_and_curves(tmp_path: Path):
     _three_horizon_fixture(tmp_path)
     payload = build_insights_payload(tmp_path, version=1)
-    assert "qtr" in payload["available_horizons"]
-    assert "qtr" in payload["leaderboards"]
-    assert payload["horizon_skill_curves"]["horizons"]
+    # Published dashboard exposes mid/eos; early/qtr remain in skill-curve analysis.
+    assert payload["available_horizons"] == ["mid", "eos"]
+    assert "mid" in payload["leaderboards"]
+    assert "eos" in payload["leaderboards"]
+    curve_hz = {h["id"] if isinstance(h, dict) else h for h in payload["horizon_skill_curves"]["horizons"]}
+    assert "qtr" in curve_hz
     assert payload["horizon_skill_curves"]["by_crop"]["maize"]["n_countries"] == 2
     assert payload["horizon_skill_curves"]["by_crop"]["maize"]["models"]
     assert "horizon_summary" not in payload

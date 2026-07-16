@@ -1,10 +1,14 @@
-// Embedded in insights.html (RQ4 training-size scatter + country bootstrap table).
+// Embedded in insights pages (sample-size scatter +/or country bootstrap table).
 (function initFamilyRq4Panel() {
   const FAMILY = DATA.family_dashboard;
   const scatterPanel = document.getElementById("rq4-scatter-panel");
   const scatterNote = document.getElementById("rq4-scatter-note");
-  const horizonSelect = document.getElementById("rq4-horizon");
-  const cropSelect = document.getElementById("rq4-crop");
+  const horizonSelect = document.getElementById("rq4-horizon")
+    || document.getElementById("family-map-horizon")
+    || document.getElementById("family-metrics-horizon");
+  const cropSelect = document.getElementById("rq4-crop")
+    || document.getElementById("family-map-crop")
+    || document.getElementById("family-metrics-crop");
   const rq4Card = document.getElementById("rq4-card");
   const bootstrapNote = document.getElementById("bootstrap-note");
   const bootstrapTable = document.getElementById("bootstrap-table");
@@ -12,7 +16,7 @@
   const bootstrapExportLatexCopyBtn = document.getElementById("bootstrap-export-latex-copy");
   const countryBootstrapSection = document.getElementById("country-bootstrap-section");
 
-  if (!scatterPanel || !horizonSelect || !FAMILY) return;
+  if (!FAMILY || (!scatterPanel && !bootstrapTable) || !horizonSelect || !cropSelect) return;
 
   const horizonLabels = FAMILY.horizon_labels || DATA.horizon_labels || {};
   const scatterMetric = FAMILY.sample_scatter_metric || DATA.sample_scatter_metric || {
@@ -26,7 +30,7 @@
   const bootstrapHorizons = Object.keys(
     (DATA.country_bootstrap || FAMILY.country_bootstrap || {}).by_horizon || {},
   );
-  const horizonOrder = ["eos", "early", "mid", "qtr"].filter(
+  const horizonOrder = ["eos", "mid", "early", "qtr"].filter(
     hz => scatterHorizons.includes(hz) || bootstrapHorizons.includes(hz),
   );
   if (!horizonOrder.length) {
@@ -109,6 +113,7 @@
   }
 
   function renderScatter() {
+    if (!scatterPanel) return;
     const metricKey = scatterMetric.key || "relative_nrmse";
     const refY = scatterMetric.reference ?? 1.0;
     const { families, summary } = currentScatterSlice();
@@ -369,17 +374,24 @@ ${bodyRows}
   }
 
   function render() {
-    renderScatter();
-    renderBootstrapTable();
+    if (scatterPanel) renderScatter();
+    if (bootstrapTable || countryBootstrapSection) renderBootstrapTable();
   }
 
-  fillHorizonSelect();
-  fillCropSelect();
-  horizonSelect.addEventListener("change", () => {
+  const ownsHorizonCrop = Boolean(document.getElementById("rq4-horizon"));
+  if (ownsHorizonCrop) {
+    fillHorizonSelect();
     fillCropSelect();
-    render();
-  });
-  cropSelect.addEventListener("change", render);
+    horizonSelect.addEventListener("change", () => {
+      fillCropSelect();
+      render();
+    });
+    cropSelect.addEventListener("change", render);
+  } else {
+    // Share family-map / family-metrics controls on the performance page.
+    horizonSelect.addEventListener("change", render);
+    cropSelect.addEventListener("change", render);
+  }
   if (bootstrapExportLatexBtn) bootstrapExportLatexBtn.addEventListener("click", downloadBootstrapTableLatex);
   if (bootstrapExportLatexCopyBtn) bootstrapExportLatexCopyBtn.addEventListener("click", copyBootstrapTableLatex);
   render();

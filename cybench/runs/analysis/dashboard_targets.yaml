@@ -12,7 +12,7 @@
 # Optional: uncomment ``include`` to pin a subset (also used by --mode planned).
 
 defaults:
-  version: 2
+  version: 4
   output_root: /lustre/backup/SHARED/AIN/agml/output
   repo_root: /lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-AAAI
   publish_root: /lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-dashboard

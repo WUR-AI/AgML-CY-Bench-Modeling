@@ -840,7 +840,12 @@ def run_commit_stage(
         return StageStatus("commit", True, f"not a git repo: {publish_root}")
 
     rel_paths = [target.publish_slug, "index.html"]
-    for global_page in ("insights.html",):
+    for global_page in (
+        "insights.html",
+        "insights-horizon.html",
+        "insights-crops.html",
+        "insights-sample-size.html",
+    ):
         if (publish_root / global_page).is_file():
             rel_paths.append(global_page)
 

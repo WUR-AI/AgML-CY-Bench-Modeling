@@ -9,10 +9,12 @@
   const mapHorizon = document.getElementById("family-map-horizon");
   const mapCrop = document.getElementById("family-map-crop");
   const mapWrap = document.getElementById("family-winner-map-wrap");
+  const benefitMapWrap = document.getElementById("family-benefit-map-wrap");
   const mapSummary = document.getElementById("family-winner-summary");
+  const benefitSummary = document.getElementById("family-benefit-summary");
   const mapModeNote = document.getElementById("family-map-note");
-  const mapModeToolbar = document.getElementById("family-map-mode-toolbar");
   const aspectLabel = document.getElementById("family-winner-aspect-label");
+  const aspectSelect = document.getElementById("family-winner-aspect");
   const aspectToolbar = document.getElementById("family-winner-aspect-toolbar");
   const winnerLegend = document.getElementById("family-winner-legend");
   const benefitLegend = document.getElementById("family-benefit-legend");
@@ -22,10 +24,9 @@
   if (!metricsWrap || !metricsHorizon) return;
 
   const horizonLabels = FAMILY.horizon_labels || {};
-  const horizonOrder = ["eos", "early", "mid", "qtr"].filter(hz => FAMILY.by_horizon[hz]);
+  const horizonOrder = ["eos", "mid", "early", "qtr"].filter(hz => FAMILY.by_horizon[hz]);
   let famHorizon = horizonOrder.includes("eos") ? "eos" : horizonOrder[0];
   let famCrop = "all";
-  let mapMode = "winner";
   let winnerAspect = (FAMILY.views || [])[0]?.label || "Overall";
 
   const MAP_FILL_OUTSIDE = "#e2e6eb";
@@ -233,9 +234,18 @@
   let worldFeatures = null;
   let mapProjection = d3.geoNaturalEarth1();
   let mapPath = d3.geoPath(mapProjection);
-  const mapSvg = d3.select("#family-winner-map-wrap").html("").append("svg")
-    .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
-    .attr("role", "img");
+  const mapSvg = mapWrap
+    ? d3.select("#family-winner-map-wrap").html("").append("svg")
+        .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
+        .attr("role", "img")
+        .attr("aria-label", "Winning model family by country")
+    : null;
+  const benefitSvg = benefitMapWrap
+    ? d3.select("#family-benefit-map-wrap").html("").append("svg")
+        .attr("viewBox", `0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`)
+        .attr("role", "img")
+        .attr("aria-label", "AI error reduction by country")
+    : null;
 
   function winnerColorMap() {
     const out = {};
@@ -285,20 +295,17 @@
   }
 
   function updateMapModeUi() {
-    const isBenefit = mapMode === "benefit";
-    if (aspectLabel) aspectLabel.style.display = isBenefit ? "none" : "";
-    if (aspectToolbar) aspectToolbar.style.display = isBenefit ? "none" : "";
-    if (winnerLegend) winnerLegend.style.display = isBenefit ? "none" : "";
-    if (benefitLegend) benefitLegend.style.display = isBenefit ? "flex" : "none";
+    if (winnerLegend) winnerLegend.style.display = "";
+    if (benefitLegend) benefitLegend.style.display = "flex";
     if (mapModeNote) {
-      mapModeNote.textContent = isBenefit
-        ? (FAMILY.ai_benefit_note || "100 × (1 − NRMSE_AI / NRMSE_Traditional). Positive ⇒ AI reduced error.")
-        : "Which modeling paradigm wins per country for the selected evaluation aspect.";
+      mapModeNote.textContent =
+        "Left: winning modeling paradigm per country. Right: AI error reduction vs traditional approaches. "
+        + (FAMILY.ai_benefit_note || "");
     }
   }
 
   function renderWinnerMap() {
-    if (!worldFeatures) return;
+    if (!worldFeatures || !mapSvg) return;
     const slice = currentWinnerSlice();
     const byAspect = slice[winnerAspect] || { countries: [] };
     const winners = new Map((byAspect.countries || []).map(r => [r.map_cc || r.country, r]));
@@ -348,7 +355,7 @@
   }
 
   function renderBenefitMap() {
-    if (!worldFeatures) return;
+    if (!worldFeatures || !benefitSvg) return;
     const slice = currentBenefitSlice();
     const rows = slice.countries || [];
     const byCountry = new Map(rows.map(r => [r.map_cc || r.country, r]));
@@ -359,7 +366,7 @@
       benefitLegendLabel.textContent = `−${extent}% · 0% · +${extent}%`;
     }
 
-    const countriesSel = mapSvg.selectAll("path.country")
+    const countriesSel = benefitSvg.selectAll("path.country")
       .data(worldFeatures)
       .join("path")
       .attr("class", "country")
@@ -395,7 +402,7 @@
 
     if (!mapSummary) return;
     if (!rows.length) {
-      mapSummary.textContent = "No AI vs traditional comparison for this horizon/crop.";
+      (benefitSummary || mapSummary).textContent = "No AI vs traditional comparison for this horizon/crop.";
       return;
     }
     const medianBenefit = d3.median(vals);
@@ -407,16 +414,13 @@
     if (nOffScale) {
       summary += ` ${nOffScale} countr${nOffScale === 1 ? "y" : "ies"} beyond scale (color clamped; hover for exact value).`;
     }
-    mapSummary.textContent = summary;
+    (benefitSummary || mapSummary).textContent = summary;
   }
 
   function renderFamilyMap() {
     if (!worldFeatures) return;
-    if (mapMode === "benefit") {
-      renderBenefitMap();
-    } else {
-      renderWinnerMap();
-    }
+    renderWinnerMap();
+    renderBenefitMap();
   }
 
   function setMapExportEnabled(enabled) {
@@ -640,35 +644,34 @@
     });
   }
 
-  if (aspectToolbar) {
+  if (aspectSelect) {
+    aspectSelect.innerHTML = (FAMILY.views || []).map(v =>
+      `<option value="${v.label}">${v.label}</option>`
+    ).join("");
+    aspectSelect.value = winnerAspect;
+    aspectSelect.addEventListener("change", () => {
+      winnerAspect = aspectSelect.value || winnerAspect;
+      renderFamilyMap();
+    });
+  } else if (aspectToolbar) {
     aspectToolbar.innerHTML = (FAMILY.views || []).map((v, idx) =>
       `<button type="button" data-aspect="${v.label}"${idx === 0 ? ' class="active"' : ""}>${v.label}</button>`
     ).join("");
     aspectToolbar.addEventListener("click", ev => {
       const btn = ev.target.closest("button[data-aspect]");
-      if (!btn || mapMode === "benefit") return;
+      if (!btn) return;
       winnerAspect = btn.dataset.aspect;
       aspectToolbar.querySelectorAll("button").forEach(b => b.classList.toggle("active", b === btn));
       renderFamilyMap();
     });
   }
-  if (mapModeToolbar) {
-    mapModeToolbar.addEventListener("click", ev => {
-      const btn = ev.target.closest("button[data-mode]");
-      if (!btn) return;
-      mapMode = btn.dataset.mode;
-      mapModeToolbar.querySelectorAll("button").forEach(b => b.classList.toggle("active", b === btn));
-      updateMapModeUi();
-      renderFamilyMap();
-    });
-    updateMapModeUi();
-  }
+  updateMapModeUi();
 
   function syncSelects() {
     fillHorizonSelect(metricsHorizon);
-    fillHorizonSelect(mapHorizon);
+    if (mapHorizon) fillHorizonSelect(mapHorizon);
     fillCropSelect(metricsCrop);
-    fillCropSelect(mapCrop);
+    if (mapCrop) fillCropSelect(mapCrop);
   }
 
   function renderAll() {
@@ -678,26 +681,30 @@
 
   metricsHorizon.addEventListener("change", () => {
     famHorizon = metricsHorizon.value;
-    mapHorizon.value = famHorizon;
+    if (mapHorizon) mapHorizon.value = famHorizon;
     syncSelects();
     renderAll();
   });
-  mapHorizon.addEventListener("change", () => {
-    famHorizon = mapHorizon.value;
-    metricsHorizon.value = famHorizon;
-    syncSelects();
-    renderAll();
-  });
+  if (mapHorizon) {
+    mapHorizon.addEventListener("change", () => {
+      famHorizon = mapHorizon.value;
+      metricsHorizon.value = famHorizon;
+      syncSelects();
+      renderAll();
+    });
+  }
   metricsCrop.addEventListener("change", () => {
     famCrop = metricsCrop.value;
-    mapCrop.value = famCrop;
+    if (mapCrop) mapCrop.value = famCrop;
     renderAll();
   });
-  mapCrop.addEventListener("change", () => {
-    famCrop = mapCrop.value;
-    metricsCrop.value = famCrop;
-    renderAll();
-  });
+  if (mapCrop) {
+    mapCrop.addEventListener("change", () => {
+      famCrop = mapCrop.value;
+      metricsCrop.value = famCrop;
+      renderAll();
+    });
+  }
 
   syncSelects();
   loadMap();

@@ -124,21 +124,13 @@
   <div class="page">
     <header>
       <h1>CY-Bench dashboards</h1>
-      <p class="lead">Click a country on the map to open walk-forward dashboards. Colors reflect the selected forecast horizon.</p>
+      <p class="lead">Click a country on the map to open mid-season and end-of-season walk-forward dashboards.</p>
     </header>
 
     <div class="top-links" id="top-links"></div>
 
     <div class="layout">
       <div class="card">
-        <div class="toolbar">
-          <span class="muted">Horizon</span>
-          <button type="button" data-horizon="all" class="active">All</button>
-          <button type="button" data-horizon="early">Early season (~25%)</button>
-          <button type="button" data-horizon="mid">Mid-season (~50%)</button>
-          <button type="button" data-horizon="qtr">Late season (~75%)</button>
-          <button type="button" data-horizon="eos">End of season</button>
-        </div>
         <div id="map-wrap"><p class="muted">Loading map…</p></div>
         <div class="legend muted">
           <span><i class="swatch" style="background:var(--land-available)"></i> Dashboard available</span>
@@ -156,26 +148,26 @@
     const DATA = __MAP_DATA_JSON__;
     const byCc = new Map(DATA.countries.map(c => [c.cc, c]));
     const byMapIso = new Map(DATA.countries.map(c => [c.map_cc || c.cc, c]));
-    let horizon = "all";
     let selectedCc = null;
 
     const topLinks = document.getElementById("top-links");
     if (DATA.has_insights) {
-      topLinks.innerHTML += `<a class="pill" href="insights.html">Global insights (all models)</a>`;
+      topLinks.innerHTML += `<a class="pill" href="insights.html">Global insights</a>`;
+      topLinks.innerHTML += `<a class="pill" href="insights-horizon.html">Forecast horizon</a>`;
+      topLinks.innerHTML += `<a class="pill" href="insights-crops.html">Crop comparison</a>`;
+      topLinks.innerHTML += `<a class="pill" href="insights-sample-size.html">Training set size</a>`;
     }
     if (DATA.has_screening && DATA.screening_href) {
       topLinks.innerHTML += `<a class="pill" href="${DATA.screening_href}">Screening (all)</a>`;
     }
-    topLinks.innerHTML += `<span class="pill muted">${DATA.n_countries} countries published</span>`;
 
-    function hasHorizon(c, hz) {
-      if (hz === "all" || hz === "both") return Boolean(c.eos || c.mid || c.qtr || c.early);
-      return Boolean(c[hz]);
+    function hasDashboard(c) {
+      return Boolean(c && (c.eos || c.mid));
     }
 
     function fillForIso(mapIso) {
       const c = byMapIso.get(mapIso);
-      if (!c || !hasHorizon(c, horizon)) return "var(--land-missing)";
+      if (!hasDashboard(c)) return "var(--land-missing)";
       if (selectedCc === c.cc) return "var(--land-active)";
       return "var(--land-available)";
     }
@@ -187,16 +179,12 @@
         return;
       }
       const c = byCc.get(cc);
-      const earlyCls = c.early ? "" : " disabled";
       const eosCls = c.eos ? "" : " disabled";
       const midCls = c.mid ? "" : " disabled";
-      const qtrCls = c.qtr ? "" : " disabled";
       el.innerHTML = `
         <h3>${c.name}</h3>
         <div class="cc">${c.cc}</div>
-        <a class="dash-link${earlyCls}" href="${c.early || "#"}">Early-season walk-forward (~25% observed)</a>
         <a class="dash-link${midCls}" href="${c.mid || "#"}">Mid-season walk-forward</a>
-        <a class="dash-link${qtrCls}" href="${c.qtr || "#"}">Late-season walk-forward (~75% observed)</a>
         <a class="dash-link${eosCls}" href="${c.eos || "#"}">End-of-season walk-forward</a>`;
     }
 
@@ -244,33 +232,17 @@
         .attr("shape-rendering", "geometricPrecision")
         .attr("class", d => {
           const c = isoToCountry(d.properties.ISO_A2);
-          return c && hasHorizon(c, horizon) ? "country available" : "country";
+          return hasDashboard(c) ? "country available" : "country";
         })
         .attr("d", path)
         .attr("fill", d => fillForIso(d.properties.ISO_A2))
         .on("click", (event, d) => {
           const c = isoToCountry(d.properties.ISO_A2);
-          if (c && hasHorizon(c, horizon)) selectCountry(c.cc);
+          if (hasDashboard(c)) selectCountry(c.cc);
         });
     }).catch(err => {
       document.getElementById("map-wrap").innerHTML =
         `<p class="muted">Could not load map (${err}). Use the country links in the repository README or open insights.</p>`;
-    });
-
-    document.querySelectorAll(".toolbar button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".toolbar button").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        horizon = btn.dataset.horizon;
-        selectedCc = null;
-        renderDetail(null);
-        d3.selectAll(".country")
-          .attr("class", d => {
-            const c = isoToCountry(d.properties.ISO_A2);
-            return c && hasHorizon(c, horizon) ? "country available" : "country";
-          })
-          .attr("fill", d => fillForIso(d.properties.ISO_A2));
-      });
     });
   </script>
 </body>
