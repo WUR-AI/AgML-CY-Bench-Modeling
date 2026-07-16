@@ -15,6 +15,8 @@ from cybench.runs.analysis.shap_importance_lib import (
     _rank_features,
     MODEL_MANIFEST,
     aggregate_feature_importance,
+    collect_shap_output_dir,
+    gather_origin_records,
     find_saved_model_artifact,
     find_screening_split_dir,
     find_walk_forward_run_dir,
@@ -194,3 +196,46 @@ def test_find_screening_split_dir_missing_raises(tmp_path: Path):
             model_slug="random_forest",
             horizon="eos",
         )
+
+
+def test_collect_shap_output_dir_from_parallel_origins(tmp_path: Path):
+    model_dir = tmp_path / "maize_NL" / "tabicl"
+    for year, prec_shap in ((2019, 0.3), (2020, 0.5)):
+        origin_dir = model_dir / f"origin_{year}"
+        origin_dir.mkdir(parents=True)
+        OmegaConf.save(
+            OmegaConf.create(
+                {
+                    "crop": "maize",
+                    "country": "NL",
+                    "model": "tabicl",
+                    "horizon": "eos",
+                    "seed": 42,
+                    "train_years": list(range(2008, year)),
+                    "test_years": [year],
+                    "n_train": 10,
+                    "n_test": 2,
+                    "reproduction": {"corr_saved_preds": 1.0, "max_abs_pred_diff": 0.0},
+                    "explainer": "PermutationImportance",
+                    "features": [
+                        {"name": "prec_sum_1", "mean_abs_shap": prec_shap, "rank": 1},
+                    ],
+                }
+            ),
+            origin_dir / "shap_importance.yaml",
+        )
+
+    summaries = collect_shap_output_dir(
+        tmp_path, crop="maize", country="NL", models=["tabicl"]
+    )
+    assert len(summaries) == 1
+    assert summaries[0]["n_origins"] == 2
+    assert (model_dir / "shap_summary.yaml").is_file()
+    assert (model_dir / "shap_aggregate.csv").is_file()
+    agg = pd.read_csv(model_dir / "shap_aggregate.csv")
+    prec = agg.loc[agg["feature"] == "prec_sum_1"].iloc[0]
+    assert prec["median_mean_abs_shap"] == pytest.approx(0.4)
+    assert (tmp_path / "maize_NL" / "shap_aggregate_all_models.csv").is_file()
+
+    records = gather_origin_records(model_dir)
+    assert len(records) == 2

@@ -1269,6 +1269,125 @@ def aggregate_feature_importance(records: Sequence[ShapOriginRecord]) -> pd.Data
     return agg
 
 
+def discover_origin_record_paths(model_dir: Path) -> list[Path]:
+    """Return ``origin_<year>/shap_importance.yaml`` paths sorted by year."""
+    paths = sorted(model_dir.glob("origin_*/shap_importance.yaml"))
+    return sorted(paths, key=lambda path: int(path.parent.name.removeprefix("origin_")))
+
+
+def load_origin_record(path: Path) -> ShapOriginRecord:
+    payload = OmegaConf.to_container(OmegaConf.load(path), resolve=True)
+    if not isinstance(payload, dict):
+        raise ValueError(f"Expected mapping in {path}")
+    return cast(ShapOriginRecord, payload)
+
+
+def gather_origin_records(model_dir: Path) -> list[ShapOriginRecord]:
+    """Load all per-origin SHAP records written under *model_dir*."""
+    records: list[ShapOriginRecord] = []
+    for path in discover_origin_record_paths(model_dir):
+        records.append(load_origin_record(path))
+    return records
+
+
+def write_model_shap_summary(
+    *,
+    model_dir: Path,
+    records: Sequence[ShapOriginRecord],
+    frozen_screening_dir: str,
+    walk_forward_run_dir: str | None,
+) -> ShapCaseSummary:
+    """Write ``shap_summary.yaml`` and ``shap_aggregate.csv`` for one model."""
+    if not records:
+        raise ValueError(f"No origin records to summarize under {model_dir}")
+    first = records[0]
+    summary = ShapCaseSummary(
+        crop=str(first["crop"]),
+        country=str(first["country"]),
+        model=str(first["model"]),
+        horizon=str(first["horizon"]),
+        seed=int(first["seed"]),
+        frozen_screening_dir=frozen_screening_dir,
+        walk_forward_run_dir=walk_forward_run_dir,
+        n_origins=len(records),
+        origins=list(records),
+    )
+    model_dir.mkdir(parents=True, exist_ok=True)
+    OmegaConf.save(OmegaConf.create(dict(summary)), model_dir / "shap_summary.yaml")
+    agg = aggregate_feature_importance(records)
+    if not agg.empty:
+        agg.to_csv(model_dir / "shap_aggregate.csv", index=False)
+    return summary
+
+
+def collect_shap_case_dir(
+    model_dir: Path,
+    *,
+    baselines_dir: Path | None = None,
+) -> ShapCaseSummary:
+    """Rebuild model-level SHAP summary/aggregate from ``origin_*/`` artifacts."""
+    records = gather_origin_records(model_dir)
+    if not records:
+        raise FileNotFoundError(f"No origin_*/shap_importance.yaml under {model_dir}")
+
+    frozen_dir = ""
+    walk_forward_run_dir: str | None = None
+    if baselines_dir is not None:
+        spec = ShapRunSpec(
+            crop=str(records[0]["crop"]),
+            country=str(records[0]["country"]),
+            model=str(records[0]["model"]),
+            horizon=str(records[0]["horizon"]),
+            seed=int(records[0]["seed"]),
+            baselines_dir=baselines_dir,
+        )
+        frozen_path, wf_path, _ = resolve_shap_paths(spec)
+        frozen_dir = str(frozen_path)
+        walk_forward_run_dir = str(wf_path) if wf_path is not None else None
+
+    return write_model_shap_summary(
+        model_dir=model_dir,
+        records=records,
+        frozen_screening_dir=frozen_dir,
+        walk_forward_run_dir=walk_forward_run_dir,
+    )
+
+
+def collect_shap_output_dir(
+    output_dir: Path,
+    *,
+    crop: str,
+    country: str,
+    baselines_dir: Path | None = None,
+    models: Sequence[str] | None = None,
+) -> list[ShapCaseSummary]:
+    """Collect per-model summaries and write cross-model aggregate CSV."""
+    case_dir = output_dir / f"{crop}_{country}"
+    if not case_dir.is_dir():
+        raise FileNotFoundError(f"Case directory not found: {case_dir}")
+
+    model_dirs = sorted(
+        path for path in case_dir.iterdir() if path.is_dir() and path.name != "__pycache__"
+    )
+    if models is not None:
+        allowed = set(models)
+        model_dirs = [path for path in model_dirs if path.name in allowed]
+
+    summaries: list[ShapCaseSummary] = []
+    all_records: list[ShapOriginRecord] = []
+    for model_dir in model_dirs:
+        if not discover_origin_record_paths(model_dir):
+            continue
+        summary = collect_shap_case_dir(model_dir, baselines_dir=baselines_dir)
+        summaries.append(summary)
+        all_records.extend(summary["origins"])
+
+    agg = aggregate_feature_importance(all_records)
+    if not agg.empty:
+        agg.to_csv(case_dir / "shap_aggregate_all_models.csv", index=False)
+    return summaries
+
+
 def resolve_shap_paths(spec: ShapRunSpec) -> tuple[Path, Path | None, Path]:
     baselines_dir = spec.baselines_dir
     if baselines_dir is None:
@@ -1295,7 +1414,12 @@ def resolve_shap_paths(spec: ShapRunSpec) -> tuple[Path, Path | None, Path]:
     return frozen_dir, walk_forward_run_dir, baselines_dir
 
 
-def run_shap_case(spec: ShapRunSpec, *, output_dir: Path) -> ShapCaseSummary:
+def run_shap_case(
+    spec: ShapRunSpec,
+    *,
+    output_dir: Path,
+    write_summary: bool = True,
+) -> ShapCaseSummary:
     if spec.model not in MODEL_MANIFEST:
         raise ValueError(
             f"Unsupported model {spec.model!r}. Supported: {sorted(MODEL_MANIFEST)}"
@@ -1348,11 +1472,12 @@ def run_shap_case(spec: ShapRunSpec, *, output_dir: Path) -> ShapCaseSummary:
         n_origins=len(records),
         origins=records,
     )
-    OmegaConf.save(
-        OmegaConf.create(dict(summary)),
-        output_dir / "shap_summary.yaml",
-    )
-    agg = aggregate_feature_importance(records)
-    if not agg.empty:
-        agg.to_csv(output_dir / "shap_aggregate.csv", index=False)
+    if write_summary:
+        OmegaConf.save(
+            OmegaConf.create(dict(summary)),
+            output_dir / "shap_summary.yaml",
+        )
+        agg = aggregate_feature_importance(records)
+        if not agg.empty:
+            agg.to_csv(output_dir / "shap_aggregate.csv", index=False)
     return summary

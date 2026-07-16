@@ -111,6 +111,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Override frozen CUDA configs (useful on login nodes)",
     )
+    parser.add_argument(
+        "--skip-summary",
+        action="store_true",
+        help="Only write origin_<year>/ artifacts (for parallel array jobs; run collect after)",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -172,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         model_out = args.output_dir / f"{args.crop}_{args.country}" / model
         model_out.mkdir(parents=True, exist_ok=True)
-        summary = run_shap_case(spec, output_dir=model_out)
+        summary = run_shap_case(spec, output_dir=model_out, write_summary=not args.skip_summary)
         summaries.append(summary)
         repro = summary["origins"][0]["reproduction"] if summary["origins"] else {}
         log.info(
@@ -182,6 +187,13 @@ def main(argv: list[str] | None = None) -> int:
             repro.get("corr_saved_preds"),
             repro.get("max_abs_pred_diff"),
         )
+
+    if args.skip_summary:
+        log.info(
+            "Skipped per-model summaries (--skip-summary). "
+            "Run collect_shap_importance.py when all origin jobs finish."
+        )
+        return 0
 
     all_records: list[dict] = []
     for summary in summaries:
