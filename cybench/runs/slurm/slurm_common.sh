@@ -141,23 +141,43 @@ slurm_crop_short() {
   esac
 }
 
+slurm_shap_model_tag() {
+  case "$1" in
+    random_forest) echo "rf" ;;
+    transformer_lf) echo "trf" ;;
+    tabpfn) echo "tabpfn" ;;
+    tabicl) echo "tabicl" ;;
+    tabdpt) echo "tabdpt" ;;
+    *) echo "${1//_/-}" ;;
+  esac
+}
+
 # Per-array-task name (model + horizon visible in squeue once the task starts).
 slurm_task_job_name() {
   local phase=$1
-  local p crop_s h name
+  local p crop_s h name tag
   case "${phase}" in
     screening) p="scr" ;;
     walk_forward) p="wf" ;;
+    shap) p="shap" ;;
     *) p=$(echo "${phase}" | cut -c1-2) ;;
   esac
   crop_s=$(slurm_crop_short "${CROP}")
   h=$(slurm_horizon_short)
-  name="cb_${p}_${MODEL}_${crop_s}${COUNTRY}_${h}"
-  if [[ -n "${WF_SEED:-}" ]]; then
-    name+="_s${WF_SEED}"
-  fi
-  if [[ -n "${WF_ORIGIN:-}" ]]; then
-    name+="_y${WF_ORIGIN}"
+  if [[ "${phase}" == "shap" ]]; then
+    tag=$(slurm_shap_model_tag "${MODEL:-${MODELS:-}}")
+    name="shap_${CROP}_${COUNTRY}_${tag}"
+    if [[ -n "${SHAP_ORIGIN:-}" ]]; then
+      name+="_${SHAP_ORIGIN}"
+    fi
+  else
+    name="cb_${p}_${MODEL}_${crop_s}${COUNTRY}_${h}"
+    if [[ -n "${WF_SEED:-}" ]]; then
+      name+="_s${WF_SEED}"
+    fi
+    if [[ -n "${WF_ORIGIN:-}" ]]; then
+      name+="_y${WF_ORIGIN}"
+    fi
   fi
   echo "${name}"
 }

@@ -76,6 +76,10 @@ if [[ -z "${ORIGIN:-}" ]]; then
   exit 1
 fi
 
+export MODEL="${MODELS}"
+export SHAP_ORIGIN="${ORIGIN}"
+slurm_update_task_job_name shap
+
 LUSTRE_ROOT="${CYBENCH_OUTPUT_ROOT:-/lustre/backup/SHARED/AIN/agml/output}"
 if [[ -n "${CYBENCH_BASELINES_DIR:-}" ]]; then
   BASELINES_DIR="${CYBENCH_BASELINES_DIR}"

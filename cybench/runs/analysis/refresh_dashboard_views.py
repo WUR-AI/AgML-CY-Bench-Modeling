@@ -87,7 +87,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--publish-root", type=Path, required=True)
-    parser.add_argument("--version", type=int, default=2, help="Batch version (default: 2)")
+    parser.add_argument("--version", type=int, default=4, help="Batch version (default: 4)")
     parser.add_argument("--country", action="append", dest="countries", metavar="CC")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -109,9 +109,6 @@ def main() -> int:
 
     if not args.dry_run:
         from cybench.runs.analysis.build_global_insights_dashboard import write_insights_dashboard
-        from cybench.runs.analysis.build_model_family_radar_dashboard import (
-            write_model_family_radar_dashboard,
-        )
         from cybench.runs.analysis.publish_dashboard_bundle import (
             discover_index_entries,
             prune_obsolete_dashboard_dirs,
@@ -124,15 +121,10 @@ def main() -> int:
             dest=publish_root / "insights.html",
             version=args.version,
         )
-        write_model_family_radar_dashboard(
-            output_root=output_root,
-            dest=publish_root / "model_families.html",
-            version=args.version,
-        )
         prune_obsolete_dashboard_dirs(publish_root)
         update_index(publish_root, discover_index_entries(publish_root))
         report_publish_bundle_size(publish_root)
-        print(f"[OK] insights.html, model_families.html, index.html")
+        print(f"[OK] insights.html, index.html")
 
     return 0
 

@@ -419,14 +419,7 @@ def build_index_html_cards(entries: list[IndexEntry], *, publish_root: Path | No
       <a class="link-card" href="insights.html">
         <div class="link-card-top"><span class="badge badge-neutral">ALL</span><span class="arrow" aria-hidden="true">→</span></div>
         <h3>Global insights</h3>
-        <p class="muted">All models — leaderboard, model×country heatmap, end-of-season vs mid-season</p>
-      </a>"""
-        if (publish_root / "model_families.html").is_file():
-            insights_card += """
-      <a class="link-card" href="model_families.html">
-        <div class="link-card-top"><span class="badge badge-neutral">ALL</span><span class="arrow" aria-hidden="true">→</span></div>
-        <h3>Model families (paper summary)</h3>
-        <p class="muted">Five paradigms — radar chart, median metrics, performance vs training size</p>
+        <p class="muted">All models — leaderboard, model×country heatmap, training-size scaling, horizon comparison</p>
       </a>"""
         insights_card += """
     </div>

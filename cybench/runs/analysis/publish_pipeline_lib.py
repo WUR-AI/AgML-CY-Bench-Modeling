@@ -824,20 +824,6 @@ def run_index_stage(
     except RuntimeError as exc:
         extras.append(f"insights skipped ({exc})")
 
-    try:
-        from cybench.runs.analysis.build_model_family_radar_dashboard import (
-            write_model_family_radar_dashboard,
-        )
-
-        radar_path = write_model_family_radar_dashboard(
-            output_root=target.output_root,
-            dest=target.publish_root / "model_families.html",
-            version=version,
-        )
-        extras.append(radar_path.name)
-    except RuntimeError as exc:
-        extras.append(f"model_families skipped ({exc})")
-
     msg = f"updated {index_path}" + (f" and {', '.join(extras)}" if extras else "")
     report_publish_bundle_size(target.publish_root)
     return StageStatus("index", False, msg)
@@ -854,7 +840,7 @@ def run_commit_stage(
         return StageStatus("commit", True, f"not a git repo: {publish_root}")
 
     rel_paths = [target.publish_slug, "index.html"]
-    for global_page in ("insights.html", "model_families.html"):
+    for global_page in ("insights.html",):
         if (publish_root / global_page).is_file():
             rel_paths.append(global_page)
 

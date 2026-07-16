@@ -25,10 +25,15 @@ def build_insights_html(payload: dict) -> str:
     template_path = (
         Path(__file__).resolve().parent.parent / "viz" / "global_insights_template.html"
     )
-    panel_path = template_path.parent / "family_rq1_panel.js"
+    viz_dir = template_path.parent
     template = template_path.read_text(encoding="utf-8")
-    panel_js = panel_path.read_text(encoding="utf-8") if panel_path.is_file() else ""
-    template = template.replace("__FAMILY_PANEL_SCRIPT__", panel_js)
+    for placeholder, filename in (
+        ("__FAMILY_PANEL_SCRIPT__", "family_rq1_panel.js"),
+        ("__FAMILY_RQ4_PANEL_SCRIPT__", "family_rq4_panel.js"),
+    ):
+        panel_path = viz_dir / filename
+        panel_js = panel_path.read_text(encoding="utf-8") if panel_path.is_file() else ""
+        template = template.replace(placeholder, panel_js)
     data_json = json.dumps(payload)
     return template.replace("__DATA_JSON__", data_json)
 
@@ -37,7 +42,7 @@ def write_insights_dashboard(
     *,
     output_root: Path,
     dest: Path,
-    version: int = 2,
+    version: int = 4,
 ) -> Path:
     payload = build_insights_payload(output_root, version=version)
     if payload["n_rows"] == 0:
@@ -67,7 +72,7 @@ def main() -> int:
         default=Path("/lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-dashboard"),
         help="GitHub Pages clone root (used when --dest is omitted)",
     )
-    parser.add_argument("--version", type=int, default=2, help="Batch version tag (default: 2)")
+    parser.add_argument("--version", type=int, default=4, help="Batch version tag (default: 4)")
     args = parser.parse_args()
 
     dest = args.dest or (args.publish_root / "insights.html")

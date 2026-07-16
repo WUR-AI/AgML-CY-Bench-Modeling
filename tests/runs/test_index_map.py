@@ -180,7 +180,6 @@ def test_group_walk_forward_entries_excludes_short_series_countries(
 
 def test_build_index_map_payload(tmp_path: Path):
     (tmp_path / "insights.html").write_text("<html></html>", encoding="utf-8")
-    (tmp_path / "model_families.html").write_text("<html></html>", encoding="utf-8")
     entries = [
         IndexEntry(
             href="pl_walk_forward_eos_v1/dashboard.html",
@@ -193,6 +192,5 @@ def test_build_index_map_payload(tmp_path: Path):
     ]
     payload = build_index_map_payload(entries, publish_root=tmp_path)
     assert payload["has_insights"] is True
-    assert payload["has_model_families"] is True
     assert payload["n_countries"] == 1
     assert payload["countries"][0]["cc"] == "PL"

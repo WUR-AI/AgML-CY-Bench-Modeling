@@ -41,6 +41,9 @@ e.g. `cb_scr_cpu_eos`, `cb_wf_gpu_mid`, `cb_wf_fcp_eos` (GPU manifest on CPU via
 
 Per-task walk-forward names may also include `_s{seed}` and `_y{year}` for large-country parallel runs.
 
+**SHAP array jobs**: submit name is `shap_{crop}_{CC}_{model}_{yearLo-yearHi}` (e.g. `shap_maize_US_trf_2019-2023`).
+Each running task is renamed to `shap_{crop}_{CC}_{model}_{year}` (e.g. `shap_wheat_US_trf_2021`) so `squeue` shows the walk-forward origin, not just the array index.
+
 (`mz`/`wh` = maize/wheat.) Batch name is only in the job log line, not in `squeue`.
 
 Rename uses `scontrol update JobId=${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}` — updating

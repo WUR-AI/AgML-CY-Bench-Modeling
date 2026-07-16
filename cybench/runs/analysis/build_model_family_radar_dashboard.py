@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Build a model-family radar dashboard from collected walk-forward summaries.
+"""Build a standalone model-family radar HTML page (legacy CLI).
 
-Scans ``paper_walk_forward_*`` directories under an output root and writes
-``model_families.html`` for GitHub Pages (relative performance across evaluation views).
+RQ4 (training-size scatter) and the country bootstrap table now live on
+``insights.html``. The publish pipeline no longer writes ``model_families.html``;
+this script remains for ad-hoc radar exports only.
 
 Example::
 

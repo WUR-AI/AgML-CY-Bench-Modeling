@@ -114,9 +114,6 @@ def build_index_map_payload(
         "countries": countries,
         "n_countries": len(countries),
         "has_insights": bool(publish_root and (publish_root / "insights.html").is_file()),
-        "has_model_families": bool(
-            publish_root and (publish_root / "model_families.html").is_file()
-        ),
         "has_screening": bool(screening),
         "screening_href": screening[0].href if screening else None,
     }
