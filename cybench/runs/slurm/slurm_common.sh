@@ -389,6 +389,8 @@ find_frozen_screening_dir() {
     echo "No screening run for ${crop}/${country}/${model_name} (model=${model_slug}) horizon=${PREDICTION_HORIZON} (tag=${htag})" >&2
     return 1
   fi
+  # Resolve symlinks (e.g. v2 screening soft-linked into a v4 batch).
+  run_dir=$(readlink -f "${run_dir}")
   frozen=$(find "${run_dir}" -name optimal_model.yaml -printf '%h\n' 2>/dev/null | head -1)
   if [[ -n "${frozen}" ]]; then
     echo "${frozen}"
