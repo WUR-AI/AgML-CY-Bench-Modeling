@@ -530,10 +530,10 @@ def write_model_comparison_dashboard(
     if shap_payload.get("available"):
         print(
             f"[DONE] SHAP dashboard data: {len(shap_payload.get('by_key', {}))} model(s)"
-            + (f" from {resolved_shap_dir}" if resolved_shap_dir else "")
+            + (f" from {resolved_shap_dirs}" if resolved_shap_dirs else "")
         )
-    elif resolved_shap_dir is not None:
-        print(f"[WARN] No shap_summary.yaml files found under {resolved_shap_dir}")
+    elif resolved_shap_dirs:
+        print(f"[WARN] No shap_summary.yaml files found under {resolved_shap_dirs}")
     return html_path
 
 
