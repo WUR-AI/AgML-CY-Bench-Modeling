@@ -5,6 +5,7 @@
 #
 # Example (maize NL, TabICL, 5 origins on GPU):
 #   MODELS=tabicl PERMUTATION_REPEATS=3 VERBOSE=1 \
+#     ORIGINS_LIST="2016 2017 2018 2019 2020" \
 #     sbatch --partition=gpu --gpus=1 --array=0-4 \
 #     cybench/runs/slurm/shap_importance_array.sh
 #
@@ -39,7 +40,13 @@ CROP="${CROP:-maize}"
 COUNTRY="${COUNTRY:-NL}"
 HORIZON="${PREDICTION_HORIZON:-eos}"
 MODELS="${MODELS:-random_forest}"
-ORIGINS_LIST="${ORIGINS_LIST:-2016 2017 2018 2019 2020}"
+# Space- or comma-separated forecast years; must match sbatch --array=0-(N-1).
+if [[ -n "${ORIGINS:-}" ]]; then
+  ORIGINS_LIST="${ORIGINS}"
+elif [[ -z "${ORIGINS_LIST:-}" ]]; then
+  ORIGINS_LIST="2016 2017 2018 2019 2020"
+fi
+ORIGINS_LIST="${ORIGINS_LIST//,/ }"
 FORCE_CPU="${FORCE_CPU:-0}"
 VERBOSE="${VERBOSE:-0}"
 MAX_BACKGROUND="${MAX_BACKGROUND:-}"
@@ -48,11 +55,20 @@ SHAPIQ_BUDGET="${SHAPIQ_BUDGET:-}"
 PERMUTATION_REPEATS="${PERMUTATION_REPEATS:-}"
 
 read -r -a ORIGINS_ARR <<< "${ORIGINS_LIST}"
+# Trim empty entries (duplicate spaces).
+ORIGINS_ARR=("${ORIGINS_ARR[@]}")
+
 if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
   echo "This script is intended for sbatch --array=... (set ORIGINS= manually for a local run)." >&2
-  ORIGIN="${ORIGINS:-${ORIGINS_ARR[0]}}"
+  ORIGIN="${ORIGINS_ARR[0]}"
 else
-  ORIGIN="${ORIGINS_ARR[$SLURM_ARRAY_TASK_ID]}"
+  task_id="${SLURM_ARRAY_TASK_ID}"
+  if (( task_id < 0 || task_id >= ${#ORIGINS_ARR[@]} )); then
+    echo "Array task ${task_id} out of range for ${#ORIGINS_ARR[@]} origin(s) in ORIGINS_LIST='${ORIGINS_LIST}'" >&2
+    echo "Set ORIGINS_LIST to match --array=0-$((${#ORIGINS_ARR[@]} - 1)) (e.g. ORIGINS_LIST='2016 2017 2018 2019 2020')." >&2
+    exit 1
+  fi
+  ORIGIN="${ORIGINS_ARR[task_id]}"
 fi
 
 if [[ -z "${ORIGIN:-}" ]]; then
