@@ -140,21 +140,25 @@ slurm_crop_short() {
   esac
 }
 
-# Per-array-task name (model visible in squeue once the task starts).
+# Per-array-task name (model + horizon visible in squeue once the task starts).
 slurm_task_job_name() {
   local phase=$1
-  local p crop_s
+  local p crop_s h name
   case "${phase}" in
     screening) p="scr" ;;
     walk_forward) p="wf" ;;
     *) p=$(echo "${phase}" | cut -c1-2) ;;
   esac
   crop_s=$(slurm_crop_short "${CROP}")
+  h=$(slurm_horizon_short)
+  name="cb_${p}_${MODEL}_${crop_s}${COUNTRY}_${h}"
   if [[ -n "${WF_SEED:-}" ]]; then
-    echo "cb_${p}_${MODEL}_${crop_s}${COUNTRY}_s${WF_SEED}"
-  else
-    echo "cb_${p}_${MODEL}_${crop_s}${COUNTRY}"
+    name+="_s${WF_SEED}"
   fi
+  if [[ -n "${WF_ORIGIN:-}" ]]; then
+    name+="_y${WF_ORIGIN}"
+  fi
+  echo "${name}"
 }
 
 # JobId for scontrol update: must be ArrayJobId_ArrayTaskId, not ArrayJobId alone

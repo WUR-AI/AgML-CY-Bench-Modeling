@@ -37,7 +37,9 @@ e.g. `cb_scr_cpu_eos`, `cb_wf_gpu_mid`, `cb_wf_fcp_eos` (GPU manifest on CPU via
 
 **Each running array task** is renamed at start to include the model:
 
-`cb_{phase}_{model}_{crop}{country}` → e.g. `cb_scr_tabpfn_mzDE`, `cb_wf_informer_lf_whDE`
+`cb_{phase}_{model}_{crop}{country}_{horizon}` → e.g. `cb_scr_tabpfn_mzDE_eos`, `cb_wf_informer_lf_whDE_mid`
+
+Per-task walk-forward names may also include `_s{seed}` and `_y{year}` for large-country parallel runs.
 
 (`mz`/`wh` = maize/wheat.) Batch name is only in the job log line, not in `squeue`.
 
