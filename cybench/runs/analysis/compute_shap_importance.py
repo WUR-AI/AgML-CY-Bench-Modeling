@@ -31,6 +31,8 @@ from pathlib import Path
 
 from cybench.runs.analysis.shap_importance_lib import (
     DEFAULT_MAIZE_FAMILY_MODELS,
+    DEFAULT_MAX_BACKGROUND,
+    DEFAULT_MAX_EVAL_SAMPLES,
     MODEL_MANIFEST,
     ShapRunSpec,
     aggregate_feature_importance,
@@ -92,8 +94,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Only compute SHAP for the latest walk-forward test year",
     )
-    parser.add_argument("--max-background", type=int, default=50)
-    parser.add_argument("--max-eval-samples", type=int, default=80)
+    parser.add_argument(
+        "--max-background",
+        type=int,
+        default=DEFAULT_MAX_BACKGROUND,
+    )
+    parser.add_argument(
+        "--max-eval-samples",
+        type=int,
+        default=DEFAULT_MAX_EVAL_SAMPLES,
+    )
     parser.add_argument(
         "--shapiq-budget",
         type=int,

@@ -117,6 +117,12 @@ INTERPRETABILITY_BY_MODEL: dict[str, InterpretabilitySpec] = {
 
 ICL_TABULAR_MODELS = frozenset({"tabpfn", "tabicl", "tabdpt"})
 
+# Subsample at most this many train (background) / test (eval) rows; use all rows when n < cap.
+DEFAULT_MAX_BACKGROUND = 500
+DEFAULT_MAX_EVAL_SAMPLES = 500
+ICL_MAX_BACKGROUND = 25
+ICL_MAX_EVAL_SAMPLES = 20
+
 
 class FeatureRank(TypedDict):
     name: str
@@ -233,8 +239,8 @@ class ShapRunSpec:
     walk_forward_run_dir: Path | None = None
     screening_split_dir: Path | None = None
     test_years: tuple[int, ...] | None = None
-    max_background: int = 50
-    max_eval_samples: int = 80
+    max_background: int = DEFAULT_MAX_BACKGROUND
+    max_eval_samples: int = DEFAULT_MAX_EVAL_SAMPLES
     shapiq_budget: int = 64
     permutation_repeats: int = 5
     force_cpu: bool = False
@@ -614,11 +620,15 @@ def resolve_shap_sample_limits(
     *,
     max_background: int,
     max_eval_samples: int,
+    n_train: int | None = None,
+    n_test: int | None = None,
 ) -> tuple[int, int]:
-    """Tighter subsampling for expensive ICL tabular explainers."""
+    """``min(dataset size, cap)``; tighter caps for expensive ICL explainers."""
+    bg = min(max_background, n_train) if n_train is not None else max_background
+    ev = min(max_eval_samples, n_test) if n_test is not None else max_eval_samples
     if model_slug in ICL_TABULAR_MODELS:
-        return min(max_background, 25), min(max_eval_samples, 20)
-    return max_background, max_eval_samples
+        return min(bg, ICL_MAX_BACKGROUND), min(ev, ICL_MAX_EVAL_SAMPLES)
+    return bg, ev
 
 
 def _require_tabular_train_arrays(
@@ -1173,6 +1183,17 @@ def run_origin_shap(
         spec.model,
         max_background=spec.max_background,
         max_eval_samples=spec.max_eval_samples,
+        n_train=len(train_dataset),
+        n_test=len(test_dataset),
+    )
+    log.info(
+        "SHAP sample limits | %s/%s | background=%d/%d | eval=%d/%d",
+        spec.crop,
+        spec.country,
+        max_background,
+        len(train_dataset),
+        max_eval_samples,
+        len(test_dataset),
     )
 
     shap_payload: PandasShapPayload | TorchShapPayload

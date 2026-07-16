@@ -18,7 +18,7 @@
 #SBATCH --mem=32G
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --time=04:00:00
+#SBATCH --time=08:00:00
 ##SBATCH --partition=gpu
 ##SBATCH --gpus=1
 ##SBATCH --array=0-4

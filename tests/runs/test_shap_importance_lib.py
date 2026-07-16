@@ -24,6 +24,10 @@ from cybench.runs.analysis.shap_importance_lib import (
     interpretability_for_model,
     model_run_name,
     resolve_shap_sample_limits,
+    DEFAULT_MAX_BACKGROUND,
+    DEFAULT_MAX_EVAL_SAMPLES,
+    ICL_MAX_BACKGROUND,
+    ICL_MAX_EVAL_SAMPLES,
 )
 
 
@@ -79,15 +83,35 @@ def test_interpretability_for_model_families():
 
 def test_resolve_shap_sample_limits_tabpfn():
     bg, ev = resolve_shap_sample_limits(
-        "tabpfn", max_background=50, max_eval_samples=80
+        "tabpfn",
+        max_background=500,
+        max_eval_samples=500,
+        n_train=10_000,
+        n_test=800,
     )
-    assert bg == 25
-    assert ev == 20
+    assert bg == ICL_MAX_BACKGROUND
+    assert ev == ICL_MAX_EVAL_SAMPLES
     bg_rf, ev_rf = resolve_shap_sample_limits(
-        "random_forest", max_background=50, max_eval_samples=80
+        "random_forest",
+        max_background=500,
+        max_eval_samples=500,
+        n_train=10_000,
+        n_test=800,
     )
-    assert bg_rf == 50
-    assert ev_rf == 80
+    assert bg_rf == 500
+    assert ev_rf == 500
+
+
+def test_resolve_shap_sample_limits_uses_all_rows_when_below_cap():
+    bg, ev = resolve_shap_sample_limits(
+        "transformer_lf",
+        max_background=500,
+        max_eval_samples=500,
+        n_train=84,
+        n_test=8,
+    )
+    assert bg == 84
+    assert ev == 8
 
 
 def test_model_manifest_includes_tabular_foundation_models():
@@ -101,10 +125,14 @@ def test_model_manifest_includes_tabular_foundation_models():
 def test_resolve_shap_sample_limits_tabicl_and_tabdpt():
     for slug in ("tabicl", "tabdpt"):
         bg, ev = resolve_shap_sample_limits(
-            slug, max_background=50, max_eval_samples=80
+            slug,
+            max_background=500,
+            max_eval_samples=500,
+            n_train=1000,
+            n_test=200,
         )
-        assert bg == 25
-        assert ev == 20
+        assert bg == ICL_MAX_BACKGROUND
+        assert ev == ICL_MAX_EVAL_SAMPLES
 
 
 def test_model_run_name_random_forest():
