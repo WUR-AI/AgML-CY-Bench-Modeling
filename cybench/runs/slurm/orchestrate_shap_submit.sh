@@ -81,7 +81,7 @@ HORIZON="eos"
 MAX_JOBS=0
 OUTPUT_ROOT=""
 DATA_DIR=""
-MODELS=()
+REQUESTED_MODELS=()
 CROPS=()
 COUNTRIES=()
 
@@ -98,7 +98,7 @@ while [[ $# -gt 0 ]]; do
     --models)
       shift
       while [[ $# -gt 0 && "$1" != --* ]]; do
-        MODELS+=("$1")
+        REQUESTED_MODELS+=("$1")
         shift
       done
       ;;
@@ -163,7 +163,7 @@ done
 plan_args=(poetry run python "${PLAN_PY}" --horizon "${HORIZON}" --version "${VERSION}")
 [[ -n "${OUTPUT_ROOT}" ]] && plan_args+=(--output-root "${OUTPUT_ROOT}")
 [[ -n "${DATA_DIR}" ]] && plan_args+=(--data-dir "${DATA_DIR}")
-[[ ${#MODELS[@]} -gt 0 ]] && plan_args+=(--models "${MODELS[@]}")
+[[ ${#REQUESTED_MODELS[@]} -gt 0 ]] && plan_args+=(--models "${REQUESTED_MODELS[@]}")
 [[ ${#CROPS[@]} -gt 0 ]] && plan_args+=(--crops "${CROPS[@]}")
 [[ ${#COUNTRIES[@]} -gt 0 ]] && plan_args+=(--countries "${COUNTRIES[@]}")
 [[ "${ALL}" == true ]] && plan_args+=(--all)
@@ -202,6 +202,8 @@ for line in "${PLAN_LINES[@]}"; do
 
   export CROP="${CROP}"
   export COUNTRY="${CC}"
+  # MODELS must be a scalar for sbatch children (not a bash array); see REQUESTED_MODELS above.
+  unset MODELS
   export MODELS="${MODEL}"
   export ORIGINS_LIST="${ORIGINS_LIST}"
   export CYBENCH_BASELINES_DIR="${BASELINES_DIR}"
@@ -212,6 +214,7 @@ for line in "${PLAN_LINES[@]}"; do
 
   echo ""
   echo "=== ${CROP}/${CC} | ${MODEL} | origins=${ORIGINS_LIST} | array=${ARRAY_SPEC} | regions=${N_REGIONS} ==="
+  echo "    job=${job_name} mem=${mem} MODELS=${MODELS}"
   if [[ "${DRY_RUN}" == true ]]; then
     echo "[DRY-RUN] sbatch ${sbatch_args[*]} ${SHAP_ARRAY}"
   else
