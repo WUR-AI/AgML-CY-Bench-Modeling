@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -1351,6 +1352,85 @@ def collect_shap_case_dir(
         frozen_screening_dir=frozen_dir,
         walk_forward_run_dir=walk_forward_run_dir,
     )
+
+
+_SHAP_OUTPUT_DIR_RE = re.compile(
+    r"^(?P<crop>maize|wheat)_(?P<country>[A-Za-z]{2})_(?P<hz>eos|mid|qtr|early)$"
+)
+
+
+@dataclass(frozen=True)
+class ShapCollectCase:
+    """One crop×country SHAP output folder with at least one origin artifact."""
+
+    crop: str
+    country: str
+    horizon_tag: str
+    output_dir: Path
+    models: tuple[str, ...]
+    n_origins: int
+
+
+def discover_shap_collect_cases(
+    shap_root: Path,
+    *,
+    crops: Sequence[str] | None = None,
+    countries: Sequence[str] | None = None,
+    horizon_tag: str | None = None,
+) -> list[ShapCollectCase]:
+    """Discover ``shap_importance/{crop}_{CC}_{hz}/`` dirs with origin YAML artifacts."""
+    if not shap_root.is_dir():
+        raise FileNotFoundError(f"SHAP root not found: {shap_root}")
+
+    crop_filter = {c.casefold() for c in crops} if crops else None
+    country_filter = {c.upper() for c in countries} if countries else None
+    cases: list[ShapCollectCase] = []
+
+    for output_dir in sorted(shap_root.iterdir()):
+        if not output_dir.is_dir():
+            continue
+        match = _SHAP_OUTPUT_DIR_RE.match(output_dir.name)
+        if match is None:
+            continue
+        crop = match.group("crop")
+        country = match.group("country").upper()
+        hz = match.group("hz")
+        if crop_filter is not None and crop.casefold() not in crop_filter:
+            continue
+        if country_filter is not None and country not in country_filter:
+            continue
+        if horizon_tag is not None and hz != horizon_tag:
+            continue
+
+        case_dir = output_dir / f"{crop}_{country}"
+        if not case_dir.is_dir():
+            continue
+
+        model_names: list[str] = []
+        origin_count = 0
+        for model_dir in sorted(case_dir.iterdir()):
+            if not model_dir.is_dir() or model_dir.name.startswith("."):
+                continue
+            paths = discover_origin_record_paths(model_dir)
+            if not paths:
+                continue
+            model_names.append(model_dir.name)
+            origin_count = max(origin_count, len(paths))
+
+        if not model_names:
+            continue
+
+        cases.append(
+            ShapCollectCase(
+                crop=crop,
+                country=country,
+                horizon_tag=hz,
+                output_dir=output_dir,
+                models=tuple(model_names),
+                n_origins=origin_count,
+            )
+        )
+    return cases
 
 
 def collect_shap_output_dir(

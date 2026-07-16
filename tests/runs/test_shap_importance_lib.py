@@ -16,6 +16,7 @@ from cybench.runs.analysis.shap_importance_lib import (
     MODEL_MANIFEST,
     aggregate_feature_importance,
     collect_shap_output_dir,
+    discover_shap_collect_cases,
     gather_origin_records,
     find_saved_model_artifact,
     find_screening_split_dir,
@@ -239,3 +240,22 @@ def test_collect_shap_output_dir_from_parallel_origins(tmp_path: Path):
 
     records = gather_origin_records(model_dir)
     assert len(records) == 2
+
+
+def test_discover_shap_collect_cases(tmp_path: Path):
+    case_root = tmp_path / "shap_importance" / "maize_NL_eos" / "maize_NL" / "random_forest"
+    (case_root / "origin_2020").mkdir(parents=True)
+    (case_root / "origin_2020" / "shap_importance.yaml").write_text(
+        "crop: maize\ncountry: NL\n", encoding="utf-8"
+    )
+    (tmp_path / "shap_importance" / "maize_NL_eos" / "maize_NL" / "empty_model").mkdir(
+        parents=True
+    )
+    (tmp_path / "shap_importance" / "not_a_case").mkdir()
+
+    cases = discover_shap_collect_cases(tmp_path / "shap_importance")
+    assert len(cases) == 1
+    assert cases[0].crop == "maize"
+    assert cases[0].country == "NL"
+    assert cases[0].models == ("random_forest",)
+    assert cases[0].n_origins == 1
