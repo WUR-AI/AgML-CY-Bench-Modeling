@@ -2934,8 +2934,13 @@
       });
 
       const detailCountries = [...new Set((slice.detail || []).map(r => r.country))].sort();
-      cropDetailCountryFilter.innerHTML = `<option value="">All</option>` +
-        detailCountries.map(c => `<option value="${c}">${c}</option>`).join("");
+      const prevCountry = cropDetailCountryFilter ? cropDetailCountryFilter.value : "";
+      if (cropDetailCountryFilter) {
+        cropDetailCountryFilter.innerHTML = `<option value="">All</option>` +
+          detailCountries.map(c => `<option value="${c}">${c}</option>`).join("");
+        cropDetailCountryFilter.value =
+          prevCountry && detailCountries.includes(prevCountry) ? prevCountry : "";
+      }
 
       const cpdCols = [
         { key: "country", label: "Country" },
@@ -2948,8 +2953,8 @@
         { key: "crop_a_samples", label: `${cropALabel} samples`, format: (v) => v == null ? "—" : String(v) },
         { key: "crop_b_samples", label: `${cropBLabel} samples`, format: (v) => v == null ? "—" : String(v) },
       ];
-      const cq = cropDetailCountryFilter.value;
-      const mq = cropDetailModelFilter.value.trim().toLowerCase();
+      const cq = cropDetailCountryFilter ? cropDetailCountryFilter.value : "";
+      const mq = (cropDetailModelFilter?.value || "").trim().toLowerCase();
       const detailRows = (slice.detail || []).filter(r => {
         if (cq && r.country !== cq) return false;
         if (mq && !r.model.toLowerCase().includes(mq)) return false;
@@ -2973,12 +2978,16 @@
         populateCropPairOptions();
         renderCropPairComparison();
       });
-    rq3PairFilter.addEventListener("change", () => {
+    if (rq3PairFilter) rq3PairFilter.addEventListener("change", () => {
       rq3PairKey = rq3PairFilter.value;
       renderCropPairComparison();
     });
-    cropDetailCountryFilter.addEventListener("change", renderCropPairComparison);
-    cropDetailModelFilter.addEventListener("input", renderCropPairComparison);
+    if (cropDetailCountryFilter) {
+      cropDetailCountryFilter.addEventListener("change", renderCropPairComparison);
+    }
+    if (cropDetailModelFilter) {
+      cropDetailModelFilter.addEventListener("input", renderCropPairComparison);
+    }
     populateCropPairOptions();
     renderCropPairComparison();
     }

@@ -5,7 +5,8 @@ Discovers ``shap_summary.yaml`` files under an input root (single or multi-count
 aggregates |SHAP| within meta-groups and EOS-anchored windows, and writes:
 
 - ``shap_family_meta_groups.png`` — 3-panel bar chart (RF / TabPFN / Transformer)
-- ``shap_timing_heatmaps.png`` — variable × window heatmaps (tabular models)
+- ``shap_timing_heatmaps.png`` — variable × window heatmaps (tabular models);
+  x-axis is chronological windows before EOS (``0, -1, -2, …``)
 - CSV tables for supplementary material
 
 Example (single country on cluster)::

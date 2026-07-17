@@ -9,11 +9,13 @@ import pytest
 from omegaconf import OmegaConf
 
 from cybench.runs.analysis.shap_plot_lib import (
+    chrono_window_columns,
     feature_rows_from_summary,
     load_feature_table,
     meta_group_shares,
     parse_feature_name,
     timing_table,
+    window_relative_to_eos,
 )
 
 
@@ -23,6 +25,95 @@ def test_parse_tabular_feature():
     assert parsed.statistic == "max"
     assert parsed.window == 8
     assert parsed.meta_group == "Vegetation"
+
+
+def test_window_relative_to_eos_is_chronological():
+    assert window_relative_to_eos(0) == 0
+    assert window_relative_to_eos(1) == -1
+    assert window_relative_to_eos(8) == -8
+    assert chrono_window_columns([0, 2, 1, 8]) == [8, 2, 1, 0]
+
+
+def test_plot_meta_group_families_keeps_ylabel(tmp_path: Path):
+    from cybench.runs.analysis.shap_plot_lib import plot_meta_group_families
+
+    shares = pd.DataFrame(
+        [
+            {
+                "crop": "maize",
+                "model": "random_forest",
+                "horizon": "eos",
+                "meta_group": "Vegetation",
+                "median_share_pct": 60.0,
+            },
+            {
+                "crop": "maize",
+                "model": "random_forest",
+                "horizon": "eos",
+                "meta_group": "Temperature",
+                "median_share_pct": 40.0,
+            },
+            {
+                "crop": "maize",
+                "model": "transformer_lf",
+                "horizon": "eos",
+                "meta_group": "Vegetation",
+                "median_share_pct": 30.0,
+            },
+            {
+                "crop": "maize",
+                "model": "transformer_lf",
+                "horizon": "eos",
+                "meta_group": "Temperature",
+                "median_share_pct": 70.0,
+            },
+        ]
+    )
+    out = tmp_path / "meta.png"
+    plot_meta_group_families(
+        shares,
+        crop="maize",
+        horizon="eos",
+        models=["random_forest", "transformer_lf"],
+        output_path=out,
+    )
+    assert out.is_file()
+
+
+def test_plot_timing_heatmaps_uses_relative_chrono_axis(tmp_path: Path, monkeypatch):
+    from cybench.runs.analysis import shap_plot_lib as lib
+
+    captured: dict = {}
+
+    def fake_heatmap(data, ax=None, **kwargs):
+        captured["columns"] = list(data.columns)
+        if ax is not None:
+            ax.imshow([[0.0]])
+
+    monkeypatch.setattr(lib.sns, "heatmap", fake_heatmap)
+    timing = pd.DataFrame(
+        [
+            {
+                "crop": "maize",
+                "model": "random_forest",
+                "horizon": "eos",
+                "variable_group": "ndvi",
+                "window": w,
+                "median_share_pct": 10.0 + w,
+            }
+            for w in (0, 1, 2)
+        ]
+    )
+    out = tmp_path / "timing.png"
+    lib.plot_timing_heatmaps(
+        timing,
+        crop="maize",
+        horizon="eos",
+        models=["random_forest"],
+        output_path=out,
+    )
+    assert captured["columns"] == [-2, -1, 0]
+    assert out.is_file()
 
 
 def test_parse_torch_features():

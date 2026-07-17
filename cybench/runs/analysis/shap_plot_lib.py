@@ -291,6 +291,21 @@ def _model_panel_order(models: Iterable[str]) -> list[str]:
     return preferred + extras
 
 
+def window_relative_to_eos(window: int | float) -> int:
+    """Map stored EOS-anchored window index to a chronological label.
+
+    Feature design stores ``0`` = EOS window, ``1`` = one aggregate before EOS,
+    ``2`` = two before, … Display as ``0, -1, -2, …`` so time runs left→right
+    toward harvest.
+    """
+    return -int(window)
+
+
+def chrono_window_columns(windows: Iterable[int | float]) -> list[int]:
+    """Sort stored window indices early→late (largest index first → EOS last)."""
+    return sorted({int(w) for w in windows}, reverse=True)
+
+
 def plot_meta_group_families(
     shares: pd.DataFrame,
     *,
@@ -326,7 +341,9 @@ def plot_meta_group_families(
     )
 
     n_models = len(model_list)
-    fig, axes = plt.subplots(1, n_models, figsize=(4.2 * n_models, 5.2), sharey=True)
+    # Do not share y-axes: empty sibling ticklabels under sharey can clear the
+    # left-panel category names in some Matplotlib versions.
+    fig, axes = plt.subplots(1, n_models, figsize=(4.2 * n_models, 5.2), sharey=False)
     if n_models == 1:
         axes = [axes]
 
@@ -338,12 +355,15 @@ def plot_meta_group_families(
         y = np.arange(len(order))
         ax.barh(
             y,
-            chunk["median_share_pct"].to_numpy(),
+            chunk["median_share_pct"].fillna(0.0).to_numpy(),
             color=[color_map[m] for m in order],
             edgecolor="white",
         )
         ax.set_yticks(y)
-        ax.set_yticklabels(order if ax is axes[0] else [])
+        ax.set_yticklabels(order)
+        is_left = ax is axes[0]
+        ax.tick_params(axis="y", labelleft=is_left, length=0 if not is_left else 3)
+        ax.set_ylabel("Feature group" if is_left else "")
         ax.set_xlabel("Median share of |SHAP| (%)")
         ax.set_title(MODEL_LABELS.get(model, model))
         ax.grid(axis="x", alpha=0.25)
@@ -372,7 +392,11 @@ def plot_timing_heatmaps(
     output_path: Path,
     title: str | None = None,
 ) -> None:
-    """Heatmaps of variable group × EOS-anchored window (tabular models only)."""
+    """Heatmaps of variable group × EOS-anchored window (tabular models only).
+
+    Columns are chronological: early season (e.g. −8) → EOS (0). Stored window
+    indices (0 = EOS, 1 = previous aggregate, …) are shown as 0, −1, −2, …
+    """
     frame = timing[(timing["crop"] == crop) & (timing["horizon"] == horizon)].copy()
     if frame.empty:
         raise ValueError("No tabular timing data available for heatmaps.")
@@ -411,7 +435,9 @@ def plot_timing_heatmaps(
             pivot.max(axis=1).sort_values(ascending=False).index.tolist()
         )
         pivot = pivot.reindex(var_order)
-        pivot = pivot.reindex(sorted(pivot.columns), axis=1)
+        col_order = chrono_window_columns(pivot.columns)
+        pivot = pivot.reindex(col_order, axis=1)
+        pivot.columns = [window_relative_to_eos(w) for w in pivot.columns]
         sns.heatmap(
             pivot,
             ax=ax,
@@ -421,7 +447,7 @@ def plot_timing_heatmaps(
             linecolor="white",
         )
         ax.set_title(MODEL_LABELS.get(model, model))
-        ax.set_xlabel("Window (0 = EOS)")
+        ax.set_xlabel("Windows before EOS (0 = EOS)")
         ax.set_ylabel("Variable group" if ax is axes[0] else "")
 
     fig.suptitle(
