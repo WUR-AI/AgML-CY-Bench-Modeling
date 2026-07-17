@@ -73,11 +73,10 @@ def configure_shap_job_logging(*, verbose: bool = False) -> None:
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CONF_DIR = REPO_ROOT / "cybench" / "conf"
 
-# Maize family representatives discussed for NL case study.
+# Default model families for SHAP paper plots (TabPFN excluded: slow / sparse coverage).
 DEFAULT_MAIZE_FAMILY_MODELS: tuple[str, ...] = (
     "random_forest",
     "transformer_lf",
-    "tabpfn",
 )
 
 class ModelManifestEntry(TypedDict):
