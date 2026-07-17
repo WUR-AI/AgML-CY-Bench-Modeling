@@ -17,6 +17,7 @@ from cybench.runs.analysis.shap_plot_lib import (
     load_shap_summary,
     meta_group_shares,
 )
+from cybench.runs.analysis.shap_importance_lib import coalesce_onehot_feature_name
 
 
 class ShapFeatureEntry(TypedDict):
@@ -156,26 +157,23 @@ def _aggregate_top_features(summary: dict[str, Any], *, top_n: int = 15) -> list
     for origin in summary.get("origins", []):
         if not isinstance(origin, dict):
             continue
+        coalesced: dict[str, float] = {}
         for feat in origin.get("features", []):
             if not isinstance(feat, dict):
                 continue
-            rows.append(
-                {
-                    "name": str(feat["name"]),
-                    "mean_abs_shap": float(feat["mean_abs_shap"]),
-                    "rank": int(feat.get("rank", 0)),
-                }
-            )
+            name = coalesce_onehot_feature_name(str(feat["name"]))
+            coalesced[name] = coalesced.get(name, 0.0) + float(feat["mean_abs_shap"])
+        for name, value in coalesced.items():
+            rows.append({"name": name, "mean_abs_shap": value})
     if not rows:
         return []
     frame = pd.DataFrame(rows)
     agg = frame.groupby("name", as_index=False).agg(
         mean_abs_shap=("mean_abs_shap", "median"),
-        mean_rank=("rank", "mean"),
     )
     sorted_rows = sorted(
         agg.to_dict(orient="records"),
-        key=lambda row: (-float(row["mean_abs_shap"]), float(row["mean_rank"])),
+        key=lambda row: (-float(row["mean_abs_shap"]), str(row["name"])),
     )[:top_n]
     out: list[ShapFeatureEntry] = []
     for rank, row in enumerate(sorted_rows, start=1):

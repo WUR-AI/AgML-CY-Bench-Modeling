@@ -16,6 +16,8 @@ from cybench.runs.analysis.shap_importance_lib import (
     _sum_abs_over_time_feature_importance,
     MODEL_MANIFEST,
     aggregate_feature_importance,
+    coalesce_onehot_feature_name,
+    coalesce_onehot_shap_ranks,
     collect_shap_output_dir,
     discover_shap_collect_cases,
     gather_origin_records,
@@ -69,6 +71,36 @@ def test_rank_features_from_2d_mean_vector():
     mean_abs = np.array([[0.1, 0.5, 0.2]])
     rows = _rank_features(names, mean_abs)
     assert rows[0]["name"] == "b"
+
+
+def test_coalesce_onehot_drainage_class():
+    assert coalesce_onehot_feature_name("drainage_class_4") == "drainage_class"
+    assert coalesce_onehot_feature_name("ctx:drainage_class_2") == "ctx:drainage_class"
+    assert coalesce_onehot_feature_name("ctx:awc") == "ctx:awc"
+    assert coalesce_onehot_feature_name("ndvi_mean_3") == "ndvi_mean_3"
+
+    ranks = coalesce_onehot_shap_ranks(
+        [
+            {"name": "drainage_class_1", "mean_abs_shap": 0.1, "rank": 1},
+            {"name": "drainage_class_4", "mean_abs_shap": 0.3, "rank": 2},
+            {"name": "awc", "mean_abs_shap": 0.2, "rank": 3},
+            {"name": "ctx:drainage_class_3", "mean_abs_shap": 0.05, "rank": 4},
+            {"name": "ctx:drainage_class_5", "mean_abs_shap": 0.15, "rank": 5},
+        ]
+    )
+    by_name = {row["name"]: row["mean_abs_shap"] for row in ranks}
+    assert by_name["drainage_class"] == pytest.approx(0.4)
+    assert by_name["ctx:drainage_class"] == pytest.approx(0.2)
+    assert by_name["awc"] == pytest.approx(0.2)
+    assert ranks[0]["name"] == "drainage_class"
+
+
+def test_rank_features_coalesces_onehot_dummies():
+    names = ["drainage_class_1", "drainage_class_4", "awc"]
+    mean_abs = np.array([0.1, 0.3, 0.25])
+    rows = _rank_features(names, mean_abs)
+    assert [row["name"] for row in rows] == ["drainage_class", "awc"]
+    assert rows[0]["mean_abs_shap"] == pytest.approx(0.4)
 
 
 def test_aggregate_shapiq_first_order():

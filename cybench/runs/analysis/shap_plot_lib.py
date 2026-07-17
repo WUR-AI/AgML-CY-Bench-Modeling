@@ -13,7 +13,10 @@ import pandas as pd
 import seaborn as sns
 from omegaconf import OmegaConf
 
-from cybench.runs.analysis.shap_importance_lib import DEFAULT_MAIZE_FAMILY_MODELS
+from cybench.runs.analysis.shap_importance_lib import (
+    DEFAULT_MAIZE_FAMILY_MODELS,
+    coalesce_onehot_feature_name,
+)
 
 STAT_SUFFIXES = ("min", "max", "mean", "sum")
 _TABULAR_TEMPORAL = re.compile(
@@ -34,6 +37,7 @@ META_GROUPS: dict[str, tuple[str, ...]] = {
         "elevation",
         "awc",
         "bulk_density",
+        "drainage_class",
         "cec",
         "clay",
         "ph",
@@ -68,6 +72,9 @@ class ParsedFeature:
 
 def parse_feature_name(name: str) -> ParsedFeature:
     """Parse tabular ``var_stat_window`` or torch ``ctx:/ts:`` feature names."""
+    # Coalesce one-hot dummies first so drainage_class_4 → drainage_class.
+    name = coalesce_onehot_feature_name(name)
+
     ctx_match = _CTX.match(name)
     if ctx_match:
         base = ctx_match.group(1)
@@ -129,7 +136,11 @@ def load_shap_summary(path: Path) -> dict[str, Any]:
 
 
 def feature_rows_from_summary(summary: dict[str, Any]) -> list[dict[str, Any]]:
-    """Flatten per-origin feature lists from one ``shap_summary.yaml``."""
+    """Flatten per-origin feature lists from one ``shap_summary.yaml``.
+
+    One-hot dummies (e.g. ``drainage_class_4``) are coalesced by summing |SHAP|
+    into the parent stem before emitting rows.
+    """
     rows: list[dict[str, Any]] = []
     crop = str(summary.get("crop", ""))
     country = str(summary.get("country", ""))
@@ -140,10 +151,18 @@ def feature_rows_from_summary(summary: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         test_years = origin.get("test_years") or []
         origin_year = int(test_years[0]) if test_years else None
+        # Sum |SHAP| across one-hot levels within this origin.
+        coalesced: dict[str, float] = {}
         for feat in origin.get("features", []):
             if not isinstance(feat, dict):
                 continue
-            parsed = parse_feature_name(str(feat["name"]))
+            name = coalesce_onehot_feature_name(str(feat["name"]))
+            coalesced[name] = coalesced.get(name, 0.0) + float(feat["mean_abs_shap"])
+        ranked = sorted(coalesced.items(), key=lambda item: (-item[1], item[0]))
+        for rank, (name, value) in enumerate(ranked, start=1):
+            if not np.isfinite(value) or value <= 0:
+                continue
+            parsed = parse_feature_name(name)
             rows.append(
                 {
                     "crop": crop,
@@ -157,8 +176,8 @@ def feature_rows_from_summary(summary: dict[str, Any]) -> list[dict[str, Any]]:
                     "window": parsed.window,
                     "channel": parsed.channel,
                     "meta_group": parsed.meta_group,
-                    "mean_abs_shap": float(feat["mean_abs_shap"]),
-                    "rank": int(feat.get("rank", 0)),
+                    "mean_abs_shap": float(value),
+                    "rank": rank,
                 }
             )
     return rows

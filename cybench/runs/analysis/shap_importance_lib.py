@@ -79,6 +79,49 @@ DEFAULT_MAIZE_FAMILY_MODELS: tuple[str, ...] = (
     "transformer_lf",
 )
 
+# Dummy-encoded categoricals (``<stem>_<class>`` / ``ctx:<stem>_<class>``).
+# SHAP ranks each dummy separately; we coalesce |SHAP| back to the parent stem.
+ONEHOT_FEATURE_STEMS: frozenset[str] = frozenset({"drainage_class"})
+_ONEHOT_NAME_RE = re.compile(
+    r"^(?:(?P<prefix>ctx|ts):)?(?P<stem>"
+    + "|".join(sorted(ONEHOT_FEATURE_STEMS))
+    + r")_(?P<level>.+)$"
+)
+
+
+def coalesce_onehot_feature_name(name: str) -> str:
+    """Map ``drainage_class_4`` / ``ctx:drainage_class_4`` → ``drainage_class`` / ``ctx:drainage_class``."""
+    match = _ONEHOT_NAME_RE.match(str(name).strip())
+    if match is None:
+        return str(name)
+    stem = match.group("stem")
+    prefix = match.group("prefix")
+    return f"{prefix}:{stem}" if prefix else stem
+
+
+def coalesce_onehot_shap_ranks(rows: Sequence[FeatureRank]) -> list[FeatureRank]:
+    """Sum |SHAP| across one-hot levels of the same categorical, then re-rank."""
+    if not rows:
+        return []
+    totals: dict[str, float] = {}
+    for row in rows:
+        key = coalesce_onehot_feature_name(str(row["name"]))
+        totals[key] = totals.get(key, 0.0) + float(row["mean_abs_shap"])
+    ordered = sorted(totals.items(), key=lambda item: (-item[1], item[0]))
+    out: list[FeatureRank] = []
+    for rank, (name, value) in enumerate(ordered, start=1):
+        if not np.isfinite(value) or value <= 0:
+            continue
+        out.append(
+            FeatureRank(
+                name=name,
+                mean_abs_shap=round(float(value), 8),
+                rank=rank,
+            )
+        )
+    return out
+
+
 class ModelManifestEntry(TypedDict):
     framework: str
     feature_design: bool
@@ -753,9 +796,13 @@ def _collapse_abs_shap(
       - ``(n_samples, T, n_features)`` — reduce time with ``time_reduce``,
         then mean over samples
 
-    ``time_reduce``:
+    ``time_reduce`` (applied after taking absolute values):
       - ``"mean"``: mean |SHAP| over timesteps (dilutes sparse peaks)
       - ``"sum"``: sum |SHAP| over timesteps (total seasonal contribution)
+
+    We always take absolute value **per timestep first**, then sum/mean over time.
+    Summing signed SHAP before abs would cancel opposing effects across the season
+    and understate channel importance.
     """
     if time_reduce not in {"mean", "sum"}:
         raise ValueError(f"time_reduce must be 'mean' or 'sum', got {time_reduce!r}")
@@ -805,7 +852,7 @@ def _sum_abs_over_time_feature_importance(
     *,
     n_features: int,
 ) -> npt.NDArray[np.float64]:
-    """Sum |SHAP| over timesteps, then mean over samples (one score per channel)."""
+    """Per timestep |SHAP|, sum over time, then mean over samples."""
     return _collapse_abs_shap(values, n_features=n_features, time_reduce="sum")
 
 
@@ -833,7 +880,7 @@ def _rank_features(
                 rank=rank,
             )
         )
-    return rows
+    return coalesce_onehot_shap_ranks(rows)
 
 
 def _native_rf_importance(
@@ -1314,7 +1361,7 @@ def aggregate_feature_importance(records: Sequence[ShapOriginRecord]) -> pd.Data
                 {
                     "model": record["model"],
                     "origin": origin,
-                    "feature": feat["name"],
+                    "feature": coalesce_onehot_feature_name(str(feat["name"])),
                     "mean_abs_shap": feat["mean_abs_shap"],
                     "rank": feat["rank"],
                 }

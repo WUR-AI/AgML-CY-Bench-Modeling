@@ -27,6 +27,41 @@ def test_parse_tabular_feature():
     assert parsed.meta_group == "Vegetation"
 
 
+def test_parse_onehot_drainage_class():
+    parsed = parse_feature_name("drainage_class_4")
+    assert parsed.raw == "drainage_class"
+    assert parsed.variable_group == "drainage_class"
+    assert parsed.meta_group == "Static"
+    ctx = parse_feature_name("ctx:drainage_class_2")
+    assert ctx.raw == "ctx:drainage_class"
+    assert ctx.variable_group == "drainage_class"
+    assert ctx.meta_group == "Static"
+
+
+def test_feature_rows_coalesce_drainage_onehots():
+    summary = {
+        "crop": "maize",
+        "country": "NL",
+        "model": "transformer_lf",
+        "horizon": "eos",
+        "origins": [
+            {
+                "test_years": [2020],
+                "features": [
+                    {"name": "ctx:drainage_class_3", "mean_abs_shap": 0.1, "rank": 1},
+                    {"name": "ctx:drainage_class_4", "mean_abs_shap": 0.2, "rank": 2},
+                    {"name": "ctx:awc", "mean_abs_shap": 0.15, "rank": 3},
+                ],
+            }
+        ],
+    }
+    rows = feature_rows_from_summary(summary)
+    by_feat = {row["feature"]: row["mean_abs_shap"] for row in rows}
+    assert by_feat["ctx:drainage_class"] == pytest.approx(0.3)
+    assert by_feat["ctx:awc"] == pytest.approx(0.15)
+    assert len(rows) == 2
+
+
 def test_window_relative_to_eos_is_chronological():
     assert window_relative_to_eos(0) == 0
     assert window_relative_to_eos(1) == -1
