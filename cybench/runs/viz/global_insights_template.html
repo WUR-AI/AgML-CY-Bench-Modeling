@@ -226,6 +226,19 @@
       margin-left: 0.03em;
       font-weight: 600;
     }
+    #horizon-improvement-table td.metric-cell { white-space: nowrap; cursor: help; }
+    #horizon-improvement-table .sig-mark {
+      font-size: 0.68em;
+      line-height: 0;
+      vertical-align: super;
+      margin-left: 0.03em;
+      font-weight: 600;
+    }
+    #horizon-improvement-table td.metric-na {
+      color: var(--muted, #6c757d);
+      font-style: italic;
+      cursor: help;
+    }
     .world-map-wrap .country {
       transition: fill 0.15s;
     }
@@ -551,6 +564,23 @@
     </div>
 
     <div data-page="horizon">
+      <div class="card">
+        <h2>Mid vs end-of-season comparison (family representatives)</h2>
+        <p class="muted" id="horizon-improvement-note">
+          How much skill differs between mid-season and end-of-season for EOS family
+          representatives. Median [IQR] of per-country Δs; small positive Δ means mid-season
+          loses little relative to end-of-season.
+        </p>
+        <div class="controls">
+          <label>Crop <select id="horizon-improvement-crop"></select></label>
+        </div>
+        <div class="table-scroll" id="horizon-improvement-table-wrap"></div>
+        <div class="export-toolbar">
+          <button type="button" id="horizon-improvement-export-latex">Download table (LaTeX)</button>
+          <button type="button" id="horizon-improvement-export-latex-copy">Copy LaTeX</button>
+        </div>
+      </div>
+
       <div class="card">
         <h2>World map — horizon improvement</h2>
         <p class="muted">
@@ -1862,6 +1892,231 @@
 
     // World map — horizon improvement (pairwise delta between forecast horizons)
     if (PAGE === "horizon") {
+    // Family-representative mid vs eos absolute Δ table (with country bootstrap)
+    (function initHorizonImprovementTable() {
+      const HIT = DATA.horizon_improvement_table || {};
+      const wrap = document.getElementById("horizon-improvement-table-wrap");
+      const cropSelect = document.getElementById("horizon-improvement-crop");
+      const noteEl = document.getElementById("horizon-improvement-note");
+      const exportLatexBtn = document.getElementById("horizon-improvement-export-latex");
+      const exportLatexCopyBtn = document.getElementById("horizon-improvement-export-latex-copy");
+      if (!wrap || !cropSelect) return;
+
+      const cropKeys = Object.keys(HIT.by_crop || {});
+      if (!cropKeys.length) {
+        wrap.innerHTML = `<p class="muted">${HIT.note || "No mid vs end-of-season comparison table."}</p>`;
+        if (exportLatexBtn) exportLatexBtn.disabled = true;
+        if (exportLatexCopyBtn) exportLatexCopyBtn.disabled = true;
+        return;
+      }
+      let hitCrop = cropKeys.includes("all") ? "all" : cropKeys[0];
+      cropSelect.innerHTML = cropKeys.map(c => {
+        const label = c === "all" ? "All crops" : c.charAt(0).toUpperCase() + c.slice(1);
+        return `<option value="${c}">${label}</option>`;
+      }).join("");
+      cropSelect.value = hitCrop;
+
+      function escapeHtml(text) {
+        return String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function escapeLatex(text) {
+        return String(text)
+          .replace(/\\/g, "\\textbackslash{}")
+          .replace(/[&%$#_{}]/g, ch => `\\${ch}`)
+          .replace(/~/g, "\\textasciitilde{}")
+          .replace(/\^/g, "\\textasciicircum{}");
+      }
+
+      function metricSigMarker(fam, metric) {
+        const stats = (fam.bootstrap || {})[metric];
+        if (!stats) return "";
+        if (stats.significant_worse) return "†";
+        if (stats.significant) return "*";
+        return "";
+      }
+
+      function metricBootTooltip(fam, metric) {
+        if (fam.eos_only) {
+          return "End-of-season only (no mid-season run) — mid vs eos Δ not applicable.";
+        }
+        const stats = (fam.bootstrap || {})[metric];
+        if (!stats) return "No paired country data for this metric.";
+        const n = stats.n_countries != null ? stats.n_countries : 0;
+        if (n === 0) return "No paired country data for this metric.";
+        if (stats.median_delta == null) {
+          return `Only ${n} countr${n === 1 ? "y" : "ies"} with paired data (bootstrap needs ≥2).`;
+        }
+        let text = `median Δ = ${Number(stats.median_delta).toFixed(3)}`;
+        if (stats.ci_lo != null && stats.ci_hi != null) {
+          text += `, 95% bootstrap CI [${Number(stats.ci_lo).toFixed(3)}, ${Number(stats.ci_hi).toFixed(3)}]`;
+        } else if (n < 2) {
+          text += " (bootstrap CI needs ≥2 countries)";
+        }
+        if (stats.p_one_sided != null) text += `, p(eos better) = ${Number(stats.p_one_sided).toFixed(3)}`;
+        if (stats.p_one_sided_worse != null) text += `, p(mid better) = ${Number(stats.p_one_sided_worse).toFixed(3)}`;
+        if (stats.significant) text += " *";
+        if (stats.significant_worse) text += " †";
+        text += ` (${n} countries; positive Δ = eos better / mid loses some skill)`;
+        return text;
+      }
+
+      function formatMetricWithIqr(fam, metric) {
+        if (fam.eos_only) return "N/A";
+        const raw = fam.raw && fam.raw[metric];
+        if (raw == null) return "—";
+        const mark = metricSigMarker(fam, metric);
+        const markHtml = mark ? `<sup class="sig-mark">${mark}</sup>` : "";
+        const band = (fam.iqr || {})[metric];
+        if (!band || band.q25 == null || band.q75 == null) {
+          return `${Number(raw).toFixed(3)}${markHtml}`;
+        }
+        return `${Number(raw).toFixed(3)}${markHtml} [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
+      }
+
+      function formatMetricLatex(fam, metric) {
+        if (fam.eos_only) return "N/A";
+        const raw = fam.raw && fam.raw[metric];
+        if (raw == null) return "---";
+        const marker = metricSigMarker(fam, metric);
+        const star = marker === "*" ? "^{*}" : marker === "†" ? "^{\\dagger}" : "";
+        const band = (fam.iqr || {})[metric];
+        const med = Number(raw).toFixed(3);
+        let cell = (!band || band.q25 == null || band.q75 == null)
+          ? `${med}${star}`
+          : `${med}${star} [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
+        return `\\mbox{${cell}}`;
+      }
+
+      function currentFamilies() {
+        return ((HIT.by_crop || {})[hitCrop] || {}).families || [];
+      }
+
+      function buildTableLatex(families) {
+        if (!families.length) return "";
+        const cols = HIT.table_columns || [];
+        const cropLabel = hitCrop === "all" ? "all crops" : hitCrop;
+        const fromLabel = HIT.from_label || HIT.from_horizon || "mid";
+        const toLabel = HIT.to_label || HIT.to_horizon || "eos";
+        const nBoot = (HIT.n_bootstrap || 10000).toLocaleString();
+        const nCountries = ((HIT.by_crop || {})[hitCrop] || {}).n_countries || 0;
+        const headers = [
+          "Family",
+          "Representative",
+          ...cols.map(c => c.latex || c.header || c.metric),
+        ];
+        const colSpec = `ll${"r".repeat(cols.length)}`;
+        const headerRow = headers.map((h, i) => (i < 2 ? escapeLatex(h) : h)).join(" & ");
+        const bodyRows = families.map(fam => {
+          const cells = [
+            escapeLatex(fam.family),
+            escapeLatex(fam.display_name),
+            ...cols.map(c => formatMetricLatex(fam, c.metric)),
+          ];
+          return `    ${cells.join(" & ")} \\\\`;
+        }).join("\n");
+        const sigNote = HIT.sig_note
+          || "* end-of-season significantly better than mid · † mid significantly better than eos.";
+        return `% CY-Bench mid vs end-of-season comparison (generated from dashboard)
+% Requires: \\usepackage{booktabs}
+\\begin{table}[ht]
+  \\centering
+  \\caption{Mid-season vs end-of-season comparison for family representatives: median [IQR] of per-country absolute $\\Delta$ (positive = end-of-season better; near-zero means mid loses little). Horizons: ${escapeLatex(fromLabel)} $\\rightarrow$ ${escapeLatex(toLabel)}; crops: ${escapeLatex(cropLabel)}; $n=${nCountries}$ countries with both horizons. Country bootstrap ($B=${nBoot}$).}
+  \\label{tab:cybench-horizon-comparison}
+  \\begin{tabular}{${colSpec}}
+    \\toprule
+    ${headerRow} \\\\
+    \\midrule
+${bodyRows}
+    \\bottomrule
+  \\end{tabular}
+  {\\footnotesize ${escapeLatex(sigNote)}}
+\\end{table}
+`;
+      }
+
+      function downloadText(filename, text) {
+        const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      function downloadTableLatex() {
+        const latex = buildTableLatex(currentFamilies());
+        if (!latex) return;
+        downloadText(`horizon_comparison_${hitCrop}.tex`, latex);
+      }
+
+      async function copyTableLatex() {
+        const latex = buildTableLatex(currentFamilies());
+        if (!latex || !exportLatexCopyBtn) return;
+        const original = exportLatexCopyBtn.textContent;
+        try {
+          await navigator.clipboard.writeText(latex);
+          exportLatexCopyBtn.textContent = "Copied!";
+          setTimeout(() => { exportLatexCopyBtn.textContent = original; }, 1600);
+        } catch (_err) {
+          downloadTableLatex();
+          exportLatexCopyBtn.textContent = "Downloaded instead";
+          setTimeout(() => { exportLatexCopyBtn.textContent = original; }, 1600);
+        }
+      }
+
+      function render() {
+        const slice = (HIT.by_crop || {})[hitCrop] || { families: [], n_countries: 0 };
+        const families = slice.families || [];
+        const cols = HIT.table_columns || [];
+        const baseNote = HIT.note || "";
+        const sigNote = HIT.sig_note || "";
+        const nNote = slice.n_countries
+          ? `${slice.n_countries} countries with both horizons.`
+          : "";
+        if (noteEl) {
+          noteEl.textContent = [baseNote, nNote, sigNote].filter(Boolean).join(" ");
+        }
+        const canExport = families.length > 0 && cols.length > 0;
+        if (exportLatexBtn) exportLatexBtn.disabled = !canExport;
+        if (exportLatexCopyBtn) exportLatexCopyBtn.disabled = !canExport;
+        if (!canExport) {
+          wrap.innerHTML = `<p class="muted">No paired mid/eos family data for this crop.</p>`;
+          return;
+        }
+        const headers = ["Family", "Representative", ...cols.map(c => c.header || c.metric)];
+        let html = '<table id="horizon-improvement-table"><thead><tr>';
+        html += headers.map(h => `<th>${escapeHtml(h)}</th>`).join("");
+        html += "</tr></thead><tbody>";
+        for (const fam of families) {
+          html += `<tr><td>${escapeHtml(fam.family)}</td><td>${escapeHtml(fam.display_name)}</td>`;
+          for (const col of cols) {
+            const metric = col.metric;
+            const content = formatMetricWithIqr(fam, metric);
+            const title = metricBootTooltip(fam, metric);
+            const cls = fam.eos_only ? "metric-na" : "metric-cell";
+            html += `<td class="${cls}" title="${escapeHtml(title)}">${content}</td>`;
+          }
+          html += "</tr>";
+        }
+        html += "</tbody></table>";
+        wrap.innerHTML = html;
+      }
+
+      cropSelect.addEventListener("change", () => {
+        hitCrop = cropSelect.value || "all";
+        render();
+      });
+      if (exportLatexBtn) exportLatexBtn.addEventListener("click", downloadTableLatex);
+      if (exportLatexCopyBtn) exportLatexCopyBtn.addEventListener("click", copyTableLatex);
+      render();
+    })();
+
     let deltaMapFromHz = AVAILABLE_HORIZONS.includes("mid") ? "mid" : (AVAILABLE_HORIZONS[0] || "eos");
     let deltaMapToHz = AVAILABLE_HORIZONS.includes("eos") ? "eos" : (AVAILABLE_HORIZONS[AVAILABLE_HORIZONS.length - 1] || "eos");
     let deltaMapCrop = "all";

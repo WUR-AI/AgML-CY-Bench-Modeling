@@ -15,6 +15,7 @@ from cybench.runs.analysis.global_insights_lib import (
     build_continent_horizon_payload,
     build_continent_horizon_table,
     build_family_models_horizon_table,
+    build_horizon_improvement_table_payload,
     build_horizon_skill_curves_payload,
     build_insights_payload,
     build_crop_comparison_payload,
@@ -491,6 +492,12 @@ def test_build_insights_payload_structure(tmp_path: Path):
     assert payload["metric_map_scales"]["nrmse"]["higher_better"] is False
     assert "horizon_delta_scales" in payload
     assert payload["horizon_delta_scales"]["nrmse"]["higher_better"] is True
+    assert "horizon_improvement_table" in payload
+    hit = payload["horizon_improvement_table"]
+    assert hit["from_horizon"] == "mid"
+    assert hit["to_horizon"] == "eos"
+    assert "by_crop" in hit
+    assert hit.get("n_bootstrap") == 10_000
 
 
 def _three_horizon_fixture(tmp_path: Path) -> pd.DataFrame:
@@ -552,6 +559,60 @@ def _three_horizon_fixture(tmp_path: Path) -> pd.DataFrame:
 
     paths = discover_summary_tables(tmp_path, version=1)
     return load_summary_frame(paths)
+
+
+def test_horizon_improvement_table_paired_absolute_deltas():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        df = _three_horizon_fixture(Path(tmp))
+        lpj_rows = [
+            {
+                "crop": "maize",
+                "country": cc,
+                "model": "lpjml_bc",
+                "batch_horizon": "eos",
+                "nrmse": 0.19,
+                "r2": 0.5,
+                "r_spatial": 0.5,
+                "r_temporal": 0.5,
+                "r_res": 0.4,
+                "n_samples": 40,
+            }
+            for cc in ("DE", "FR")
+        ]
+        df = pd.concat([df, pd.DataFrame(lpj_rows)], ignore_index=True)
+        payload = build_horizon_improvement_table_payload(
+            df, n_bootstrap=500, seed=1
+        )
+        assert payload["from_horizon"] == "mid"
+        assert payload["to_horizon"] == "eos"
+        assert "maize" in payload["by_crop"]
+        maize = payload["by_crop"]["maize"]
+        assert maize["n_countries"] == 2
+        assert set(maize["countries"]) == {"DE", "FR"}
+        assert {c["metric"] for c in payload["table_columns"]} == {
+            "nrmse",
+            "r2",
+            "r_spatial",
+            "r_temporal",
+            "r_res",
+        }
+        xgb = next(f for f in maize["families"] if f["model"] == "xgboost")
+        # mid NRMSE 0.28 → eos 0.14 ⇒ Δ = +0.14 (eos better)
+        assert xgb["raw"]["nrmse"] == pytest.approx(0.14, abs=1e-4)
+        assert xgb["iqr"]["nrmse"]["q25"] == pytest.approx(0.14, abs=1e-4)
+        # mid r_temporal 0.35 → eos 0.70 ⇒ Δ = +0.35
+        assert xgb["raw"]["r_temporal"] == pytest.approx(0.35, abs=1e-4)
+        boot = xgb["bootstrap"]["nrmse"]
+        assert boot["n_countries"] == 2
+        assert boot["median_delta"] == pytest.approx(0.14, abs=1e-3)
+        assert boot["ci_lo"] is not None and boot["ci_hi"] is not None
+        assert boot["significant"] is True
+        lpj = next(f for f in maize["families"] if f["model"] == "lpjml_bc")
+        assert lpj["eos_only"] is True
+        assert all(v is None for v in lpj["raw"].values())
+        assert "N/A" in payload["sig_note"] or "LPJmL" in payload["sig_note"]
 
 
 def test_horizon_skill_curves_inner_join_countries():

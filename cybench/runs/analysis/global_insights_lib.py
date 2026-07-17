@@ -1273,6 +1273,215 @@ def build_horizon_skill_curves_payload(
     }
 
 
+HORIZON_IMPROVEMENT_METRICS: tuple[str, ...] = (
+    "nrmse",
+    "r2",
+    "r_spatial",
+    "r_temporal",
+    "r_res",
+)
+
+HORIZON_IMPROVEMENT_COLUMNS: tuple[dict[str, str], ...] = (
+    {"metric": "nrmse", "header": "Δ NRMSE", "latex": "$\\Delta$ NRMSE", "aspect": "Overall"},
+    {"metric": "r2", "header": "Δ R²", "latex": "$\\Delta R^2$", "aspect": "Overall"},
+    {"metric": "r_spatial", "header": "Δ Spatial (r)", "latex": "$\\Delta r$ (spatial)", "aspect": "Spatial"},
+    {"metric": "r_temporal", "header": "Δ Temporal (r)", "latex": "$\\Delta r$ (temporal)", "aspect": "Temporal"},
+    {"metric": "r_res", "header": "Δ Anomaly (r)", "latex": "$\\Delta r$ (anomaly)", "aspect": "Anomaly"},
+)
+
+HORIZON_IMPROVEMENT_SIG_NOTE = (
+    "* end-of-season significantly better than mid · † mid-season significantly better than eos "
+    "(country bootstrap of median Δ, B=10,000). Hover for bootstrap CI. "
+    "Positive Δ = end-of-season better, so near-zero / non-significant Δ means mid loses little. "
+    "N/A = no mid-season run (e.g. LPJmL)."
+)
+
+
+def _horizon_improvement_delta(
+    mid_val: float, eos_val: float, *, higher_is_better: bool
+) -> float:
+    """Absolute mid→eos change oriented so positive means eos is better."""
+    return (eos_val - mid_val) if higher_is_better else (mid_val - eos_val)
+
+
+def build_horizon_improvement_table_payload(
+    df: pd.DataFrame,
+    *,
+    representatives: dict[str, str] | None = None,
+    from_horizon: str = "mid",
+    to_horizon: str = "eos",
+    n_bootstrap: int = 10_000,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Family-representative mid vs eos absolute Δ table with country bootstrap.
+
+    For each family representative and metric, take countries with both horizons,
+    compute per-country absolute Δ (positive ⇒ later horizon better), then report
+    median [IQR] and a country-level bootstrap CI / one-sided significance.
+    Framed as a mid vs end-of-season comparison: small positive Δ means mid-season
+    loses little relative to end-of-season.
+    """
+    from cybench.runs.analysis.country_significance_lib import (
+        bootstrap_family_vs_naive_stats,
+    )
+    from cybench.runs.analysis.model_family_radar_lib import (
+        FAMILY_ORDER,
+        MODEL_DISPLAY_NAMES,
+        _metric_higher_is_better,
+        pick_representatives,
+    )
+    import numpy as np
+
+    horizons = published_horizons_in_data(df)
+    if from_horizon not in horizons or to_horizon not in horizons:
+        return {
+            "from_horizon": from_horizon,
+            "to_horizon": to_horizon,
+            "n_bootstrap": n_bootstrap,
+            "table_columns": list(HORIZON_IMPROVEMENT_COLUMNS),
+            "by_crop": {},
+            "note": (
+                f"Need both {from_horizon} and {to_horizon} summaries for the "
+                "horizon improvement table."
+            ),
+            "sig_note": HORIZON_IMPROVEMENT_SIG_NOTE,
+        }
+
+    pair = (from_horizon, to_horizon)
+    rep_source_hz = to_horizon if to_horizon in horizons else horizons[-1]
+    rep_work = _filter_summary_work(df, batch_horizon=rep_source_hz)
+    reps = pick_representatives(rep_work, overrides=representatives)
+    metrics = tuple(m for m in HORIZON_IMPROVEMENT_METRICS if m in df.columns)
+    value_columns = tuple(c for c in HORIZON_SKILL_VALUE_COLUMNS if c in df.columns and c in metrics)
+
+    crop_keys = ["all", *_crop_keys(df)]
+    by_crop: dict[str, Any] = {}
+    for crop_i, crop_key in enumerate(crop_keys):
+        crop_filter = None if crop_key == "all" else crop_key
+        crop_work = _filter_summary_work(df, crop=crop_filter, require_valid_nrmse=False)
+        wide = _wide_country_model_horizon_metrics(
+            crop_work,
+            pair,
+            crop=crop_filter,
+            value_columns=value_columns,
+        )
+        countries = (
+            sorted(wide["country"].astype(str).unique()) if not wide.empty else []
+        )
+        families: list[dict[str, Any]] = []
+        for fam_i, family in enumerate(FAMILY_ORDER):
+            model = reps.get(family)
+            if not model:
+                continue
+            eos_only = model in EOS_ONLY_HORIZON_CURVE_MODELS
+            empty_boot = {
+                "n_countries": 0,
+                "median_delta": None,
+                "ci_lo": None,
+                "ci_hi": None,
+                "p_one_sided": None,
+                "p_one_sided_worse": None,
+                "significant": False,
+                "significant_worse": False,
+            }
+            if eos_only:
+                families.append(
+                    {
+                        "family": family,
+                        "model": model,
+                        "display_name": MODEL_DISPLAY_NAMES.get(model, model),
+                        "is_naive": family == "Naive baselines",
+                        "eos_only": True,
+                        "raw": {m: None for m in metrics},
+                        "iqr": {m: {"q25": None, "q75": None} for m in metrics},
+                        "bootstrap": {m: dict(empty_boot) for m in metrics},
+                    }
+                )
+                continue
+            model_wide = (
+                wide[wide["model"].astype(str) == model].copy()
+                if not wide.empty
+                else wide
+            )
+            raw: dict[str, float | None] = {}
+            iqr: dict[str, dict[str, float | None]] = {}
+            bootstrap: dict[str, dict[str, float | bool | int | None]] = {}
+            for met_i, metric in enumerate(metrics):
+                mid_col = f"{metric}_{from_horizon}"
+                eos_col = f"{metric}_{to_horizon}"
+                if (
+                    model_wide.empty
+                    or mid_col not in model_wide.columns
+                    or eos_col not in model_wide.columns
+                ):
+                    raw[metric] = None
+                    iqr[metric] = {"q25": None, "q75": None}
+                    bootstrap[metric] = dict(empty_boot)
+                    continue
+                higher = _metric_higher_is_better(metric)
+                deltas = []
+                for _, row in model_wide.iterrows():
+                    mid_v = row[mid_col]
+                    eos_v = row[eos_col]
+                    if pd.isna(mid_v) or pd.isna(eos_v):
+                        continue
+                    deltas.append(
+                        _horizon_improvement_delta(
+                            float(mid_v), float(eos_v), higher_is_better=higher
+                        )
+                    )
+                stats = _median_iqr_stats(deltas)
+                raw[metric] = stats["median"]
+                iqr[metric] = {"q25": stats["q25"], "q75": stats["q75"]}
+                boot_seed = seed + 17 * crop_i + 31 * fam_i + 47 * met_i
+                boot = bootstrap_family_vs_naive_stats(
+                    np.asarray(deltas, dtype=float),
+                    n_bootstrap=n_bootstrap,
+                    seed=boot_seed,
+                )
+                bootstrap[metric] = boot
+            families.append(
+                {
+                    "family": family,
+                    "model": model,
+                    "display_name": MODEL_DISPLAY_NAMES.get(model, model),
+                    "is_naive": family == "Naive baselines",
+                    "eos_only": False,
+                    "raw": raw,
+                    "iqr": iqr,
+                    "bootstrap": bootstrap,
+                }
+            )
+        by_crop[crop_key] = {
+            "n_countries": len(countries),
+            "countries": countries,
+            "families": families,
+        }
+
+    from_label = HORIZON_DISPLAY_LABELS.get(from_horizon, from_horizon)
+    to_label = HORIZON_DISPLAY_LABELS.get(to_horizon, to_horizon)
+    rep_labels = ", ".join(f"{f}: {m}" for f, m in reps.items())
+    return {
+        "from_horizon": from_horizon,
+        "to_horizon": to_horizon,
+        "from_label": from_label,
+        "to_label": to_label,
+        "n_bootstrap": n_bootstrap,
+        "representatives": reps,
+        "representatives_summary": rep_labels,
+        "table_columns": list(HORIZON_IMPROVEMENT_COLUMNS),
+        "by_crop": by_crop,
+        "note": (
+            "Mid-season vs end-of-season comparison for EOS family representatives. "
+            "Each country contributes one paired Δ (median across crops when crop=all). "
+            "Cells show median [IQR] of country-level Δs. Positive = end-of-season better "
+            "(NRMSE: mid−eos; R²/r: eos−mid), so small positive values mean mid-season "
+            f"loses little skill vs end-of-season. Pair: {from_label} → {to_label}."
+        ),
+        "sig_note": HORIZON_IMPROVEMENT_SIG_NOTE,
+    }
+
+
 CONTINENT_REGION_ORDER: tuple[str, ...] = (
     "Africa",
     "Asia",
@@ -1768,6 +1977,7 @@ def build_insights_payload(output_root: Path, *, version: int = 4) -> dict[str, 
         "model_country_skilled": model_country_skilled,
         "horizon_skill_curves": build_horizon_skill_curves_payload(df),
         "continent_horizons": build_continent_horizon_payload(df),
+        "horizon_improvement_table": build_horizon_improvement_table_payload(df),
         "crop_comparison": build_crop_comparison_payload(df),
         "country_map_cc": country_map_cc,
         "benchmark_map_isos": benchmark_map_isos,
