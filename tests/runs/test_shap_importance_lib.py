@@ -13,6 +13,7 @@ from cybench.runs.analysis.shap_importance_lib import (
     _aggregate_shapiq_first_order,
     _mean_abs_feature_importance,
     _rank_features,
+    _sum_abs_over_time_feature_importance,
     MODEL_MANIFEST,
     aggregate_feature_importance,
     collect_shap_output_dir,
@@ -42,6 +43,25 @@ def test_mean_abs_feature_importance_temporal():
     shap_ts = np.random.rand(80, 24, 10)
     out = _mean_abs_feature_importance(shap_ts, n_features=10)
     assert out.shape == (10,)
+
+
+def test_sum_abs_over_time_feature_importance():
+    # One sample, two timesteps, two features.
+    # Feature 0: |SHAP| = 1 then 3 → sum 4
+    # Feature 1: |SHAP| = 2 then 2 → sum 4
+    shap_ts = np.array(
+        [
+            [[1.0, 2.0], [3.0, 2.0]],
+            [[1.0, 0.0], [1.0, 4.0]],
+        ]
+    )
+    out = _sum_abs_over_time_feature_importance(shap_ts, n_features=2)
+    # Sample0: [4, 4], sample1: [2, 4] → mean [3, 4]
+    assert out.tolist() == pytest.approx([3.0, 4.0])
+    mean_out = _mean_abs_feature_importance(shap_ts, n_features=2)
+    # Mean over time then samples: sample0 [2, 2], sample1 [1, 2] → [1.5, 2]
+    assert mean_out.tolist() == pytest.approx([1.5, 2.0])
+    assert out[0] > mean_out[0]
 
 
 def test_rank_features_from_2d_mean_vector():

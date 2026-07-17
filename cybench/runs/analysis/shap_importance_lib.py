@@ -740,12 +740,27 @@ def _subsample_indices(n: int, k: int, rng: np.random.Generator) -> npt.NDArray[
     return np.sort(rng.choice(n, size=k, replace=False))
 
 
-def _mean_abs_feature_importance(
+def _collapse_abs_shap(
     values: npt.NDArray[np.float64] | np.ndarray,
     *,
     n_features: int,
+    time_reduce: str = "mean",
 ) -> npt.NDArray[np.float64]:
-    """Collapse sample/time axes and return one mean |SHAP| per feature."""
+    """Collapse SHAP arrays to one |SHAP| score per feature.
+
+    Expected layouts:
+      - ``(n_features,)``
+      - ``(n_samples, n_features)`` — mean over samples
+      - ``(n_samples, T, n_features)`` — reduce time with ``time_reduce``,
+        then mean over samples
+
+    ``time_reduce``:
+      - ``"mean"``: mean |SHAP| over timesteps (dilutes sparse peaks)
+      - ``"sum"``: sum |SHAP| over timesteps (total seasonal contribution)
+    """
+    if time_reduce not in {"mean", "sum"}:
+        raise ValueError(f"time_reduce must be 'mean' or 'sum', got {time_reduce!r}")
+
     arr = np.abs(np.asarray(values, dtype=np.float64))
     arr = np.squeeze(arr)
     if arr.ndim == 0:
@@ -761,8 +776,38 @@ def _mean_abs_feature_importance(
             f"SHAP trailing dimension {arr.shape[-1]} does not match {n_features} features "
             f"(full shape {arr.shape})."
         )
+    if arr.ndim == 2:
+        return np.mean(arr, axis=0)
+    if arr.ndim == 3:
+        # (n_samples, T, n_features)
+        if time_reduce == "sum":
+            per_sample = np.sum(arr, axis=1)
+        else:
+            per_sample = np.mean(arr, axis=1)
+        return np.mean(per_sample, axis=0)
     lead_axes = tuple(range(arr.ndim - 1))
+    if time_reduce == "sum":
+        # Fallback for unexpected ranks: sum all lead axes (legacy-compatible bulk collapse).
+        return np.sum(arr, axis=lead_axes)
     return np.mean(arr, axis=lead_axes)
+
+
+def _mean_abs_feature_importance(
+    values: npt.NDArray[np.float64] | np.ndarray,
+    *,
+    n_features: int,
+) -> npt.NDArray[np.float64]:
+    """Collapse sample/time axes with mean |SHAP| per feature."""
+    return _collapse_abs_shap(values, n_features=n_features, time_reduce="mean")
+
+
+def _sum_abs_over_time_feature_importance(
+    values: npt.NDArray[np.float64] | np.ndarray,
+    *,
+    n_features: int,
+) -> npt.NDArray[np.float64]:
+    """Sum |SHAP| over timesteps, then mean over samples (one score per channel)."""
+    return _collapse_abs_shap(values, n_features=n_features, time_reduce="sum")
 
 
 def _rank_features(
@@ -979,11 +1024,14 @@ def compute_shap_torch(
 
     ctx_names = list(train_dataset.x_context_columns)
     ts_names = list(train_dataset.x_ts_columns)
+    # Context has no time axis: mean |SHAP| over samples.
     ctx_mean = _mean_abs_feature_importance(
         np.asarray(shap_values[0], dtype=float),
         n_features=len(ctx_names),
     )
-    ts_mean = _mean_abs_feature_importance(
+    # Temporal channels: sum |SHAP| over timesteps, then mean over samples
+    # (total seasonal contribution; avoids diluting sparse critical windows).
+    ts_imp = _sum_abs_over_time_feature_importance(
         np.asarray(shap_values[1], dtype=float),
         n_features=len(ts_names),
     )
@@ -995,7 +1043,7 @@ def compute_shap_torch(
     feature_rows.extend(
         _rank_features(
             [f"ts:{name}" for name in ts_names],
-            ts_mean,
+            ts_imp,
         )
     )
     feature_rows.sort(key=lambda row: row["rank"])
@@ -1005,7 +1053,7 @@ def compute_shap_torch(
     return TorchShapPayload(
         explainer=interpretability["explainer_label"],
         features=feature_rows,
-        temporal_aggregation="mean_abs_over_time",
+        temporal_aggregation="sum_abs_over_time",
     )
 
 
