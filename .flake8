@@ -1,0 +1,23 @@
+[flake8]
+# Poetry uses virtualenvs.in-project; flake8 must not lint site-packages
+# (sympy can trigger RecursionError in pyflakes).
+exclude =
+    .svn,
+    CVS,
+    .bzr,
+    .hg,
+    .git,
+    __pycache__,
+    .tox,
+    .nox,
+    .eggs,
+    *.egg,
+    .venv,
+    venv,
+    build,
+    dist,
+    _build,
+    output,
+    outputs
+max-line-length = 127
+max-complexity = 10
