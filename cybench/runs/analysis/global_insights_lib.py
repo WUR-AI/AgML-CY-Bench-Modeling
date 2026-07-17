@@ -1929,6 +1929,207 @@ def build_crop_comparison_payload(df: pd.DataFrame) -> dict[str, dict[str, Any]]
     return out
 
 
+CROP_COMPARISON_TABLE_METRICS: tuple[str, ...] = HORIZON_IMPROVEMENT_METRICS
+CROP_COMPARISON_TABLE_COLUMNS: tuple[dict[str, str], ...] = HORIZON_IMPROVEMENT_COLUMNS
+
+
+def _crop_pair_delta(
+    crop_a_val: float, crop_b_val: float, *, higher_is_better: bool
+) -> float:
+    """Absolute crop_a vs crop_b Δ oriented so positive means crop_a is better."""
+    return (crop_a_val - crop_b_val) if higher_is_better else (crop_b_val - crop_a_val)
+
+
+def _wide_country_model_crop_metrics(
+    work: pd.DataFrame,
+    crops: tuple[str, ...],
+    *,
+    value_columns: tuple[str, ...],
+) -> pd.DataFrame:
+    """Inner-join median metrics across crops on country×model (fair country set)."""
+    frame = work[work["nrmse"].notna()].copy() if "nrmse" in work.columns else work.copy()
+    cols = [c for c in value_columns if c in frame.columns]
+    if not cols or len(crops) < 2:
+        return pd.DataFrame()
+    group_keys = ["country", "model"]
+    wide: pd.DataFrame | None = None
+    for crop in crops:
+        crop_df = frame[frame["crop"] == crop]
+        if crop_df.empty:
+            return pd.DataFrame()
+        agg = crop_df.groupby(group_keys, as_index=False)[cols].median()
+        rename = {c: f"{c}_{crop}" for c in cols}
+        part = agg.rename(columns=rename)
+        wide = part if wide is None else wide.merge(part, on=group_keys, how="inner")
+    return wide if wide is not None else pd.DataFrame()
+
+
+def build_crop_comparison_table_payload(
+    df: pd.DataFrame,
+    *,
+    representatives: dict[str, str] | None = None,
+    crop_a: str = "maize",
+    crop_b: str = "wheat",
+    n_bootstrap: int = 10_000,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Family-representative maize vs wheat Δ table with country bootstrap.
+
+    For each family representative and metric, take countries with both crops,
+    compute per-country absolute Δ (positive ⇒ crop_a better), then report
+    median [IQR] and a country-level bootstrap CI / one-sided significance.
+    """
+    from cybench.runs.analysis.country_significance_lib import (
+        bootstrap_family_vs_naive_stats,
+    )
+    from cybench.runs.analysis.model_family_radar_lib import (
+        FAMILY_ORDER,
+        MODEL_DISPLAY_NAMES,
+        _metric_higher_is_better,
+        pick_representatives,
+    )
+    import numpy as np
+
+    crops_present = set(_crop_keys(df))
+    crop_a_label = crop_a[:1].upper() + crop_a[1:]
+    crop_b_label = crop_b[:1].upper() + crop_b[1:]
+    sig_note = (
+        f"* {crop_a_label} significantly easier than {crop_b_label} · "
+        f"† {crop_b_label} significantly easier than {crop_a_label} "
+        "(country bootstrap of median Δ, B=10,000). Hover for bootstrap CI. "
+        f"Positive Δ = {crop_a_label} better "
+        f"(NRMSE: {crop_b}−{crop_a}; R²/r: {crop_a}−{crop_b})."
+    )
+
+    if crop_a not in crops_present or crop_b not in crops_present:
+        return {
+            "crop_a": crop_a,
+            "crop_b": crop_b,
+            "n_bootstrap": n_bootstrap,
+            "table_columns": list(CROP_COMPARISON_TABLE_COLUMNS),
+            "by_horizon": {},
+            "note": f"Need both {crop_a} and {crop_b} summaries for the crop comparison table.",
+            "sig_note": sig_note,
+        }
+
+    horizons = published_horizons_in_data(df)
+    rep_source_hz = "eos" if "eos" in horizons else (horizons[-1] if horizons else "eos")
+    rep_work = _filter_summary_work(df, batch_horizon=rep_source_hz)
+    reps = pick_representatives(rep_work, overrides=representatives)
+    metrics = tuple(m for m in CROP_COMPARISON_TABLE_METRICS if m in df.columns)
+    value_columns = tuple(
+        c for c in HORIZON_SKILL_VALUE_COLUMNS if c in df.columns and c in metrics
+    )
+    crop_pair = (crop_a, crop_b)
+
+    by_horizon: dict[str, Any] = {}
+    for hz_i, hz in enumerate(horizons):
+        hz_work = _filter_summary_work(
+            df, batch_horizon=hz, require_valid_nrmse=False
+        )
+        wide = _wide_country_model_crop_metrics(
+            hz_work, crop_pair, value_columns=value_columns
+        )
+        countries = (
+            sorted(wide["country"].astype(str).unique()) if not wide.empty else []
+        )
+        families: list[dict[str, Any]] = []
+        empty_boot = {
+            "n_countries": 0,
+            "median_delta": None,
+            "ci_lo": None,
+            "ci_hi": None,
+            "p_one_sided": None,
+            "p_one_sided_worse": None,
+            "significant": False,
+            "significant_worse": False,
+        }
+        for fam_i, family in enumerate(FAMILY_ORDER):
+            model = reps.get(family)
+            if not model:
+                continue
+            model_wide = (
+                wide[wide["model"].astype(str) == model].copy()
+                if not wide.empty
+                else wide
+            )
+            raw: dict[str, float | None] = {}
+            iqr: dict[str, dict[str, float | None]] = {}
+            bootstrap: dict[str, dict[str, float | bool | int | None]] = {}
+            for met_i, metric in enumerate(metrics):
+                a_col = f"{metric}_{crop_a}"
+                b_col = f"{metric}_{crop_b}"
+                if (
+                    model_wide.empty
+                    or a_col not in model_wide.columns
+                    or b_col not in model_wide.columns
+                ):
+                    raw[metric] = None
+                    iqr[metric] = {"q25": None, "q75": None}
+                    bootstrap[metric] = dict(empty_boot)
+                    continue
+                higher = _metric_higher_is_better(metric)
+                deltas = []
+                for _, row in model_wide.iterrows():
+                    a_v = row[a_col]
+                    b_v = row[b_col]
+                    if pd.isna(a_v) or pd.isna(b_v):
+                        continue
+                    deltas.append(
+                        _crop_pair_delta(
+                            float(a_v), float(b_v), higher_is_better=higher
+                        )
+                    )
+                stats = _median_iqr_stats(deltas)
+                raw[metric] = stats["median"]
+                iqr[metric] = {"q25": stats["q25"], "q75": stats["q75"]}
+                boot_seed = seed + 19 * hz_i + 31 * fam_i + 47 * met_i
+                bootstrap[metric] = bootstrap_family_vs_naive_stats(
+                    np.asarray(deltas, dtype=float),
+                    n_bootstrap=n_bootstrap,
+                    seed=boot_seed,
+                )
+            families.append(
+                {
+                    "family": family,
+                    "model": model,
+                    "display_name": MODEL_DISPLAY_NAMES.get(model, model),
+                    "is_naive": family == "Naive baselines",
+                    "raw": raw,
+                    "iqr": iqr,
+                    "bootstrap": bootstrap,
+                }
+            )
+        by_horizon[hz] = {
+            "n_countries": len(countries),
+            "countries": countries,
+            "families": families,
+        }
+
+    rep_labels = ", ".join(f"{f}: {m}" for f, m in reps.items())
+    return {
+        "crop_a": crop_a,
+        "crop_b": crop_b,
+        "crop_a_label": crop_a_label,
+        "crop_b_label": crop_b_label,
+        "n_bootstrap": n_bootstrap,
+        "representatives": reps,
+        "representatives_source_horizon": rep_source_hz,
+        "representatives_summary": rep_labels,
+        "table_columns": list(CROP_COMPARISON_TABLE_COLUMNS),
+        "by_horizon": by_horizon,
+        "note": (
+            f"{crop_a_label} vs {crop_b_label} comparison for EOS family representatives. "
+            "Only countries with both crops. Each country contributes one paired Δ. "
+            "Cells show median [IQR] of country-level Δs. "
+            f"Positive = {crop_a_label} better "
+            f"(NRMSE: {crop_b}−{crop_a}; R²/r: {crop_a}−{crop_b}). "
+            "This is the median of paired Δs, not the difference of independent crop medians."
+        ),
+        "sig_note": sig_note,
+    }
+
+
 def build_insights_payload(output_root: Path, *, version: int = 4) -> dict[str, Any]:
     """Build JSON-serializable payload for the global insights dashboard."""
     from cybench.runs.analysis.model_family_radar_lib import build_radar_payload
@@ -1979,6 +2180,7 @@ def build_insights_payload(output_root: Path, *, version: int = 4) -> dict[str, 
         "continent_horizons": build_continent_horizon_payload(df),
         "horizon_improvement_table": build_horizon_improvement_table_payload(df),
         "crop_comparison": build_crop_comparison_payload(df),
+        "crop_comparison_table": build_crop_comparison_table_payload(df),
         "country_map_cc": country_map_cc,
         "benchmark_map_isos": benchmark_map_isos,
         "map_coverage_note": MAP_COVERAGE_NOTE,

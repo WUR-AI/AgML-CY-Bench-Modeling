@@ -226,15 +226,18 @@
       margin-left: 0.03em;
       font-weight: 600;
     }
-    #horizon-improvement-table td.metric-cell { white-space: nowrap; cursor: help; }
-    #horizon-improvement-table .sig-mark {
+    #horizon-improvement-table td.metric-cell,
+    #crop-comparison-table td.metric-cell { white-space: nowrap; cursor: help; }
+    #horizon-improvement-table .sig-mark,
+    #crop-comparison-table .sig-mark {
       font-size: 0.68em;
       line-height: 0;
       vertical-align: super;
       margin-left: 0.03em;
       font-weight: 600;
     }
-    #horizon-improvement-table td.metric-na {
+    #horizon-improvement-table td.metric-na,
+    #crop-comparison-table td.metric-na {
       color: var(--muted, #6c757d);
       font-style: italic;
       cursor: help;
@@ -683,29 +686,19 @@
 
     <div data-page="crops">
       <div class="card">
-        <h2>Which crop is easier to predict (fair comparison)?</h2>
-        <p class="muted">
-          Pooling all countries biases crop rankings (e.g. maize-heavy regions may be harder).
-          Here we keep only <strong>countries with both crops</strong> and compare NRMSE within the same
-          country and model — a paired crop×country comparison.
+        <h2>Maize vs wheat comparison (family representatives)</h2>
+        <p class="muted" id="crop-comparison-note">
+          Paired countries only (both crops). Median [IQR] of per-country Δs for EOS family
+          representatives. Positive Δ = maize better than wheat.
         </p>
         <div class="controls">
-          <label>Horizon <select id="rq3-horizon"></select></label>
-          <label>Crop pair <select id="rq3-pair-filter"></select></label>
+          <label>Horizon <select id="crop-comparison-horizon"></select></label>
         </div>
-        <p class="muted" id="crop-pair-note"></p>
-        <div class="stat-grid" id="crop-pair-stats"></div>
-        <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">By model (paired countries only)</h3>
-        <div class="table-scroll" id="crop-pair-summary-wrap"></div>
-        <h3 style="font-size:1rem;margin:1rem 0 0.5rem;">Detail per country × model</h3>
-        <div class="controls">
-          <label>Model <input type="search" id="crop-detail-model-filter" placeholder="Filter…" /></label>
-          <label>Country
-            <select id="crop-detail-country-filter"><option value="">All</option></select>
-          </label>
+        <div class="table-scroll" id="crop-comparison-table-wrap"></div>
+        <div class="export-toolbar">
+          <button type="button" id="crop-comparison-export-latex">Download table (LaTeX)</button>
+          <button type="button" id="crop-comparison-export-latex-copy">Copy LaTeX</button>
         </div>
-        <div class="table-scroll" id="crop-pair-detail-wrap"></div>
-        <p class="muted note" id="crop-pair-delta-note"></p>
       </div>
     </div>
 
@@ -740,7 +733,7 @@
       },
       crops: {
         title: "Crop comparison",
-        lead: "Paired crop×country comparison: which crop is easier to predict within the same country and model.",
+        lead: "Paired maize vs wheat comparison for family representatives in countries with both crops.",
       },
       sample_size: {
         title: "Training set size",
@@ -3095,157 +3088,232 @@ ${bodyRows}
 
     } // end PAGE === horizon
 
-    // Crop pair comparison (RQ3)
+    // Maize vs wheat family-rep comparison table (paired countries + bootstrap)
     if (PAGE === "crops") {
-    let rq3Horizon = AVAILABLE_HORIZONS.includes("eos") ? "eos" : (AVAILABLE_HORIZONS[0] || "eos");
-    let rq3PairKey = "";
-    const rq3HorizonSelect = document.getElementById("rq3-horizon");
-    const rq3PairFilter = document.getElementById("rq3-pair-filter");
-    const cropPairNote = document.getElementById("crop-pair-note");
-    const cropPairStats = document.getElementById("crop-pair-stats");
-    const cropPairDeltaNote = document.getElementById("crop-pair-delta-note");
-    const cropDetailCountryFilter = document.getElementById("crop-detail-country-filter");
-    const cropDetailModelFilter = document.getElementById("crop-detail-model-filter");
-    const cpsWrap = document.getElementById("crop-pair-summary-wrap");
-    const cpdWrap = document.getElementById("crop-pair-detail-wrap");
+    (function initCropComparisonTable() {
+      const CCT = DATA.crop_comparison_table || {};
+      const wrap = document.getElementById("crop-comparison-table-wrap");
+      const horizonSelect = document.getElementById("crop-comparison-horizon");
+      const noteEl = document.getElementById("crop-comparison-note");
+      const exportLatexBtn = document.getElementById("crop-comparison-export-latex");
+      const exportLatexCopyBtn = document.getElementById("crop-comparison-export-latex-copy");
+      if (!wrap || !horizonSelect) return;
 
-    function currentCropPairSlice() {
-      const hz = (DATA.crop_comparison || {})[rq3Horizon] || {};
-      const keys = Object.keys(hz).sort();
-      if (!rq3PairKey && keys.length) rq3PairKey = keys[0];
-      if (rq3PairKey && !hz[rq3PairKey] && keys.length) rq3PairKey = keys[0];
-      return hz[rq3PairKey] || null;
-    }
-
-    function populateCropPairOptions() {
-      const hz = (DATA.crop_comparison || {})[rq3Horizon] || {};
-      const keys = Object.keys(hz).sort();
-      rq3PairFilter.innerHTML = keys.length
-        ? keys.map(k => {
-            const p = hz[k];
-            const label = `${p.crop_a} vs ${p.crop_b}`;
-            return `<option value="${k}">${label}</option>`;
-          }).join("")
-        : `<option value="">No crop pairs</option>`;
-      if (keys.length && (!rq3PairKey || !hz[rq3PairKey])) rq3PairKey = keys[0];
-      rq3PairFilter.value = rq3PairKey || "";
-    }
-
-    let cpsSort = "weighted_delta_nrmse";
-    let cpsDir = "desc";
-    let cpdSort = "delta_nrmse";
-    let cpdDir = "desc";
-
-    function renderCropPairComparison() {
-      const slice = currentCropPairSlice();
-      const overall = slice ? (slice.overall || {}) : {};
-      const cropA = overall.crop_a || "crop A";
-      const cropB = overall.crop_b || "crop B";
-      const cropALabel = cropA.charAt(0).toUpperCase() + cropA.slice(1);
-      const cropBLabel = cropB.charAt(0).toUpperCase() + cropB.slice(1);
-
-      cropPairNote.textContent = overall.interpretation || "No paired crop comparison for this horizon.";
-      cropPairDeltaNote.textContent = slice
-        ? `Δ NRMSE = ${cropBLabel} − ${cropALabel}. Positive ⇒ ${cropALabel} has lower NRMSE. `
-          + `${cropALabel} win % = share of country×model pairs where ${cropALabel} wins.`
-        : "";
-
-      if (!overall.n_pairs) {
-        cropPairStats.innerHTML = `<p class="muted">No paired comparisons available.</p>`;
-        cpsWrap.innerHTML = "";
-        cpdWrap.innerHTML = "";
+      const hzKeys = Object.keys(CCT.by_horizon || {});
+      const orderedHz = ["eos", "mid", "early", "qtr"].filter(hz => hzKeys.includes(hz))
+        .concat(hzKeys.filter(hz => !["eos", "mid", "early", "qtr"].includes(hz)));
+      if (!orderedHz.length) {
+        wrap.innerHTML = `<p class="muted">${CCT.note || "No maize vs wheat comparison table."}</p>`;
+        if (exportLatexBtn) exportLatexBtn.disabled = true;
+        if (exportLatexCopyBtn) exportLatexCopyBtn.disabled = true;
         return;
       }
+      let cctHz = orderedHz.includes("eos") ? "eos" : orderedHz[0];
+      horizonSelect.innerHTML = orderedHz.map(hz => {
+        const label = (DATA.horizon_labels || {})[hz] || HORIZON_LABELS[hz] || hz;
+        return `<option value="${hz}">${label}</option>`;
+      }).join("");
+      horizonSelect.value = cctHz;
 
-      const countries = overall.paired_countries || [];
-      cropPairStats.innerHTML = `
-        <div class="stat"><div class="label">Paired countries</div><div class="value">${overall.n_countries || countries.length}</div></div>
-        <div class="stat"><div class="label">Country×model pairs</div><div class="value">${overall.n_pairs}</div></div>
-        <div class="stat"><div class="label">${cropALabel} wins</div><div class="value good">${pct(overall.crop_a_win_rate)}</div></div>
-        <div class="stat"><div class="label">Mean ${cropALabel} NRMSE</div><div class="value">${fmt(overall.mean_crop_a_nrmse)}</div></div>
-        <div class="stat"><div class="label">Mean ${cropBLabel} NRMSE</div><div class="value">${fmt(overall.mean_crop_b_nrmse)}</div></div>
-        <div class="stat"><div class="label">Weighted Δ NRMSE</div><div class="value">${fmt(overall.weighted_delta_nrmse)}</div></div>`;
+      const cropALabel = CCT.crop_a_label || "Maize";
+      const cropBLabel = CCT.crop_b_label || "Wheat";
 
-      const cpsCols = [
-        { key: "model", label: "Model" },
-        { key: "n_countries", label: "Countries" },
-        { key: "n_pairs", label: "Pairs" },
-        { key: "crop_a_win_rate", label: `${cropALabel} win %`, format: pct },
-        { key: "weighted_delta_nrmse", label: "Weighted Δ NRMSE", bg: fixedDeltaBg },
-        { key: "mean_delta_nrmse", label: "Mean Δ NRMSE", bg: fixedDeltaBg },
-        { key: "mean_crop_a_nrmse", label: `Mean ${cropALabel} NRMSE`, bg: fixedNrmseBg },
-        { key: "mean_crop_b_nrmse", label: `Mean ${cropBLabel} NRMSE`, bg: fixedNrmseBg },
-      ];
-      const summaryRows = [...(slice.summary || [])].sort((a, b) => {
-        const dir = cpsDir === "asc" ? 1 : -1;
-        const cmp = compareSortValues(a, b, cpsSort);
-        if (cmp !== 0) return dir * cmp;
-        return a.model.localeCompare(b.model);
-      });
-      renderSortableTable(cpsWrap, cpsCols, summaryRows, cpsSort, cpsDir, (key) => {
-        if (cpsSort === key) cpsDir = cpsDir === "asc" ? "desc" : "asc";
-        else { cpsSort = key; cpsDir = key === "crop_a_win_rate" || key.includes("delta") ? "desc" : "asc"; }
-        renderCropPairComparison();
-      });
-
-      const detailCountries = [...new Set((slice.detail || []).map(r => r.country))].sort();
-      const prevCountry = cropDetailCountryFilter ? cropDetailCountryFilter.value : "";
-      if (cropDetailCountryFilter) {
-        cropDetailCountryFilter.innerHTML = `<option value="">All</option>` +
-          detailCountries.map(c => `<option value="${c}">${c}</option>`).join("");
-        cropDetailCountryFilter.value =
-          prevCountry && detailCountries.includes(prevCountry) ? prevCountry : "";
+      function escapeHtml(text) {
+        return String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
       }
 
-      const cpdCols = [
-        { key: "country", label: "Country" },
-        { key: "model", label: "Model" },
-        { key: "crop_a_nrmse", label: `${cropALabel} NRMSE`, bg: fixedNrmseBg },
-        { key: "crop_b_nrmse", label: `${cropBLabel} NRMSE`, bg: fixedNrmseBg },
-        { key: "delta_nrmse", label: "Δ NRMSE", bg: fixedDeltaBg },
-        { key: "crop_a_r2", label: `${cropALabel} R²` },
-        { key: "crop_b_r2", label: `${cropBLabel} R²` },
-        { key: "crop_a_samples", label: `${cropALabel} samples`, format: (v) => v == null ? "—" : String(v) },
-        { key: "crop_b_samples", label: `${cropBLabel} samples`, format: (v) => v == null ? "—" : String(v) },
-      ];
-      const cq = cropDetailCountryFilter ? cropDetailCountryFilter.value : "";
-      const mq = (cropDetailModelFilter?.value || "").trim().toLowerCase();
-      const detailRows = (slice.detail || []).filter(r => {
-        if (cq && r.country !== cq) return false;
-        if (mq && !r.model.toLowerCase().includes(mq)) return false;
-        return true;
-      }).sort((a, b) => {
-        const dir = cpdDir === "asc" ? 1 : -1;
-        const cmp = compareSortValues(a, b, cpdSort);
-        if (cmp !== 0) return dir * cmp;
-        return a.model.localeCompare(b.model);
-      });
-      renderSortableTable(cpdWrap, cpdCols, detailRows, cpdSort, cpdDir, (key) => {
-        if (cpdSort === key) cpdDir = cpdDir === "asc" ? "desc" : "asc";
-        else { cpdSort = key; cpdDir = key === "country" || key === "model" ? "asc" : "desc"; }
-        renderCropPairComparison();
-      });
-    }
+      function escapeLatex(text) {
+        return String(text)
+          .replace(/\\/g, "\\textbackslash{}")
+          .replace(/[&%$#_{}]/g, ch => `\\${ch}`)
+          .replace(/~/g, "\\textasciitilde{}")
+          .replace(/\^/g, "\\textasciicircum{}");
+      }
 
-    if (rq3HorizonSelect || document.getElementById("crop-pair-summary-wrap")) {
-      rq3Horizon = fillHorizonSelect(rq3HorizonSelect, rq3Horizon, (hz) => {
-        rq3Horizon = hz;
-        populateCropPairOptions();
-        renderCropPairComparison();
+      function metricSigMarker(fam, metric) {
+        const stats = (fam.bootstrap || {})[metric];
+        if (!stats) return "";
+        if (stats.significant_worse) return "†";
+        if (stats.significant) return "*";
+        return "";
+      }
+
+      function metricBootTooltip(fam, metric) {
+        const stats = (fam.bootstrap || {})[metric];
+        if (!stats) return "No paired country data for this metric.";
+        const n = stats.n_countries != null ? stats.n_countries : 0;
+        if (n === 0) return "No paired country data for this metric.";
+        if (stats.median_delta == null) {
+          return `Only ${n} countr${n === 1 ? "y" : "ies"} with paired data (bootstrap needs ≥2).`;
+        }
+        let text = `median Δ = ${Number(stats.median_delta).toFixed(3)}`;
+        if (stats.ci_lo != null && stats.ci_hi != null) {
+          text += `, 95% bootstrap CI [${Number(stats.ci_lo).toFixed(3)}, ${Number(stats.ci_hi).toFixed(3)}]`;
+        } else if (n < 2) {
+          text += " (bootstrap CI needs ≥2 countries)";
+        }
+        if (stats.p_one_sided != null) {
+          text += `, p(${cropALabel.toLowerCase()} easier) = ${Number(stats.p_one_sided).toFixed(3)}`;
+        }
+        if (stats.p_one_sided_worse != null) {
+          text += `, p(${cropBLabel.toLowerCase()} easier) = ${Number(stats.p_one_sided_worse).toFixed(3)}`;
+        }
+        if (stats.significant) text += " *";
+        if (stats.significant_worse) text += " †";
+        text += ` (${n} countries; positive Δ = ${cropALabel.toLowerCase()} better)`;
+        return text;
+      }
+
+      function formatMetricWithIqr(fam, metric) {
+        const raw = fam.raw && fam.raw[metric];
+        if (raw == null) return "—";
+        const mark = metricSigMarker(fam, metric);
+        const markHtml = mark ? `<sup class="sig-mark">${mark}</sup>` : "";
+        const band = (fam.iqr || {})[metric];
+        if (!band || band.q25 == null || band.q75 == null) {
+          return `${Number(raw).toFixed(3)}${markHtml}`;
+        }
+        return `${Number(raw).toFixed(3)}${markHtml} [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
+      }
+
+      function formatMetricLatex(fam, metric) {
+        const raw = fam.raw && fam.raw[metric];
+        if (raw == null) return "---";
+        const marker = metricSigMarker(fam, metric);
+        const star = marker === "*" ? "^{*}" : marker === "†" ? "^{\\dagger}" : "";
+        const band = (fam.iqr || {})[metric];
+        const med = Number(raw).toFixed(3);
+        let cell = (!band || band.q25 == null || band.q75 == null)
+          ? `${med}${star}`
+          : `${med}${star} [${Number(band.q25).toFixed(3)}, ${Number(band.q75).toFixed(3)}]`;
+        return `\\mbox{${cell}}`;
+      }
+
+      function currentFamilies() {
+        return ((CCT.by_horizon || {})[cctHz] || {}).families || [];
+      }
+
+      function buildTableLatex(families) {
+        if (!families.length) return "";
+        const cols = CCT.table_columns || [];
+        const hzLabel = (DATA.horizon_labels || {})[cctHz] || HORIZON_LABELS[cctHz] || cctHz;
+        const nBoot = (CCT.n_bootstrap || 10000).toLocaleString();
+        const nCountries = ((CCT.by_horizon || {})[cctHz] || {}).n_countries || 0;
+        const headers = [
+          "Family",
+          "Representative",
+          ...cols.map(c => c.latex || c.header || c.metric),
+        ];
+        const colSpec = `ll${"r".repeat(cols.length)}`;
+        const headerRow = headers.map((h, i) => (i < 2 ? escapeLatex(h) : h)).join(" & ");
+        const bodyRows = families.map(fam => {
+          const cells = [
+            escapeLatex(fam.family),
+            escapeLatex(fam.display_name),
+            ...cols.map(c => formatMetricLatex(fam, c.metric)),
+          ];
+          return `    ${cells.join(" & ")} \\\\`;
+        }).join("\n");
+        const sigNote = CCT.sig_note
+          || `* ${cropALabel} significantly easier · † ${cropBLabel} significantly easier.`;
+        return `% CY-Bench maize vs wheat comparison (generated from dashboard)
+% Requires: \\usepackage{booktabs}
+\\begin{table}[ht]
+  \\centering
+  \\caption{${escapeLatex(cropALabel)} vs ${escapeLatex(cropBLabel)} comparison for family representatives: median [IQR] of per-country absolute $\\Delta$ (positive = ${escapeLatex(cropALabel.toLowerCase())} better). Horizon: ${escapeLatex(hzLabel)}; $n=${nCountries}$ countries with both crops. Country bootstrap ($B=${nBoot}$).}
+  \\label{tab:cybench-crop-comparison}
+  \\begin{tabular}{${colSpec}}
+    \\toprule
+    ${headerRow} \\\\
+    \\midrule
+${bodyRows}
+    \\bottomrule
+  \\end{tabular}
+  {\\footnotesize ${escapeLatex(sigNote)}}
+\\end{table}
+`;
+      }
+
+      function downloadText(filename, text) {
+        const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      function downloadTableLatex() {
+        const latex = buildTableLatex(currentFamilies());
+        if (!latex) return;
+        downloadText(`crop_comparison_${cctHz}.tex`, latex);
+      }
+
+      async function copyTableLatex() {
+        const latex = buildTableLatex(currentFamilies());
+        if (!latex || !exportLatexCopyBtn) return;
+        const original = exportLatexCopyBtn.textContent;
+        try {
+          await navigator.clipboard.writeText(latex);
+          exportLatexCopyBtn.textContent = "Copied!";
+          setTimeout(() => { exportLatexCopyBtn.textContent = original; }, 1600);
+        } catch (_err) {
+          downloadTableLatex();
+          exportLatexCopyBtn.textContent = "Downloaded instead";
+          setTimeout(() => { exportLatexCopyBtn.textContent = original; }, 1600);
+        }
+      }
+
+      function render() {
+        const slice = (CCT.by_horizon || {})[cctHz] || { families: [], n_countries: 0 };
+        const families = slice.families || [];
+        const cols = CCT.table_columns || [];
+        const baseNote = CCT.note || "";
+        const sigNote = CCT.sig_note || "";
+        const nNote = slice.n_countries
+          ? `${slice.n_countries} countries with both ${cropALabel.toLowerCase()} and ${cropBLabel.toLowerCase()}.`
+          : "";
+        if (noteEl) {
+          noteEl.textContent = [baseNote, nNote, sigNote].filter(Boolean).join(" ");
+        }
+        const canExport = families.length > 0 && cols.length > 0;
+        if (exportLatexBtn) exportLatexBtn.disabled = !canExport;
+        if (exportLatexCopyBtn) exportLatexCopyBtn.disabled = !canExport;
+        if (!canExport) {
+          wrap.innerHTML = `<p class="muted">No paired crop data for this horizon.</p>`;
+          return;
+        }
+        const headers = ["Family", "Representative", ...cols.map(c => c.header || c.metric)];
+        let html = '<table id="crop-comparison-table"><thead><tr>';
+        html += headers.map(h => `<th>${escapeHtml(h)}</th>`).join("");
+        html += "</tr></thead><tbody>";
+        for (const fam of families) {
+          html += `<tr><td>${escapeHtml(fam.family)}</td><td>${escapeHtml(fam.display_name)}</td>`;
+          for (const col of cols) {
+            const metric = col.metric;
+            const content = formatMetricWithIqr(fam, metric);
+            const title = metricBootTooltip(fam, metric);
+            html += `<td class="metric-cell" title="${escapeHtml(title)}">${content}</td>`;
+          }
+          html += "</tr>";
+        }
+        html += "</tbody></table>";
+        wrap.innerHTML = html;
+      }
+
+      horizonSelect.addEventListener("change", () => {
+        cctHz = horizonSelect.value || cctHz;
+        render();
       });
-    if (rq3PairFilter) rq3PairFilter.addEventListener("change", () => {
-      rq3PairKey = rq3PairFilter.value;
-      renderCropPairComparison();
-    });
-    if (cropDetailCountryFilter) {
-      cropDetailCountryFilter.addEventListener("change", renderCropPairComparison);
-    }
-    if (cropDetailModelFilter) {
-      cropDetailModelFilter.addEventListener("input", renderCropPairComparison);
-    }
-    populateCropPairOptions();
-    renderCropPairComparison();
-    }
+      if (exportLatexBtn) exportLatexBtn.addEventListener("click", downloadTableLatex);
+      if (exportLatexCopyBtn) exportLatexCopyBtn.addEventListener("click", copyTableLatex);
+      render();
+    })();
 
     } // end PAGE === crops
 

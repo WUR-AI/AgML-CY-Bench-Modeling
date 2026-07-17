@@ -19,6 +19,7 @@ from cybench.runs.analysis.global_insights_lib import (
     build_horizon_skill_curves_payload,
     build_insights_payload,
     build_crop_comparison_payload,
+    build_crop_comparison_table_payload,
     build_model_country_matrix,
     compare_crops_pairwise,
     compare_horizons,
@@ -419,6 +420,67 @@ def test_compare_crops_pairwise_shared_countries_only():
     assert overall["crop_a_win_rate"] == 0.5
 
 
+def test_crop_comparison_table_family_paired_deltas():
+    rows = []
+    # Two paired countries; maize easier in DE, closer in FR.
+    # Enough models for family representatives.
+    specs = [
+        ("average_yield", "DE", "maize", 0.30),
+        ("average_yield", "DE", "wheat", 0.40),
+        ("average_yield", "FR", "maize", 0.28),
+        ("average_yield", "FR", "wheat", 0.32),
+        ("trend", "DE", "maize", 0.28),
+        ("trend", "DE", "wheat", 0.38),
+        ("trend", "FR", "maize", 0.26),
+        ("trend", "FR", "wheat", 0.30),
+        ("lpjml_bc", "DE", "maize", 0.22),
+        ("lpjml_bc", "DE", "wheat", 0.30),
+        ("lpjml_bc", "FR", "maize", 0.20),
+        ("lpjml_bc", "FR", "wheat", 0.24),
+        ("xgboost", "DE", "maize", 0.10),
+        ("xgboost", "DE", "wheat", 0.20),
+        ("xgboost", "FR", "maize", 0.12),
+        ("xgboost", "FR", "wheat", 0.14),
+        ("transformer_lf", "DE", "maize", 0.11),
+        ("transformer_lf", "DE", "wheat", 0.19),
+        ("transformer_lf", "FR", "maize", 0.13),
+        ("transformer_lf", "FR", "wheat", 0.15),
+        ("tabicl", "DE", "maize", 0.09),
+        ("tabicl", "DE", "wheat", 0.18),
+        ("tabicl", "FR", "maize", 0.11),
+        ("tabicl", "FR", "wheat", 0.13),
+    ]
+    for model, cc, crop, nrmse in specs:
+        rows.append(
+            {
+                "crop": crop,
+                "country": cc,
+                "model": model,
+                "batch_horizon": "eos",
+                "nrmse": nrmse,
+                "r2": 0.7,
+                "r_spatial": 0.6,
+                "r_temporal": 0.5,
+                "r_res": 0.4,
+                "n_samples": 40,
+            }
+        )
+    df = pd.DataFrame(rows)
+    payload = build_crop_comparison_table_payload(df, n_bootstrap=500, seed=2)
+    assert payload["crop_a"] == "maize"
+    assert payload["crop_b"] == "wheat"
+    assert "eos" in payload["by_horizon"]
+    eos = payload["by_horizon"]["eos"]
+    assert eos["n_countries"] == 2
+    assert set(eos["countries"]) == {"DE", "FR"}
+    xgb = next(f for f in eos["families"] if f["model"] == "xgboost")
+    # DE: 0.20-0.10=+0.10; FR: 0.14-0.12=+0.02; median = 0.06
+    assert xgb["raw"]["nrmse"] == pytest.approx(0.06, abs=1e-4)
+    assert xgb["bootstrap"]["nrmse"]["n_countries"] == 2
+    assert xgb["bootstrap"]["nrmse"]["ci_lo"] is not None
+    assert {c["metric"] for c in payload["table_columns"]} >= {"nrmse", "r2"}
+
+
 def test_load_summary_frame_from_tmp(tmp_path: Path):
     de_dir = tmp_path / "paper_walk_forward_de_eos_v1"
     de_dir.mkdir()
@@ -498,6 +560,7 @@ def test_build_insights_payload_structure(tmp_path: Path):
     assert hit["to_horizon"] == "eos"
     assert "by_crop" in hit
     assert hit.get("n_bootstrap") == 10_000
+    assert "crop_comparison_table" in payload
 
 
 def _three_horizon_fixture(tmp_path: Path) -> pd.DataFrame:
