@@ -48,11 +48,14 @@
       align-items: center;
       justify-content: center;
       flex: 0 0 auto;
+      padding: 0.35rem 0.55rem;
+      background: #0d1117;
+      border-radius: 8px;
       text-decoration: none;
     }
     .brand-logo img {
       display: block;
-      height: 48px;
+      height: 44px;
       width: auto;
     }
     .brand-copy { flex: 1 1 220px; min-width: 0; }
@@ -216,7 +219,7 @@
       <div class="brand-copy">
         <p class="brand-kicker">AgML · Crop yield forecasting</p>
         <h1>CY-Bench dashboards</h1>
-        <p class="lead">Explore walk-forward results by country, and cross-country summaries from the CY-Bench benchmark.</p>
+        <p class="lead">Explore country model results and cross-country summaries from the CY-Bench benchmark.</p>
       </div>
     </header>
 
@@ -227,13 +230,13 @@
       More about the project on
       <a href="https://www.agml.org/" target="_blank" rel="noopener noreferrer">agml.org</a>
       and the
-      <a href="https://github.com/WUR-AI/AgML-CY-Bench" target="_blank" rel="noopener noreferrer">GitHub repository</a>.
+      <a href="https://github.com/WUR-AI/AgML-CY-Bench/tree/KDD/cybench" target="_blank" rel="noopener noreferrer">KDD branch on GitHub</a>.
     </p>
 
     <section class="section">
       <div class="section-head">
         <h2>Country dashboards</h2>
-        <p>Click a blue country to open mid-season and end-of-season walk-forward views</p>
+        <p>Click a blue country to open mid-season and end-of-season model results</p>
       </div>
       <div class="layout">
         <div class="card">
@@ -261,8 +264,8 @@
 
     <footer class="site-footer">
       Part of <a href="https://www.agml.org/" target="_blank" rel="noopener noreferrer">AgML</a>
-      · CY-Bench code and data on
-      <a href="https://github.com/WUR-AI/AgML-CY-Bench" target="_blank" rel="noopener noreferrer">WUR-AI/AgML-CY-Bench</a>
+      · CY-Bench code on
+      <a href="https://github.com/WUR-AI/AgML-CY-Bench/tree/KDD/cybench" target="_blank" rel="noopener noreferrer">WUR-AI/AgML-CY-Bench (KDD)</a>
     </footer>
   </div>
 
@@ -336,8 +339,8 @@
       el.innerHTML = `
         <h3>${c.name}</h3>
         <div class="cc">${c.cc}</div>
-        <a class="dash-link${midCls}" href="${c.mid || "#"}">Mid-season walk-forward</a>
-        <a class="dash-link${eosCls}" href="${c.eos || "#"}">End-of-season walk-forward</a>`;
+        <a class="dash-link${midCls}" href="${c.mid || "#"}">Mid-season results</a>
+        <a class="dash-link${eosCls}" href="${c.eos || "#"}">End-of-season results</a>`;
     }
 
     function selectCountry(cc) {
