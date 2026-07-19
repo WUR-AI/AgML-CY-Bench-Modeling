@@ -172,21 +172,22 @@
     }
     .toolbar button:disabled,
     .toolbar button.is-disabled {
-      opacity: 0.45;
+      opacity: 1;
       cursor: not-allowed;
-      background: #f3f4f6;
-      color: var(--muted);
-      border-color: var(--border);
+      background: #eef0f2;
+      color: #8b949e;
+      border-color: #d0d7de;
+      border-style: dashed;
     }
     .toolbar button:disabled:hover,
     .toolbar button.is-disabled:hover {
-      background: #f3f4f6;
+      background: #eef0f2;
     }
     .toolbar button.active:disabled,
     .toolbar button.active.is-disabled {
-      background: #f3f4f6;
-      color: var(--muted);
-      border-color: var(--border);
+      background: #eef0f2;
+      color: #8b949e;
+      border-color: #d0d7de;
     }
     .img-grid { display: grid; grid-template-columns: 1fr; gap: 0.6rem; }
     .img-grid.two { grid-template-columns: 1fr 1fr; }
@@ -309,7 +310,7 @@
         <button data-panel="maps" class="active">Maps</button>
         <button data-panel="scatter">Scatter</button>
         <button data-panel="temporal">Temporal</button>
-        <button data-panel="shap" id="shap-panel-btn" style="display:none;">SHAP</button>
+        <button data-panel="shap" id="shap-panel-btn" type="button" disabled title="SHAP">SHAP</button>
       </div>
       <div id="missing-note" class="muted"></div>
       <div id="shap-panel" style="display:none;">
@@ -393,7 +394,6 @@
       SHAP_DATA && SHAP_DATA.available && SHAP_DATA.by_key
         && Object.keys(SHAP_DATA.by_key).length
     );
-    if (HAS_SHAP && shapPanelBtn) shapPanelBtn.style.display = "";
 
     const SHAP_MODEL_FALLBACK_LABELS = {
       random_forest: "Random Forest",
@@ -416,7 +416,6 @@
         const label = entry.model_label || SHAP_MODEL_FALLBACK_LABELS[key] || key;
         if (label) labels.set(key, label);
       }
-      // Prefer a stable RF / Transformer order when both are present.
       const preferred = ["random_forest", "transformer_lf"];
       const ordered = [];
       for (const key of preferred) {
@@ -428,7 +427,7 @@
     }
 
     function formatShapModelList(labels) {
-      if (!labels.length) return "selected models with computed importance";
+      if (!labels.length) return "Random Forest and Transformer (when computed)";
       if (labels.length === 1) return labels[0];
       if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
       return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
@@ -439,17 +438,21 @@
       const modelLabel = model
         ? (SHAP_MODEL_FALLBACK_LABELS[model] || model)
         : null;
+      if (!HAS_SHAP) {
+        return `SHAP is not available for this country yet. It is currently computed for ${available}.`;
+      }
       const modelBit = modelLabel ? ` for ${modelLabel}` : "";
       return `SHAP is not available${modelBit}. It is currently available for ${available}.`;
     }
 
     function updateShapButtonState() {
-      if (!shapPanelBtn || !HAS_SHAP) return;
+      if (!shapPanelBtn) return;
       const enabled = selectedCell
         ? hasShapFor(selectedCell.dataset, selectedCell.model)
         : false;
       shapPanelBtn.disabled = !enabled;
       shapPanelBtn.classList.toggle("is-disabled", !enabled);
+      shapPanelBtn.textContent = enabled ? "SHAP" : "SHAP (n/a)";
       shapPanelBtn.title = enabled
         ? "Feature importance (SHAP)"
         : shapUnavailableMessage(selectedCell ? selectedCell.model : null);

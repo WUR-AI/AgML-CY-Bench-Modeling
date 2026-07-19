@@ -416,6 +416,73 @@ def build_html(
     )
 
 
+def _extract_js_json_assignment(html: str, name: str) -> Any | None:
+    """Extract ``const NAME = <json>;`` from a built dashboard HTML page."""
+    marker = f"const {name} = "
+    start = html.find(marker)
+    if start < 0:
+        return None
+    i = start + len(marker)
+    while i < len(html) and html[i].isspace():
+        i += 1
+    if i >= len(html) or html[i] not in "{[":
+        return None
+    opener = html[i]
+    closer = "}" if opener == "{" else "]"
+    depth = 0
+    in_str = False
+    escape = False
+    for j in range(i, len(html)):
+        ch = html[j]
+        if in_str:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+            continue
+        if ch == opener:
+            depth += 1
+        elif ch == closer:
+            depth -= 1
+            if depth == 0:
+                blob = html[i : j + 1]
+                try:
+                    return json.loads(blob)
+                except json.JSONDecodeError:
+                    return None
+    return None
+
+
+def restamp_dashboard_html(html_path: Path) -> bool:
+    """Rebuild a dashboard HTML file with the current template, keeping embedded JSON.
+
+    Returns True when the file was rewritten.
+    """
+    path = Path(html_path)
+    if not path.is_file():
+        return False
+    html = path.read_text(encoding="utf-8")
+    data = _extract_js_json_assignment(html, "DATA")
+    if data is None:
+        return False
+    map_payload = _extract_js_json_assignment(html, "MAP_DATA") or {}
+    shap_payload = _extract_js_json_assignment(html, "SHAP_DATA") or {}
+    path.write_text(
+        build_html(
+            data if isinstance(data, list) else [],
+            map_payload=map_payload if isinstance(map_payload, dict) else {},
+            shap_payload=shap_payload if isinstance(shap_payload, dict) else {},
+        ),
+        encoding="utf-8",
+    )
+    return True
+
+
 def bundle_referenced_assets(
     records: List[Dict], output_dir: str, assets_dirname: str = "assets"
 ) -> List[Dict]:

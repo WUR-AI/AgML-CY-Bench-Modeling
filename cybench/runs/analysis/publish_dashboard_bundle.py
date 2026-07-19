@@ -262,6 +262,15 @@ def publish_bundle(
     dest_html = dest_dir / "dashboard.html"
     shutil.copy2(html_src, dest_html)
 
+    # Re-apply current dashboard_template.html so UI fixes ship without re-collect.
+    try:
+        from cybench.runs.viz.build_results_dashboard import restamp_dashboard_html
+
+        if restamp_dashboard_html(dest_html):
+            print(f"[INFO] restamped dashboard HTML from current template: {dest_html.name}")
+    except Exception as exc:  # noqa: BLE001 — keep publish robust
+        print(f"[WARN] could not restamp dashboard HTML ({exc})")
+
     dest_assets = dest_dir / "assets"
     if assets_src and assets_src.is_dir():
         n_assets = _copy_assets(assets_src, dest_assets)
