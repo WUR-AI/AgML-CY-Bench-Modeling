@@ -21,6 +21,7 @@
   const benefitLegendLabel = document.getElementById("family-benefit-legend-label");
   const metricsNote = document.getElementById("family-metrics-note");
   const mapExportSvgBtn = document.getElementById("family-map-export-svg");
+  const benefitMapExportSvgBtn = document.getElementById("family-benefit-map-export-svg");
   if (!metricsWrap || !metricsHorizon) return;
 
   const horizonLabels = FAMILY.horizon_labels || {};
@@ -36,10 +37,10 @@
     return benchmarkIsos.has(iso) && iso !== "XX";
   }
 
-  function mapCountryStroke(iso) {
-    return isColoredBenchmarkIso(iso)
+  function mapDataStroke(hasData) {
+    return hasData
       ? { color: "#6d7d8f", width: 0.55 }
-      : { color: "#c8d0d8", width: 0.22 };
+      : { color: "none", width: 0 };
   }
 
   function fillHorizonSelect(sel) {
@@ -323,8 +324,16 @@
         if (!rec) return MAP_FILL_OUTSIDE;
         return colors[rec.winner_family] || "#999";
       })
-      .attr("stroke", d => mapCountryStroke(d.properties.ISO_A2).color)
-      .attr("stroke-width", d => mapCountryStroke(d.properties.ISO_A2).width);
+      .attr("stroke", d => {
+        const iso = d.properties.ISO_A2;
+        const hasData = isColoredBenchmarkIso(iso) && winners.has(iso);
+        return mapDataStroke(hasData).color;
+      })
+      .attr("stroke-width", d => {
+        const iso = d.properties.ISO_A2;
+        const hasData = isColoredBenchmarkIso(iso) && winners.has(iso);
+        return mapDataStroke(hasData).width;
+      });
 
     countriesSel.selectAll("title")
       .data(d => [d])
@@ -378,8 +387,18 @@
         if (!rec || rec.benefit_pct == null) return MAP_FILL_OUTSIDE;
         return benefitColor(rec.benefit_pct, extent);
       })
-      .attr("stroke", d => mapCountryStroke(d.properties.ISO_A2).color)
-      .attr("stroke-width", d => mapCountryStroke(d.properties.ISO_A2).width);
+      .attr("stroke", d => {
+        const iso = d.properties.ISO_A2;
+        const rec = byCountry.get(iso);
+        const hasData = isColoredBenchmarkIso(iso) && rec && rec.benefit_pct != null;
+        return mapDataStroke(hasData).color;
+      })
+      .attr("stroke-width", d => {
+        const iso = d.properties.ISO_A2;
+        const rec = byCountry.get(iso);
+        const hasData = isColoredBenchmarkIso(iso) && rec && rec.benefit_pct != null;
+        return mapDataStroke(hasData).width;
+      });
 
     countriesSel.selectAll("title")
       .data(d => [d])
@@ -424,6 +443,7 @@
 
   function setMapExportEnabled(enabled) {
     if (mapExportSvgBtn) mapExportSvgBtn.disabled = !enabled;
+    if (benefitMapExportSvgBtn) benefitMapExportSvgBtn.disabled = !enabled;
   }
 
   function escapeXml(text) {
@@ -434,16 +454,20 @@
       .replace(/"/g, "&quot;");
   }
 
-  function mapExportMeta() {
+  function mapExportMeta(kind) {
     const hzLabel = horizonLabels[famHorizon] || famHorizon;
     const cropLabel = famCrop === "all" ? "all crops" : famCrop;
-    const modeLabel = `Winning family · ${winnerAspect}`;
-    return { hz: famHorizon, crop: famCrop, hzLabel, cropLabel, modeLabel };
+    const modeLabel = kind === "benefit"
+      ? "AI error reduction"
+      : `Winning family · ${winnerAspect}`;
+    return { hz: famHorizon, crop: famCrop, hzLabel, cropLabel, modeLabel, kind };
   }
 
-  function mapExportFilename(ext) {
-    const { hz, crop } = mapExportMeta();
-    const modeSlug = `winner-${winnerAspect.toLowerCase().replace(/\s+/g, "-")}`;
+  function mapExportFilename(ext, kind = "winner") {
+    const { hz, crop } = mapExportMeta(kind);
+    const modeSlug = kind === "benefit"
+      ? "ai-error-reduction"
+      : `winner-${winnerAspect.toLowerCase().replace(/\s+/g, "-")}`;
     return `cybench-map_${hz}_${crop}_${modeSlug}.${ext}`;
   }
 
@@ -568,14 +592,17 @@
       ${exportLegendMarkup(barX + barW, labelY, `+${extent}%`, "end")}`;
   }
 
-  function buildMapExportSvgString(exportScale = MAP_EXPORT_SCALE) {
-    const mapNode = mapWrap && mapWrap.querySelector("svg");
+  function buildMapExportSvgString(kind = "winner", exportScale = MAP_EXPORT_SCALE) {
+    const wrap = kind === "benefit" ? benefitMapWrap : mapWrap;
+    const mapNode = wrap && wrap.querySelector("svg");
     if (!mapNode || !worldFeatures) return null;
     const padT = 12;
     const padB = MAP_EXPORT_PAD_B;
     const totalH = MAP_HEIGHT + padT + padB;
     const legendY = padT + MAP_HEIGHT + 6;
-    const legendSvg = buildWinnerLegendSvg(legendY);
+    const legendSvg = kind === "benefit"
+      ? buildBenefitLegendSvg(legendY)
+      : buildWinnerLegendSvg(legendY);
     const mapContent = mapNode.innerHTML;
     const exportW = MAP_WIDTH * exportScale;
     const exportH = totalH * exportScale;
@@ -600,19 +627,22 @@
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
 
-  function downloadFamilyMapSvg() {
+  function downloadFamilyMapSvg(kind = "winner") {
     ensureExportFont().then(() => {
-      const svg = buildMapExportSvgString();
+      const svg = buildMapExportSvgString(kind);
       if (!svg) return;
       triggerBlobDownload(
         new Blob([svg], { type: "image/svg+xml;charset=utf-8" }),
-        mapExportFilename("svg"),
+        mapExportFilename("svg", kind),
       );
     });
   }
 
   if (mapExportSvgBtn) {
-    mapExportSvgBtn.addEventListener("click", downloadFamilyMapSvg);
+    mapExportSvgBtn.addEventListener("click", () => downloadFamilyMapSvg("winner"));
+  }
+  if (benefitMapExportSvgBtn) {
+    benefitMapExportSvgBtn.addEventListener("click", () => downloadFamilyMapSvg("benefit"));
   }
   ensureExportFont();
 

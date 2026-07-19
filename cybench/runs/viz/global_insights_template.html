@@ -536,6 +536,7 @@
         </div>
         <div class="export-toolbar">
           <button type="button" id="family-map-export-svg" disabled>Download winning-family map (SVG)</button>
+          <button type="button" id="family-benefit-map-export-svg" disabled>Download AI-error-reduction map (SVG)</button>
         </div>
 
         <div id="country-bootstrap-section" style="margin-top:1.25rem">
@@ -1488,10 +1489,10 @@
       return isBenchmarkIso(iso) && iso !== "XX";
     }
 
-    function mapCountryStroke(iso) {
-      return isColoredBenchmarkIso(iso)
+    function mapDataStroke(hasData) {
+      return hasData
         ? { color: "#6d7d8f", width: 0.55 }
-        : { color: "#c8d0d8", width: 0.22 };
+        : { color: "none", width: 0 };
     }
 
     function mapCc(country) {
@@ -1606,12 +1607,16 @@
       const byCountry = new Map(rows.map(r => [r.map_cc, r]));
       return worldFeatures.map(feature => {
         const iso = feature.properties.ISO_A2;
-        const stroke = mapCountryStroke(iso);
         let fill = MAP_FILL_OUTSIDE;
+        let hasData = false;
         if (isColoredBenchmarkIso(iso)) {
           const rec = byCountry.get(iso);
-          fill = rec ? metricMapColor(rec.value, spec, palette) : MAP_FILL_OUTSIDE;
+          if (rec) {
+            fill = metricMapColor(rec.value, spec, palette);
+            hasData = true;
+          }
         }
+        const stroke = mapDataStroke(hasData);
         const d = mapPath(feature);
         return `<path class="country" shape-rendering="geometricPrecision" d="${d}" fill="${fill}" stroke="${stroke.color}" stroke-width="${stroke.width}"/>`;
       }).join("");
@@ -1667,8 +1672,16 @@
           if (!rec) return MAP_FILL_OUTSIDE;
           return metricMapColor(rec.value, spec);
         })
-        .attr("stroke", d => mapCountryStroke(d.properties.ISO_A2).color)
-        .attr("stroke-width", d => mapCountryStroke(d.properties.ISO_A2).width)
+        .attr("stroke", d => {
+          const iso = d.properties.ISO_A2;
+          const hasData = isColoredBenchmarkIso(iso) && byCountry.has(iso);
+          return mapDataStroke(hasData).color;
+        })
+        .attr("stroke-width", d => {
+          const iso = d.properties.ISO_A2;
+          const hasData = isColoredBenchmarkIso(iso) && byCountry.has(iso);
+          return mapDataStroke(hasData).width;
+        })
         .selectAll("title")
         .data(d => [d])
         .join("title")
@@ -2332,8 +2345,16 @@ ${bodyRows}
           if (!rec) return MAP_FILL_OUTSIDE;
           return deltaMapColor(rec.delta, spec);
         })
-        .attr("stroke", d => mapCountryStroke(d.properties.ISO_A2).color)
-        .attr("stroke-width", d => mapCountryStroke(d.properties.ISO_A2).width)
+        .attr("stroke", d => {
+          const iso = d.properties.ISO_A2;
+          const hasData = isColoredBenchmarkIso(iso) && byCountry.has(iso);
+          return mapDataStroke(hasData).color;
+        })
+        .attr("stroke-width", d => {
+          const iso = d.properties.ISO_A2;
+          const hasData = isColoredBenchmarkIso(iso) && byCountry.has(iso);
+          return mapDataStroke(hasData).width;
+        })
         .selectAll("title")
         .data(d => [d])
         .join("title")

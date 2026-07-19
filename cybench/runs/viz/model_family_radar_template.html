@@ -337,10 +337,10 @@
       return MAP_FILL_OUTSIDE;
     }
 
-    function mapCountryStroke(iso) {
-      return isColoredBenchmarkIso(iso)
+    function mapDataStroke(hasData) {
+      return hasData
         ? { color: "#6d7d8f", width: 0.55 }
-        : { color: "#c8d0d8", width: 0.22 };
+        : { color: "none", width: 0 };
     }
 
     let radarMode = "relative";
@@ -1316,8 +1316,16 @@ ${bodyRows}
           if (!rec) return MAP_FILL_OUTSIDE;
           return colors[rec.winner_family] || "#999";
         })
-        .attr("stroke", d => mapCountryStroke(d.properties.ISO_A2).color)
-        .attr("stroke-width", d => mapCountryStroke(d.properties.ISO_A2).width);
+        .attr("stroke", d => {
+          const iso = d.properties.ISO_A2;
+          const hasData = isColoredBenchmarkIso(iso) && winners.has(iso);
+          return mapDataStroke(hasData).color;
+        })
+        .attr("stroke-width", d => {
+          const iso = d.properties.ISO_A2;
+          const hasData = isColoredBenchmarkIso(iso) && winners.has(iso);
+          return mapDataStroke(hasData).width;
+        });
 
       countriesSel.selectAll("title")
         .data(d => [d])
@@ -1364,8 +1372,16 @@ ${bodyRows}
           if (!rec || rec.benefit_pct == null) return MAP_FILL_OUTSIDE;
           return benefitColor(rec.benefit_pct, extent);
         })
-        .attr("stroke", d => mapCountryStroke(d.properties.ISO_A2).color)
-        .attr("stroke-width", d => mapCountryStroke(d.properties.ISO_A2).width);
+        .attr("stroke", d => {
+          const iso = d.properties.ISO_A2;
+          const hasData = isColoredBenchmarkIso(iso) && byCountry.has(iso) && byCountry.get(iso)?.benefit_pct != null;
+          return mapDataStroke(hasData).color;
+        })
+        .attr("stroke-width", d => {
+          const iso = d.properties.ISO_A2;
+          const hasData = isColoredBenchmarkIso(iso) && byCountry.has(iso) && byCountry.get(iso)?.benefit_pct != null;
+          return mapDataStroke(hasData).width;
+        });
 
       countriesSel.selectAll("title")
         .data(d => [d])
