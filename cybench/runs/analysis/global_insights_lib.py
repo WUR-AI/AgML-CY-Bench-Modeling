@@ -50,7 +50,8 @@ HORIZON_DELTA_SCALES: dict[str, dict[str, Any]] = {
 }
 
 MAP_COVERAGE_NOTE = (
-    "CY-Bench countries use a blue-grey base; other land is neutral grey. "
+    "Countries without a value for the current selection use the same neutral grey "
+    "as land outside CY-Bench. "
     "The United States and France are metropolitan only (Alaska, French Guiana, "
     "and other overseas territories are not colored)."
 )

@@ -1100,7 +1100,8 @@ def build_radar_payload(
         "countries": sorted(df["country"].unique()) if "country" in df.columns else [],
         "benchmark_map_isos": benchmark_map_isos,
         "map_coverage_note": (
-            "Only CY-Bench countries are colored (blue-grey base); other land is neutral grey. "
+            "Only countries with a value for the current selection are colored; "
+            "CY-Bench countries without data and other land share the same neutral grey. "
             "US and France show metropolitan extent only (Alaska and overseas departments are grey). "
             "Hover for values."
         ),

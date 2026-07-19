@@ -1367,7 +1367,6 @@
       r: { lo: -1, hi: 1, higher_better: true, label: "r" },
     };
     const MAP_FILL_OUTSIDE = "#e2e6eb";
-    const MAP_FILL_BENCHMARK = "#9eb4c8";
     const benchmarkIsos = new Set(DATA.benchmark_map_isos || []);
     const MAP_WIDTH = 1280;
     const MAP_HEIGHT = 694;
@@ -1467,7 +1466,8 @@
 
     if (metricMapCoverageNote) {
       metricMapCoverageNote.textContent = DATA.map_coverage_note || (
-        "CY-Bench countries use a blue-grey base; other land is neutral grey."
+        "Countries without a value for the current selection use the same neutral grey "
+        + "as land outside CY-Bench."
       );
     }
 
@@ -1598,7 +1598,7 @@
       const lo = scale.lo ?? 0;
       const hi = scale.hi ?? 1;
       const higherBetter = scale.higher_better !== false && spec.higherBetter !== false;
-      return metricDisplayColor(value, lo, hi, higherBetter, palette) || MAP_FILL_BENCHMARK;
+      return metricDisplayColor(value, lo, hi, higherBetter, palette) || MAP_FILL_OUTSIDE;
     }
 
     function metricMapPathsSvg(palette = "intensity") {
@@ -1610,7 +1610,7 @@
         let fill = MAP_FILL_OUTSIDE;
         if (isColoredBenchmarkIso(iso)) {
           const rec = byCountry.get(iso);
-          fill = rec ? metricMapColor(rec.value, spec, palette) : MAP_FILL_BENCHMARK;
+          fill = rec ? metricMapColor(rec.value, spec, palette) : MAP_FILL_OUTSIDE;
         }
         const d = mapPath(feature);
         return `<path class="country" shape-rendering="geometricPrecision" d="${d}" fill="${fill}" stroke="${stroke.color}" stroke-width="${stroke.width}"/>`;
@@ -1664,7 +1664,7 @@
           const iso = d.properties.ISO_A2;
           if (!isColoredBenchmarkIso(iso)) return MAP_FILL_OUTSIDE;
           const rec = byCountry.get(iso);
-          if (!rec) return MAP_FILL_BENCHMARK;
+          if (!rec) return MAP_FILL_OUTSIDE;
           return metricMapColor(rec.value, spec);
         })
         .attr("stroke", d => mapCountryStroke(d.properties.ISO_A2).color)
@@ -2288,7 +2288,7 @@ ${bodyRows}
       const lo = scale.lo ?? -0.15;
       const hi = scale.hi ?? 0.15;
       const t = metricPerformanceT(delta, lo, hi, true);
-      if (t == null) return MAP_FILL_BENCHMARK;
+      if (t == null) return MAP_FILL_OUTSIDE;
       return palette === "semantic" ? metricSemanticColor(t) : metricIntensityColor(t);
     }
 
@@ -2329,7 +2329,7 @@ ${bodyRows}
           const iso = d.properties.ISO_A2;
           if (!isColoredBenchmarkIso(iso)) return MAP_FILL_OUTSIDE;
           const rec = byCountry.get(iso);
-          if (!rec) return MAP_FILL_BENCHMARK;
+          if (!rec) return MAP_FILL_OUTSIDE;
           return deltaMapColor(rec.delta, spec);
         })
         .attr("stroke", d => mapCountryStroke(d.properties.ISO_A2).color)

@@ -30,7 +30,6 @@
   let winnerAspect = (FAMILY.views || [])[0]?.label || "Overall";
 
   const MAP_FILL_OUTSIDE = "#e2e6eb";
-  const MAP_FILL_BENCHMARK = "#9eb4c8";
   const benchmarkIsos = new Set(DATA.benchmark_map_isos || []);
 
   function isColoredBenchmarkIso(iso) {
@@ -321,7 +320,7 @@
         const iso = d.properties.ISO_A2;
         if (!isColoredBenchmarkIso(iso)) return MAP_FILL_OUTSIDE;
         const rec = winners.get(iso);
-        if (!rec) return MAP_FILL_BENCHMARK;
+        if (!rec) return MAP_FILL_OUTSIDE;
         return colors[rec.winner_family] || "#999";
       })
       .attr("stroke", d => mapCountryStroke(d.properties.ISO_A2).color)
@@ -376,7 +375,7 @@
         const iso = d.properties.ISO_A2;
         if (!isColoredBenchmarkIso(iso)) return MAP_FILL_OUTSIDE;
         const rec = byCountry.get(iso);
-        if (!rec || rec.benefit_pct == null) return MAP_FILL_BENCHMARK;
+        if (!rec || rec.benefit_pct == null) return MAP_FILL_OUTSIDE;
         return benefitColor(rec.benefit_pct, extent);
       })
       .attr("stroke", d => mapCountryStroke(d.properties.ISO_A2).color)
