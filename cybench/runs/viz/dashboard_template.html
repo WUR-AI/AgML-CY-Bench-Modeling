@@ -170,6 +170,24 @@
       color: #fff;
       border-color: var(--accent);
     }
+    .toolbar button:disabled,
+    .toolbar button.is-disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      background: #f3f4f6;
+      color: var(--muted);
+      border-color: var(--border);
+    }
+    .toolbar button:disabled:hover,
+    .toolbar button.is-disabled:hover {
+      background: #f3f4f6;
+    }
+    .toolbar button.active:disabled,
+    .toolbar button.active.is-disabled {
+      background: #f3f4f6;
+      color: var(--muted);
+      border-color: var(--border);
+    }
     .img-grid { display: grid; grid-template-columns: 1fr; gap: 0.6rem; }
     .img-grid.two { grid-template-columns: 1fr 1fr; }
     .img-grid img {
@@ -377,6 +395,71 @@
     );
     if (HAS_SHAP && shapPanelBtn) shapPanelBtn.style.display = "";
 
+    const SHAP_MODEL_FALLBACK_LABELS = {
+      random_forest: "Random Forest",
+      transformer_lf: "Transformer",
+    };
+
+    function shapKey(dataset, model) {
+      return `${dataset}|||${model}`;
+    }
+
+    function hasShapFor(dataset, model) {
+      if (!HAS_SHAP || !dataset || !model) return false;
+      return Boolean((SHAP_DATA.by_key || {})[shapKey(dataset, model)]);
+    }
+
+    function shapAvailableModelLabels() {
+      const labels = new Map();
+      for (const entry of Object.values(SHAP_DATA.by_key || {})) {
+        const key = entry.model || "";
+        const label = entry.model_label || SHAP_MODEL_FALLBACK_LABELS[key] || key;
+        if (label) labels.set(key, label);
+      }
+      // Prefer a stable RF / Transformer order when both are present.
+      const preferred = ["random_forest", "transformer_lf"];
+      const ordered = [];
+      for (const key of preferred) {
+        if (labels.has(key)) ordered.push(labels.get(key));
+        labels.delete(key);
+      }
+      ordered.push(...Array.from(labels.values()).sort((a, b) => a.localeCompare(b)));
+      return ordered;
+    }
+
+    function formatShapModelList(labels) {
+      if (!labels.length) return "selected models with computed importance";
+      if (labels.length === 1) return labels[0];
+      if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+      return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+    }
+
+    function shapUnavailableMessage(model) {
+      const available = formatShapModelList(shapAvailableModelLabels());
+      const modelLabel = model
+        ? (SHAP_MODEL_FALLBACK_LABELS[model] || model)
+        : null;
+      const modelBit = modelLabel ? ` for ${modelLabel}` : "";
+      return `SHAP is not available${modelBit}. It is currently available for ${available}.`;
+    }
+
+    function updateShapButtonState() {
+      if (!shapPanelBtn || !HAS_SHAP) return;
+      const enabled = selectedCell
+        ? hasShapFor(selectedCell.dataset, selectedCell.model)
+        : false;
+      shapPanelBtn.disabled = !enabled;
+      shapPanelBtn.classList.toggle("is-disabled", !enabled);
+      shapPanelBtn.title = enabled
+        ? "Feature importance (SHAP)"
+        : shapUnavailableMessage(selectedCell ? selectedCell.model : null);
+      if (!enabled && activePanel === "shap") {
+        activePanel = "maps";
+        panelButtons.forEach(b => {
+          b.classList.toggle("active", b.dataset.panel === "maps");
+        });
+      }
+    }
     const MAP_YEAR_MEAN = "__mean__";
     let mapYearKeys = [MAP_YEAR_MEAN];
     let mapYearSelection = MAP_YEAR_MEAN;
@@ -675,13 +758,12 @@
     }
 
     function renderShapPanel(dataset, model) {
-      const key = `${dataset}|||${model}`;
+      const key = shapKey(dataset, model);
       const entry = (SHAP_DATA.by_key || {})[key];
       shapMetaChart.innerHTML = "";
       shapFeaturesBody.innerHTML = "";
       if (!entry) {
-        shapCaption.textContent =
-          "No SHAP importance for this model. Run compute_shap_importance.py for this country.";
+        shapCaption.textContent = shapUnavailableMessage(model);
         return;
       }
       shapCaption.textContent =
@@ -1121,10 +1203,12 @@
         drillImageB.removeAttribute("src");
         missingNote.textContent = "No rows match the current filters.";
         selectionLabel.textContent = "No selection.";
+        updateShapButtonState();
       }
     }
 
     function refreshDrill() {
+      updateShapButtonState();
       if (!selectedCell) return;
       const parts = parseDataset(selectedCell.dataset);
       const label = parts.country
@@ -1193,6 +1277,7 @@
 
     panelButtons.forEach(btn => {
       btn.addEventListener("click", () => {
+        if (btn.disabled || btn.classList.contains("is-disabled")) return;
         panelButtons.forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
         activePanel = btn.dataset.panel;
@@ -1211,4 +1296,5 @@
 
     buildRows();
     renderHeatmap();
+    updateShapButtonState();
   </script>

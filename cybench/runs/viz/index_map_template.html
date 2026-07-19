@@ -18,7 +18,6 @@
       --land-available: #9ec5fe;
       --land-active: #0969da;
       --land-missing: #f0f0f0;
-      --brand-dark: #0d1117;
     }
     * { box-sizing: border-box; }
     body {
@@ -49,14 +48,11 @@
       align-items: center;
       justify-content: center;
       flex: 0 0 auto;
-      padding: 0.45rem 0.65rem;
-      background: var(--brand-dark);
-      border-radius: 8px;
       text-decoration: none;
     }
     .brand-logo img {
       display: block;
-      height: 42px;
+      height: 48px;
       width: auto;
     }
     .brand-copy { flex: 1 1 220px; min-width: 0; }
@@ -227,21 +223,12 @@
     <p class="intro">
       <strong>CY-Bench</strong> is a dataset and benchmark for subnational crop yield forecasting
       (maize and wheat), comparing classical, process-based, and machine-learning models.
-      This site hosts interactive results: start with a country on the map, or open a global insight page below.
+      This site hosts interactive results: start with a country on the map, or browse global insights below.
       More about the project on
       <a href="https://www.agml.org/" target="_blank" rel="noopener noreferrer">agml.org</a>
       and the
       <a href="https://github.com/WUR-AI/AgML-CY-Bench" target="_blank" rel="noopener noreferrer">GitHub repository</a>.
     </p>
-
-    <section class="section" id="insights-section" hidden>
-      <div class="section-head">
-        <h2>Global insights</h2>
-        <p>Cross-country summaries · not tied to a single dashboard country</p>
-      </div>
-      <div class="nav-cards" id="top-links"></div>
-      <div class="extra-links" id="extra-links"></div>
-    </section>
 
     <section class="section">
       <div class="section-head">
@@ -261,6 +248,15 @@
           <p class="muted">Click a highlighted country on the map.</p>
         </div>
       </div>
+    </section>
+
+    <section class="section" id="insights-section" hidden>
+      <div class="section-head">
+        <h2>Global insights</h2>
+        <p>Cross-country summaries · not tied to a single dashboard country</p>
+      </div>
+      <div class="nav-cards" id="top-links"></div>
+      <div class="extra-links" id="extra-links"></div>
     </section>
 
     <footer class="site-footer">
