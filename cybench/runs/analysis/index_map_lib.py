@@ -16,6 +16,9 @@ if TYPE_CHECKING:
 _BUNDLED_GEOJSON = (
     Path(__file__).resolve().parent.parent / "viz" / "data" / "world_countries_50m.geojson"
 )
+_BUNDLED_AGML_LOGO = (
+    Path(__file__).resolve().parent.parent / "viz" / "assets" / "agml-logo.png"
+)
 _SLUG_RE = re.compile(
     r"^([a-z]{2})_walk_forward_(eos|early|early_season|mid|mid_season|qtr|quarter_season)(?:_v\d+)?$", re.IGNORECASE
 )
@@ -202,6 +205,17 @@ def ensure_world_geojson(publish_root: Path) -> str:
             "shapefiles under data_preparation/, or add "
             f"{_BUNDLED_GEOJSON.name} to the engine repo."
         ) from exc
+
+
+def ensure_agml_logo(publish_root: Path) -> str:
+    """Copy bundled AgML logo into publish_root/assets; return relative href."""
+    if not _BUNDLED_AGML_LOGO.is_file():
+        raise FileNotFoundError(f"Missing bundled AgML logo: {_BUNDLED_AGML_LOGO}")
+    assets_dir = publish_root / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    dest = assets_dir / "agml-logo.png"
+    shutil.copy2(_BUNDLED_AGML_LOGO, dest)
+    return "assets/agml-logo.png"
 
 
 def build_index_map_html(payload: dict[str, Any], *, geojson_href: str) -> str:

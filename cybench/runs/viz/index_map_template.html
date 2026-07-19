@@ -18,6 +18,7 @@
       --land-available: #9ec5fe;
       --land-active: #0969da;
       --land-missing: #f0f0f0;
+      --brand-dark: #0d1117;
     }
     * { box-sizing: border-box; }
     body {
@@ -29,21 +30,124 @@
       line-height: 1.45;
     }
     .page { max-width: 1200px; margin: 0 auto; }
-    h1 { margin: 0; font-size: 1.5rem; font-weight: 600; }
-    h2 { margin: 0 0 0.75rem; font-size: 1.05rem; font-weight: 600; }
-    .lead { margin: 0.35rem 0 1rem; color: var(--muted); }
-    .top-links { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-bottom: 1rem; }
+    h1 { margin: 0; font-size: 1.65rem; font-weight: 650; letter-spacing: -0.02em; }
+    h2 { margin: 0 0 0.45rem; font-size: 1.05rem; font-weight: 600; }
+    .brand {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 1rem 1.25rem;
+      margin-bottom: 1rem;
+      padding: 0.85rem 1rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 1px 2px rgba(31, 35, 40, 0.06);
+    }
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      padding: 0.45rem 0.65rem;
+      background: var(--brand-dark);
+      border-radius: 8px;
+      text-decoration: none;
+    }
+    .brand-logo img {
+      display: block;
+      height: 42px;
+      width: auto;
+    }
+    .brand-copy { flex: 1 1 220px; min-width: 0; }
+    .brand-kicker {
+      margin: 0 0 0.15rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .lead { margin: 0.35rem 0 0; color: var(--muted); max-width: 58rem; }
+    .intro {
+      margin: 0 0 1.15rem;
+      color: var(--text);
+      max-width: 58rem;
+    }
+    .intro a { color: var(--accent); }
+    .section { margin-bottom: 1.25rem; }
+    .section-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.35rem 1rem;
+      margin-bottom: 0.65rem;
+    }
+    .section-head p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+    .nav-cards {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.75rem;
+    }
+    @media (max-width: 960px) {
+      .nav-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 560px) {
+      .nav-cards { grid-template-columns: 1fr; }
+    }
+    .nav-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      padding: 0.9rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      color: inherit;
+      text-decoration: none;
+      box-shadow: 0 1px 2px rgba(31, 35, 40, 0.06);
+      transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+      min-height: 100%;
+    }
+    .nav-card:hover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: 0 2px 8px rgba(9, 105, 218, 0.12);
+    }
+    .nav-card strong {
+      font-size: 0.98rem;
+      font-weight: 650;
+    }
+    .nav-card span {
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.4;
+    }
+    .nav-card .arrow {
+      margin-top: auto;
+      padding-top: 0.45rem;
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+    .extra-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
     .pill {
       display: inline-flex;
       align-items: center;
       gap: 0.35rem;
-      padding: 0.45rem 0.75rem;
+      padding: 0.4rem 0.7rem;
       border-radius: 999px;
       border: 1px solid var(--border);
       background: var(--card);
       color: var(--text);
       text-decoration: none;
-      font-size: 0.88rem;
+      font-size: 0.86rem;
     }
     .pill:hover { border-color: var(--accent); background: var(--accent-soft); }
     .layout {
@@ -61,27 +165,6 @@
       border-radius: 10px;
       padding: 0.85rem;
       box-shadow: 0 1px 2px rgba(31, 35, 40, 0.06);
-    }
-    .toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      align-items: center;
-      margin-bottom: 0.65rem;
-    }
-    .toolbar button {
-      padding: 0.35rem 0.7rem;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: #fff;
-      cursor: pointer;
-      font: inherit;
-      font-size: 0.86rem;
-    }
-    .toolbar button.active {
-      background: var(--accent);
-      color: #fff;
-      border-color: var(--accent);
     }
     .muted { color: var(--muted); font-size: 0.88rem; }
     #map-wrap { width: 100%; overflow: hidden; }
@@ -118,30 +201,73 @@
       width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border);
       display: inline-block;
     }
+    .site-footer {
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+    .site-footer a { color: var(--accent); }
   </style>
 </head>
 <body>
   <div class="page">
-    <header>
-      <h1>CY-Bench dashboards</h1>
-      <p class="lead">Click a country on the map to open mid-season and end-of-season walk-forward dashboards.</p>
+    <header class="brand">
+      <a class="brand-logo" href="https://www.agml.org/" target="_blank" rel="noopener noreferrer" title="AgML">
+        <img src="assets/agml-logo.png" alt="AgML" width="160" height="72" />
+      </a>
+      <div class="brand-copy">
+        <p class="brand-kicker">AgML · Crop yield forecasting</p>
+        <h1>CY-Bench dashboards</h1>
+        <p class="lead">Explore walk-forward results by country, and cross-country summaries from the CY-Bench benchmark.</p>
+      </div>
     </header>
 
-    <div class="top-links" id="top-links"></div>
+    <p class="intro">
+      <strong>CY-Bench</strong> is a dataset and benchmark for subnational crop yield forecasting
+      (maize and wheat), comparing classical, process-based, and machine-learning models.
+      This site hosts interactive results: start with a country on the map, or open a global insight page below.
+      More about the project on
+      <a href="https://www.agml.org/" target="_blank" rel="noopener noreferrer">agml.org</a>
+      and the
+      <a href="https://github.com/WUR-AI/AgML-CY-Bench" target="_blank" rel="noopener noreferrer">GitHub repository</a>.
+    </p>
 
-    <div class="layout">
-      <div class="card">
-        <div id="map-wrap"><p class="muted">Loading map…</p></div>
-        <div class="legend muted">
-          <span><i class="swatch" style="background:var(--land-available)"></i> Dashboard available</span>
-          <span><i class="swatch" style="background:var(--land-missing)"></i> No dashboard</span>
+    <section class="section" id="insights-section" hidden>
+      <div class="section-head">
+        <h2>Global insights</h2>
+        <p>Cross-country summaries · not tied to a single dashboard country</p>
+      </div>
+      <div class="nav-cards" id="top-links"></div>
+      <div class="extra-links" id="extra-links"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Country dashboards</h2>
+        <p>Click a blue country to open mid-season and end-of-season walk-forward views</p>
+      </div>
+      <div class="layout">
+        <div class="card">
+          <div id="map-wrap"><p class="muted">Loading map…</p></div>
+          <div class="legend muted">
+            <span><i class="swatch" style="background:var(--land-available)"></i> Dashboard available</span>
+            <span><i class="swatch" style="background:var(--land-missing)"></i> No dashboard</span>
+          </div>
+        </div>
+        <div class="card" id="detail">
+          <h3>Select a country</h3>
+          <p class="muted">Click a highlighted country on the map.</p>
         </div>
       </div>
-      <div class="card" id="detail">
-        <h3>Select a country</h3>
-        <p class="muted">Click a highlighted country on the map.</p>
-      </div>
-    </div>
+    </section>
+
+    <footer class="site-footer">
+      Part of <a href="https://www.agml.org/" target="_blank" rel="noopener noreferrer">AgML</a>
+      · CY-Bench code and data on
+      <a href="https://github.com/WUR-AI/AgML-CY-Bench" target="_blank" rel="noopener noreferrer">WUR-AI/AgML-CY-Bench</a>
+    </footer>
   </div>
 
   <script>
@@ -150,15 +276,45 @@
     const byMapIso = new Map(DATA.countries.map(c => [c.map_cc || c.cc, c]));
     let selectedCc = null;
 
+    const insightsSection = document.getElementById("insights-section");
     const topLinks = document.getElementById("top-links");
+    const extraLinks = document.getElementById("extra-links");
+
+    const INSIGHT_CARDS = [
+      {
+        href: "insights.html",
+        title: "Model performance",
+        blurb: "Who wins where: family maps, metrics, and country-level AI advantage.",
+      },
+      {
+        href: "insights-horizon.html",
+        title: "Forecast horizon",
+        blurb: "Mid-season vs end-of-season: how lead time changes skill.",
+      },
+      {
+        href: "insights-crops.html",
+        title: "Crop comparison",
+        blurb: "Maize vs wheat paired differences across model families.",
+      },
+      {
+        href: "insights-sample-size.html",
+        title: "Training set size",
+        blurb: "How performance scales with more years of training data.",
+      },
+    ];
+
     if (DATA.has_insights) {
-      topLinks.innerHTML += `<a class="pill" href="insights.html">Global insights</a>`;
-      topLinks.innerHTML += `<a class="pill" href="insights-horizon.html">Forecast horizon</a>`;
-      topLinks.innerHTML += `<a class="pill" href="insights-crops.html">Crop comparison</a>`;
-      topLinks.innerHTML += `<a class="pill" href="insights-sample-size.html">Training set size</a>`;
+      insightsSection.hidden = false;
+      topLinks.innerHTML = INSIGHT_CARDS.map(card => `
+        <a class="nav-card" href="${card.href}">
+          <strong>${card.title}</strong>
+          <span>${card.blurb}</span>
+          <span class="arrow">Open →</span>
+        </a>`).join("");
     }
     if (DATA.has_screening && DATA.screening_href) {
-      topLinks.innerHTML += `<a class="pill" href="${DATA.screening_href}">Screening (all)</a>`;
+      insightsSection.hidden = false;
+      extraLinks.innerHTML += `<a class="pill" href="${DATA.screening_href}">Screening (all)</a>`;
     }
 
     function hasDashboard(c) {

@@ -372,6 +372,7 @@ def build_index_html(entries: list[IndexEntry], *, publish_root: Path | None = N
     from cybench.runs.analysis.index_map_lib import (
         build_index_map_html,
         build_index_map_payload,
+        ensure_agml_logo,
         ensure_world_geojson,
     )
 
@@ -380,6 +381,7 @@ def build_index_html(entries: list[IndexEntry], *, publish_root: Path | None = N
 
     payload = build_index_map_payload(entries, publish_root=publish_root)
     geojson_href = ensure_world_geojson(publish_root)
+    ensure_agml_logo(publish_root)
     return build_index_map_html(payload, geojson_href=geojson_href)
 
 
