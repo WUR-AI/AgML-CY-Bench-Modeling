@@ -640,10 +640,23 @@
     }
 
     function yearsForModel(slice, model) {
+<<<<<<< HEAD
       const byYear = ((slice.models_by_year || {})[model]) || {};
       const modelYears = Object.keys(byYear).sort();
       if (modelYears.length) return modelYears;
       // Fallback when only pooled means exist (no per-year preds).
+=======
+      const predByYear = ((slice.models_by_year || {})[model]) || {};
+      const actualByYear = slice.actual_by_year || {};
+      const predYears = Object.keys(predByYear);
+      // Only years with both ground truth and model preds (avoids empty maps
+      // when naive baselines use a shifted year window, e.g. AU wheat 2019 vs 2024).
+      const both = predYears.length
+        ? predYears.filter((y) => Object.keys(actualByYear[y] || {}).length > 0)
+        : Object.keys(actualByYear);
+      if (both.length) return both.sort();
+      if (predYears.length) return predYears.sort();
+>>>>>>> 067fe13 (dashboard)
       return Array.isArray(slice.years) ? slice.years.map(String) : [];
     }
 
