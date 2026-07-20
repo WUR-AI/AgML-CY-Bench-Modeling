@@ -639,8 +639,16 @@
       return yearKey === MAP_YEAR_MEAN ? "Mean (all years)" : String(yearKey);
     }
 
-    function setupMapYearSlider(slice) {
-      const years = Array.isArray(slice.years) ? slice.years.map(String) : [];
+    function yearsForModel(slice, model) {
+      const byYear = ((slice.models_by_year || {})[model]) || {};
+      const modelYears = Object.keys(byYear).sort();
+      if (modelYears.length) return modelYears;
+      // Fallback when only pooled means exist (no per-year preds).
+      return Array.isArray(slice.years) ? slice.years.map(String) : [];
+    }
+
+    function setupMapYearSlider(slice, model) {
+      const years = yearsForModel(slice, model);
       mapYearKeys = years.length > 1 ? [MAP_YEAR_MEAN, ...years] : years;
       mapYearSelection = mapYearKeys[0] || MAP_YEAR_MEAN;
 
@@ -730,7 +738,7 @@
       const slice = (MAP_DATA.datasets || {})[dataset];
       if (!slice) return false;
       const country = slice.country;
-      setupMapYearSlider(slice);
+      setupMapYearSlider(slice, model);
       if (mapFeaturesCacheCountry !== country) {
         mapFeaturesCache = await loadCountryGeojson(country);
         mapFeaturesCacheCountry = country;
