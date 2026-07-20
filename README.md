@@ -21,8 +21,8 @@ This work benchmarks **five modeling paradigms** on CY-Bench—**63 country–cr
 1. Statistical baselines  
 2. Process-based models  
 3. Conventional feature-engineered machine learning  
-4. Deep sequence models  
-5. Tabular foundation models  
+4. Tabular foundation models  
+5. Deep sequence models  
 
 Beyond pooled accuracy, the paper uses a multi-dimensional evaluation that separately quantifies **overall**, **spatial**, **temporal**, and **anomaly** prediction skill. Models are compared under a shared protocol with in-season forecast horizons (including mid-season and end-of-season).
 
@@ -42,6 +42,17 @@ Explore country-level and cross-country results in the [dashboard](https://wur-a
 Implementation of the modeling and evaluation pipeline behind the paper and dashboard (experiment configuration, model families above, screening and walk-forward evaluation, analysis and visualization).
 
 For results, prefer the [dashboard](https://wur-ai.github.io/AgML-CY-Bench-dashboard/) over browsing the source tree.
+
+### Quick start
+
+```bash
+poetry install
+# put CY-Bench data under cybench/data/ (see Zenodo link above)
+poetry run python cybench/runs/run_experiments.py dataset/crop=maize dataset.country=NL model=ridge
+```
+
+- **Models & configs:** `cybench/models/` (implementations) and `cybench/conf/model/` (Hydra configs; pick a model with `model=<name>`).
+- **Entry point:** `cybench/runs/run_experiments.py` (screening / walk-forward). Cluster jobs: `cybench/runs/slurm/`.
 
 ---
 
