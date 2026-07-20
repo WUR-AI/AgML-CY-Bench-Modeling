@@ -48,7 +48,10 @@ For results, prefer the [dashboard](https://wur-ai.github.io/AgML-CY-Bench-dashb
 ```bash
 poetry install
 # put CY-Bench data under cybench/data/ (see Zenodo link above)
-poetry run python cybench/runs/run_experiments.py dataset/crop=maize dataset.country=NL model=ridge
+poetry run python cybench/runs/run_experiments.py \
+  dataset/crop=maize dataset.country=NL model=ridge \
+  dataset/temporal=feature_design validation=single \
+  experiment.device=cpu experiment.n_repetitions=1
 ```
 
 - **Models & configs:** `cybench/models/` (implementations) and `cybench/conf/model/` (Hydra configs; pick a model with `model=<name>`).
