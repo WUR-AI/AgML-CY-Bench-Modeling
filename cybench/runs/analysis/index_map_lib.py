@@ -105,10 +105,77 @@ def group_walk_forward_entries(
     ]
 
 
+def build_landing_stats(
+    output_root: Path | None,
+    *,
+    version: int = 4,
+) -> dict[str, Any]:
+    """Derive landing-page headline counts from walk-forward summaries."""
+    from cybench.runs.analysis.global_insights_lib import (
+        discover_summary_tables,
+        load_summary_frame,
+        matrix_axes_payload,
+    )
+
+    n_axes = matrix_axes_payload()
+    n_skill_dimensions = len(n_axes)
+    empty: dict[str, Any] = {
+        "n_country_crop_datasets": None,
+        "n_maize_datasets": None,
+        "n_wheat_datasets": None,
+        "n_regions": None,
+        "n_models": None,
+        "n_skill_dimensions": n_skill_dimensions,
+        "skill_dimension_labels": [str(ax["label"]) for ax in n_axes],
+    }
+    if output_root is None:
+        return empty
+    paths = discover_summary_tables(Path(output_root), version=version)
+    if not paths:
+        return empty
+    df = load_summary_frame(paths)
+    if df.empty or "model" not in df.columns:
+        return empty
+
+    crop_col = "crop" if "crop" in df.columns else None
+    country_col = "country" if "country" in df.columns else None
+    n_country_crop = None
+    n_maize = None
+    n_wheat = None
+    if crop_col and country_col:
+        pairs = df[[crop_col, country_col]].drop_duplicates()
+        n_country_crop = int(len(pairs))
+        crops = pairs[crop_col].astype(str).str.casefold()
+        n_maize = int((crops == "maize").sum())
+        n_wheat = int(crops.str.contains("wheat", regex=False).sum())
+
+    n_regions = None
+    if crop_col and country_col and "n_regions" in df.columns:
+        per_dataset = (
+            df.groupby([crop_col, country_col], dropna=False)["n_regions"]
+            .max()
+            .dropna()
+        )
+        if len(per_dataset):
+            n_regions = int(per_dataset.sum())
+
+    return {
+        "n_country_crop_datasets": n_country_crop,
+        "n_maize_datasets": n_maize,
+        "n_wheat_datasets": n_wheat,
+        "n_regions": n_regions,
+        "n_models": int(df["model"].nunique()),
+        "n_skill_dimensions": n_skill_dimensions,
+        "skill_dimension_labels": [str(ax["label"]) for ax in n_axes],
+    }
+
+
 def build_index_map_payload(
     entries: list[IndexEntry],
     *,
     publish_root: Path | None = None,
+    output_root: Path | None = None,
+    version: int = 4,
     data_dir: Path | None = None,
 ) -> dict[str, Any]:
     screening = [e for e in entries if e.kind == "screening"]
@@ -116,6 +183,7 @@ def build_index_map_payload(
     return {
         "countries": countries,
         "n_countries": len(countries),
+        "stats": build_landing_stats(output_root, version=version),
         "has_insights": bool(publish_root and (publish_root / "insights.html").is_file()),
         "has_screening": bool(screening),
         "screening_href": screening[0].href if screening else None,

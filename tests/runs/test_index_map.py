@@ -6,6 +6,7 @@ from pathlib import Path
 
 from cybench.runs.analysis.index_map_lib import (
     build_index_map_payload,
+    build_landing_stats,
     export_world_geojson,
     group_walk_forward_entries,
     map_iso_for_cybencH,
@@ -194,3 +195,27 @@ def test_build_index_map_payload(tmp_path: Path):
     assert payload["has_insights"] is True
     assert payload["n_countries"] == 1
     assert payload["countries"][0]["cc"] == "PL"
+    assert "stats" in payload
+    assert payload["stats"]["n_skill_dimensions"] >= 1
+
+
+def test_build_landing_stats_from_summaries(tmp_path: Path):
+    for name, crop, n_regions in (
+        ("paper_walk_forward_de_eos_v4", "maize", 10),
+        ("paper_walk_forward_fr_eos_v4", "wheat", 20),
+    ):
+        d = tmp_path / name
+        d.mkdir()
+        (d / "walk_forward_summary.csv").write_text(
+            "model,crop,n_regions,nrmse,r2\n"
+            f"random_forest,{crop},{n_regions},0.2,0.5\n"
+            f"transformer_lf,{crop},{n_regions},0.25,0.4\n",
+            encoding="utf-8",
+        )
+    stats = build_landing_stats(tmp_path, version=4)
+    assert stats["n_country_crop_datasets"] == 2
+    assert stats["n_maize_datasets"] == 1
+    assert stats["n_wheat_datasets"] == 1
+    assert stats["n_models"] == 2
+    assert stats["n_regions"] == 30
+    assert stats["n_skill_dimensions"] == len(stats["skill_dimension_labels"])

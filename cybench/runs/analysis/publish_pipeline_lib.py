@@ -809,8 +809,13 @@ def run_index_stage(
         return StageStatus("index", False, "would rebuild index.html")
     prune_obsolete_dashboard_dirs(target.publish_root)
     entries = discover_index_entries(target.publish_root)
-    index_path = update_index(target.publish_root, entries)
     version = insights_version if insights_version is not None else target.version
+    index_path = update_index(
+        target.publish_root,
+        entries,
+        output_root=target.output_root,
+        version=version,
+    )
     extras: list[str] = []
     try:
         from cybench.runs.analysis.build_global_insights_dashboard import write_insights_dashboard

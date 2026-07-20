@@ -376,7 +376,13 @@ def discover_index_entries(
     return entries
 
 
-def build_index_html(entries: list[IndexEntry], *, publish_root: Path | None = None) -> str:
+def build_index_html(
+    entries: list[IndexEntry],
+    *,
+    publish_root: Path | None = None,
+    output_root: Path | None = None,
+    version: int = 4,
+) -> str:
     """Landing page with clickable world map."""
     from cybench.runs.analysis.index_map_lib import (
         build_index_map_html,
@@ -388,7 +394,12 @@ def build_index_html(entries: list[IndexEntry], *, publish_root: Path | None = N
     if publish_root is None:
         raise ValueError("publish_root is required to build the map index")
 
-    payload = build_index_map_payload(entries, publish_root=publish_root)
+    payload = build_index_map_payload(
+        entries,
+        publish_root=publish_root,
+        output_root=output_root,
+        version=version,
+    )
     geojson_href = ensure_world_geojson(publish_root)
     ensure_agml_logo(publish_root)
     return build_index_map_html(payload, geojson_href=geojson_href)
@@ -539,10 +550,22 @@ def build_index_html_cards(entries: list[IndexEntry], *, publish_root: Path | No
 """
 
 
-def update_index(publish_root: Path, entries: list[IndexEntry]) -> Path:
+def update_index(
+    publish_root: Path,
+    entries: list[IndexEntry],
+    *,
+    output_root: Path | None = None,
+    version: int = 4,
+) -> Path:
     index_path = publish_root / "index.html"
     index_path.write_text(
-        build_index_html(entries, publish_root=publish_root), encoding="utf-8"
+        build_index_html(
+            entries,
+            publish_root=publish_root,
+            output_root=output_root,
+            version=version,
+        ),
+        encoding="utf-8",
     )
     return index_path
 
