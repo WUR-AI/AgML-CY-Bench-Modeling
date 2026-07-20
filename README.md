@@ -3,72 +3,45 @@
 Code companion to:
 
 > **Benchmarking the State of AI for Crop Yield Forecasting: A Global Assessment Across Modeling Paradigms**  
-> Kallenberg et al., KDD 2027.
+> Michiel Kallenberg, Philip Janz, Christoph Jörges, Vageesh Saxena, Pratishtha Poudel, Mohammed Musthafa Rafi, and Ioannis N. Athanasiadis  
+> (submitted to KDD ’27)
 
-This repository implements the modeling and evaluation pipeline used in that study. Interactive results are published at **[cybench.agml.org](https://cybench.agml.org/)**.
+Interactive results: **[wur-ai.github.io/AgML-CY-Bench-dashboard](https://wur-ai.github.io/AgML-CY-Bench-dashboard/)**.
 
-The underlying subnational yield dataset and data-preparation protocols are described in the CY-Bench dataset paper ([Kallenberg et al., ESSD 2026](https://essd.copernicus.org/articles/18/3997/2026/)) and released on [Zenodo](https://doi.org/10.5281/zenodo.11502142). Dataset code lives in [WUR-AI/AgML-CY-Bench](https://github.com/WUR-AI/AgML-CY-Bench).
-
----
-
-## What the paper studies
-
-CY-Bench provides a common evaluation setting for **in-season, subnational maize and wheat yield forecasting**. Building on that resource, this work asks how far today’s AI methods go when compared under a shared protocol—not only on overall accuracy, but also on **spatial**, **temporal**, and **anomaly** skill.
-
-We compare modeling paradigms that are routinely used (or proposed) for crop yield forecasting:
-
-- statistical and process-based baselines  
-- conventional machine learning with engineered features  
-- deep sequence models (late-fusion architectures over weather and related time series)  
-- tabular foundation models  
-
-Forecasts are evaluated at multiple points in the season (e.g. mid-season and end-of-season). Models are selected under a **screening** protocol, then assessed with **walk-forward** evaluation that mirrors operational forecasting.
+The underlying subnational yield dataset is CY-Bench ([Kallenberg et al., ESSD 2026](https://essd.copernicus.org/articles/18/3997/2026/); [Zenodo](https://doi.org/10.5281/zenodo.11502142)). Dataset and data-preparation code: [WUR-AI/AgML-CY-Bench](https://github.com/WUR-AI/AgML-CY-Bench).
 
 ---
 
-## Key findings (summary)
+## Summary of the study
 
-Results are easiest to explore in the [dashboard](https://cybench.agml.org/). At a high level:
+Accurate crop yield forecasting matters for food security, agricultural policy, and commodity markets. Statistical, process-based, and machine learning approaches have all been proposed, but their relative strengths remain poorly understood without large-scale, standardized comparisons.
 
-- Feature-engineered ML and tabular foundation models achieve the strongest overall skill in most countries.
-- Spatial prediction is substantially easier than temporal and anomaly prediction across modeling paradigms.
-- Process-based models show comparatively strong temporal skill despite lower overall accuracy; year-to-year anomalies remain hard.
+This work benchmarks **five modeling paradigms** on CY-Bench—**63 country–crop datasets** (>12,000 administrative regions) across six continents:
 
-Country pages on the dashboard break these patterns down by crop, horizon, and metric; global insight pages summarize cross-country comparisons.
+1. Statistical baselines  
+2. Process-based models  
+3. Conventional feature-engineered machine learning  
+4. Deep sequence models  
+5. Tabular foundation models  
+
+Beyond pooled accuracy, the paper uses a multi-dimensional evaluation that separately quantifies **overall**, **spatial**, **temporal**, and **anomaly** prediction skill. Models are compared under a shared protocol with in-season forecast horizons (including mid-season and end-of-season).
+
+### Main findings
+
+- Feature-engineered ML and tabular foundation models achieve the strongest overall predictive performance, though gains over simple statistical baselines are modest: data-driven models reduce NRMSE in **72%** of maize countries and **78%** of wheat countries (median reductions **8.8%** and **11.9%**).
+- Across all paradigms, **spatial** prediction is substantially easier than **temporal** and **anomaly** prediction.
+- Data-driven models markedly improve temporal and anomaly prediction over statistical baselines, yet accurately forecasting **year-to-year** yield variability remains challenging.
+- Progress at scale will depend more on better characterization of the environmental and management factors that drive inter-annual variability than on paradigm choice alone.
+
+Explore country-level and cross-country results in the [dashboard](https://wur-ai.github.io/AgML-CY-Bench-dashboard/).
 
 ---
 
 ## This repository
 
-This codebase is the implementation behind the paper experiments and the dashboard: Hydra-configured datasets and models, screening and walk-forward evaluation, and the analysis/visualization used to produce figures and interactive views.
+Implementation of the modeling and evaluation pipeline behind the paper and dashboard (experiment configuration, model families above, screening and walk-forward evaluation, analysis and visualization).
 
-For a map of results rather than a tour of the source tree, start at **[cybench.agml.org](https://cybench.agml.org/)**.
-
----
-
-## Citation
-
-Please cite the modeling paper and, when using the dataset, the CY-Bench data paper:
-
-```
-Kallenberg et al. Benchmarking the State of AI for Crop Yield Forecasting:
-A Global Assessment Across Modeling Paradigms. KDD 2027.
-```
-
-```
-@article{kallenberg_etal2026_cybench,
-  title   = {CY-Bench: A comprehensive benchmark dataset for subnational crop yield forecasting},
-  author  = {Kallenberg, Michiel and others},
-  journal = {Earth System Science Data},
-  year    = {2026},
-  volume  = {18},
-  pages   = {3997--4025},
-  doi     = {10.5194/essd-18-3997-2026},
-  url     = {https://essd.copernicus.org/articles/18/3997/2026/}
-}
-```
-
-(Update the modeling bibtex entry with the official proceedings citation when available.)
+For results, prefer the [dashboard](https://wur-ai.github.io/AgML-CY-Bench-dashboard/) over browsing the source tree.
 
 ---
 
@@ -76,8 +49,10 @@ A Global Assessment Across Modeling Paradigms. KDD 2027.
 
 | Resource | URL |
 |----------|-----|
-| Results dashboard | https://cybench.agml.org/ |
+| Results dashboard | https://wur-ai.github.io/AgML-CY-Bench-dashboard/ |
 | AgML | https://www.agml.org/ |
 | CY-Bench dataset (ESSD) | https://essd.copernicus.org/articles/18/3997/2026/ |
 | Dataset release | https://doi.org/10.5281/zenodo.11502142 |
 | Dataset / data-prep repository | https://github.com/WUR-AI/AgML-CY-Bench |
+
+A citation for this modeling paper will be added when a preprint or proceedings version is available. Please cite the [CY-Bench dataset paper](https://essd.copernicus.org/articles/18/3997/2026/) when using the data.
