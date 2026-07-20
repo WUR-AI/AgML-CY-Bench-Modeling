@@ -1,0 +1,506 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cybench.runs.viz package &mdash; AgML-crop-yield-forecasting  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9a2dae69"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            AgML-crop-yield-forecasting
+              <img src="_static/agml-logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">cybench.runs.viz package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-cybench.runs.viz.build_results_dashboard">cybench.runs.viz.build_results_dashboard module</a><ul>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.SourceConfig"><code class="docutils literal notranslate"><span class="pre">SourceConfig</span></code></a><ul>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.SourceConfig.model_name"><code class="docutils literal notranslate"><span class="pre">SourceConfig.model_name</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.SourceConfig.results_dir"><code class="docutils literal notranslate"><span class="pre">SourceConfig.results_dir</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard._extract_js_json_assignment"><code class="docutils literal notranslate"><span class="pre">_extract_js_json_assignment()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard._view_metric_values_from_report"><code class="docutils literal notranslate"><span class="pre">_view_metric_values_from_report()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard._view_metric_values_from_stats"><code class="docutils literal notranslate"><span class="pre">_view_metric_values_from_stats()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.build_html"><code class="docutils literal notranslate"><span class="pre">build_html()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.bundle_referenced_assets"><code class="docutils literal notranslate"><span class="pre">bundle_referenced_assets()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.calc_nrmse"><code class="docutils literal notranslate"><span class="pre">calc_nrmse()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.calc_r_r2"><code class="docutils literal notranslate"><span class="pre">calc_r_r2()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.discover_run_dirs"><code class="docutils literal notranslate"><span class="pre">discover_run_dirs()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.discover_stats_json"><code class="docutils literal notranslate"><span class="pre">discover_stats_json()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.generate_assets_for_runs"><code class="docutils literal notranslate"><span class="pre">generate_assets_for_runs()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.get_prediction_column"><code class="docutils literal notranslate"><span class="pre">get_prediction_column()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.infer_prediction_col_for_run"><code class="docutils literal notranslate"><span class="pre">infer_prediction_col_for_run()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.load_records"><code class="docutils literal notranslate"><span class="pre">load_records()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.load_records_from_runs_root"><code class="docutils literal notranslate"><span class="pre">load_records_from_runs_root()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.parse_run_dir_name"><code class="docutils literal notranslate"><span class="pre">parse_run_dir_name()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.parse_source"><code class="docutils literal notranslate"><span class="pre">parse_source()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.restamp_dashboard_html"><code class="docutils literal notranslate"><span class="pre">restamp_dashboard_html()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.safe_float"><code class="docutils literal notranslate"><span class="pre">safe_float()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.runs.viz.region_map_lib">cybench.runs.viz.region_map_lib module</a><ul>
+<li><a class="reference internal" href="#cybench.runs.viz.region_map_lib.benchmark_locs_by_country"><code class="docutils literal notranslate"><span class="pre">benchmark_locs_by_country()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.region_map_lib.build_region_map_payload"><code class="docutils literal notranslate"><span class="pre">build_region_map_payload()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.region_map_lib.bundle_region_map_assets"><code class="docutils literal notranslate"><span class="pre">bundle_region_map_assets()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.region_map_lib.dataset_country_code"><code class="docutils literal notranslate"><span class="pre">dataset_country_code()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.region_map_lib.dataset_crop"><code class="docutils literal notranslate"><span class="pre">dataset_crop()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.region_map_lib.export_region_geojson"><code class="docutils literal notranslate"><span class="pre">export_region_geojson()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.region_map_lib.infer_pred_column"><code class="docutils literal notranslate"><span class="pre">infer_pred_column()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.region_map_lib.load_dataset_year_csvs"><code class="docutils literal notranslate"><span class="pre">load_dataset_year_csvs()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.region_map_lib.preds_dir_for_row"><code class="docutils literal notranslate"><span class="pre">preds_dir_for_row()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.region_map_lib.prepare_geometry_for_geojson"><code class="docutils literal notranslate"><span class="pre">prepare_geometry_for_geojson()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.region_map_lib.region_means"><code class="docutils literal notranslate"><span class="pre">region_means()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.region_map_lib.region_values_by_year"><code class="docutils literal notranslate"><span class="pre">region_values_by_year()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.region_map_lib.write_region_map_sidecar"><code class="docutils literal notranslate"><span class="pre">write_region_map_sidecar()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.runs.viz.visualize_results_aggregated">cybench.runs.viz.visualize_results_aggregated module</a><ul>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated._as_float_array"><code class="docutils literal notranslate"><span class="pre">_as_float_array()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated._complete_rows_mask"><code class="docutils literal notranslate"><span class="pre">_complete_rows_mask()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated._index_as_list"><code class="docutils literal notranslate"><span class="pre">_index_as_list()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated._load_dashboard_metrics_overlay"><code class="docutils literal notranslate"><span class="pre">_load_dashboard_metrics_overlay()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated._panel_export_bbox"><code class="docutils literal notranslate"><span class="pre">_panel_export_bbox()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated._plot_mean_std_band"><code class="docutils literal notranslate"><span class="pre">_plot_mean_std_band()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated._plot_scatter_panel"><code class="docutils literal notranslate"><span class="pre">_plot_scatter_panel()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated._region_year_metrics_from_overlay"><code class="docutils literal notranslate"><span class="pre">_region_year_metrics_from_overlay()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated._series_int_at"><code class="docutils literal notranslate"><span class="pre">_series_int_at()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated._yearly_cross_region_stats"><code class="docutils literal notranslate"><span class="pre">_yearly_cross_region_stats()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated.discover_inputs"><code class="docutils literal notranslate"><span class="pre">discover_inputs()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated.generate_html_table"><code class="docutils literal notranslate"><span class="pre">generate_html_table()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated.generate_local_report_html"><code class="docutils literal notranslate"><span class="pre">generate_local_report_html()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated.generate_markdown_table"><code class="docutils literal notranslate"><span class="pre">generate_markdown_table()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated.load_and_clean_data"><code class="docutils literal notranslate"><span class="pre">load_and_clean_data()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated.parse_panels"><code class="docutils literal notranslate"><span class="pre">parse_panels()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated.process_dataset"><code class="docutils literal notranslate"><span class="pre">process_dataset()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.viz.visualize_results_aggregated.save_panel_images"><code class="docutils literal notranslate"><span class="pre">save_panel_images()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.runs.viz">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">AgML-crop-yield-forecasting</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">cybench.runs.viz package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/cybench.runs.viz.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="cybench-runs-viz-package">
+<h1>cybench.runs.viz package<a class="headerlink" href="#cybench-runs-viz-package" title="Link to this heading"></a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="module-cybench.runs.viz.build_results_dashboard">
+<span id="cybench-runs-viz-build-results-dashboard-module"></span><h2>cybench.runs.viz.build_results_dashboard module<a class="headerlink" href="#module-cybench.runs.viz.build_results_dashboard" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.SourceConfig">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">SourceConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">results_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.SourceConfig" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.SourceConfig.model_name">
+<span class="sig-name descname"><span class="pre">model_name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.SourceConfig.model_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.SourceConfig.results_dir">
+<span class="sig-name descname"><span class="pre">results_dir</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.SourceConfig.results_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard._extract_js_json_assignment">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">_extract_js_json_assignment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">html</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard._extract_js_json_assignment" title="Link to this definition"></a></dt>
+<dd><p>Extract <code class="docutils literal notranslate"><span class="pre">const</span> <span class="pre">NAME</span> <span class="pre">=</span> <span class="pre">&lt;json&gt;;</span></code> from a built dashboard HTML page.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard._view_metric_values_from_report">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">_view_metric_values_from_report</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">report</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard._view_metric_values_from_report" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard._view_metric_values_from_stats">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">_view_metric_values_from_stats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard._view_metric_values_from_stats" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.build_html">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">build_html</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">records</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">map_payload</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shap_payload</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.build_html" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.bundle_referenced_assets">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">bundle_referenced_assets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">records</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assets_dirname</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'assets'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.bundle_referenced_assets" title="Link to this definition"></a></dt>
+<dd><p>Copy only image assets referenced in records into output_dir/assets_dirname.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.calc_nrmse">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">calc_nrmse</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">y_true</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_pred</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.calc_nrmse" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.calc_r_r2">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">calc_r_r2</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">y_true</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_pred</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.calc_r_r2" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.discover_run_dirs">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">discover_run_dirs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runs_root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.discover_run_dirs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.discover_stats_json">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">discover_stats_json</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.discover_stats_json" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.generate_assets_for_runs">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">generate_assets_for_runs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">run_dirs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prediction_col_override</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.generate_assets_for_runs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.get_prediction_column">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">get_prediction_column</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">override</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.get_prediction_column" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.infer_prediction_col_for_run">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">infer_prediction_col_for_run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">run_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prediction_col_override</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.infer_prediction_col_for_run" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.load_records">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">load_records</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sources</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.SourceConfig" title="cybench.runs.viz.build_results_dashboard.SourceConfig"><span class="pre">SourceConfig</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.load_records" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.load_records_from_runs_root">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">load_records_from_runs_root</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runs_root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prediction_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.load_records_from_runs_root" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.main">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.main" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.parse_run_dir_name">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">parse_run_dir_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">run_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.parse_run_dir_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.parse_source">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">parse_source</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cybench.runs.viz.build_results_dashboard.SourceConfig" title="cybench.runs.viz.build_results_dashboard.SourceConfig"><span class="pre">SourceConfig</span></a></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.parse_source" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.restamp_dashboard_html">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">restamp_dashboard_html</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">html_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.restamp_dashboard_html" title="Link to this definition"></a></dt>
+<dd><p>Rebuild a dashboard HTML file with the current template, keeping embedded JSON.</p>
+<p>Returns True when the file was rewritten.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.build_results_dashboard.safe_float">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.build_results_dashboard.</span></span><span class="sig-name descname"><span class="pre">safe_float</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">v</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.build_results_dashboard.safe_float" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-cybench.runs.viz.region_map_lib">
+<span id="cybench-runs-viz-region-map-lib-module"></span><h2>cybench.runs.viz.region_map_lib module<a class="headerlink" href="#module-cybench.runs.viz.region_map_lib" title="Link to this heading"></a></h2>
+<p>Pre-bake regional map geometry and yield values for country dashboards.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.region_map_lib.benchmark_locs_by_country">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.region_map_lib.</span></span><span class="sig-name descname"><span class="pre">benchmark_locs_by_country</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">map_payload</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">set</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.region_map_lib.benchmark_locs_by_country" title="Link to this definition"></a></dt>
+<dd><p>Union of region ids with yield data, grouped by country code.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.region_map_lib.build_region_map_payload">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.region_map_lib.</span></span><span class="sig-name descname"><span class="pre">build_region_map_payload</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">summary_rows</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.region_map_lib.build_region_map_payload" title="Link to this definition"></a></dt>
+<dd><p>Build map values from pooled year CSVs under output_dir/preds/.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.region_map_lib.bundle_region_map_assets">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.region_map_lib.</span></span><span class="sig-name descname"><span class="pre">bundle_region_map_assets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">map_payload</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assets_dirname</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'assets'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.region_map_lib.bundle_region_map_assets" title="Link to this definition"></a></dt>
+<dd><p>Export GeoJSON per country into assets/ and set relative hrefs.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.region_map_lib.dataset_country_code">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.region_map_lib.</span></span><span class="sig-name descname"><span class="pre">dataset_country_code</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cybench.runs.viz.region_map_lib.dataset_country_code" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.region_map_lib.dataset_crop">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.region_map_lib.</span></span><span class="sig-name descname"><span class="pre">dataset_crop</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cybench.runs.viz.region_map_lib.dataset_crop" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.region_map_lib.export_region_geojson">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.region_map_lib.</span></span><span class="sig-name descname"><span class="pre">export_region_geojson</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">country_code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dest</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">simplify</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.005</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">locations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">set</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">frozenset</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.region_map_lib.export_region_geojson" title="Link to this definition"></a></dt>
+<dd><p>Write simplified admin-region GeoJSON (all units unless <code class="docutils literal notranslate"><span class="pre">locations</span></code> is set).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.region_map_lib.infer_pred_column">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.region_map_lib.</span></span><span class="sig-name descname"><span class="pre">infer_pred_column</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.region_map_lib.infer_pred_column" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.region_map_lib.load_dataset_year_csvs">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.region_map_lib.</span></span><span class="sig-name descname"><span class="pre">load_dataset_year_csvs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">preds_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.region_map_lib.load_dataset_year_csvs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.region_map_lib.preds_dir_for_row">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.region_map_lib.</span></span><span class="sig-name descname"><span class="pre">preds_dir_for_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">row</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.region_map_lib.preds_dir_for_row" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.region_map_lib.prepare_geometry_for_geojson">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.region_map_lib.</span></span><span class="sig-name descname"><span class="pre">prepare_geometry_for_geojson</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geometry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">BaseGeometry</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">BaseGeometry</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.region_map_lib.prepare_geometry_for_geojson" title="Link to this definition"></a></dt>
+<dd><p>Drop pathological footprints; ring winding is fixed in the dashboard (D3/SVG).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.region_map_lib.region_means">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.region_map_lib.</span></span><span class="sig-name descname"><span class="pre">region_means</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.region_map_lib.region_means" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.region_map_lib.region_values_by_year">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.region_map_lib.</span></span><span class="sig-name descname"><span class="pre">region_values_by_year</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.region_map_lib.region_values_by_year" title="Link to this definition"></a></dt>
+<dd><p>Per-calendar-year regional values; outer keys are year strings.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.region_map_lib.write_region_map_sidecar">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.region_map_lib.</span></span><span class="sig-name descname"><span class="pre">write_region_map_sidecar</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">map_payload</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'region_map_data.json'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.region_map_lib.write_region_map_sidecar" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-cybench.runs.viz.visualize_results_aggregated">
+<span id="cybench-runs-viz-visualize-results-aggregated-module"></span><h2>cybench.runs.viz.visualize_results_aggregated module<a class="headerlink" href="#module-cybench.runs.viz.visualize_results_aggregated" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated._as_float_array">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">_as_float_array</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">_SupportsArray</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">_NestedSequence</span><span class="p"><span class="pre">[</span></span><span class="pre">_SupportsArray</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">complex</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bytes</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">_NestedSequence</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">complex</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bytes</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">floating</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated._as_float_array" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated._complete_rows_mask">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">_complete_rows_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">columns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Series</span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated._complete_rows_mask" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated._index_as_list">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">_index_as_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Index</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated._index_as_list" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated._load_dashboard_metrics_overlay">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">_load_dashboard_metrics_overlay</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated._load_dashboard_metrics_overlay" title="Link to this definition"></a></dt>
+<dd><p>Region-year metrics from collect (walk_forward_summary), if dashboard_metrics.json exists.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated._panel_export_bbox">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">_panel_export_bbox</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fig</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Figure</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Axes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">renderer</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Bbox</span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated._panel_export_bbox" title="Link to this definition"></a></dt>
+<dd><p>Bounding box for exporting one subplot as a standalone PNG.</p>
+<p><code class="docutils literal notranslate"><span class="pre">get_tightbbox</span></code> alone can clip axis labels when <code class="docutils literal notranslate"><span class="pre">set_box_aspect</span></code> is used,
+and may bleed into neighbouring panels in a multi-panel figure. Union with the
+axes window extent and pad on all sides.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated._plot_mean_std_band">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">_plot_mean_std_band</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Axes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">color</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mean_linestyle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zorder</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated._plot_mean_std_band" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated._plot_scatter_panel">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">_plot_scatter_panel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Axes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df_filtered</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metrics_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metrics_base</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metrics_note</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated._plot_scatter_panel" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated._region_year_metrics_from_overlay">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">_region_year_metrics_from_overlay</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overlay</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated._region_year_metrics_from_overlay" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated._series_int_at">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">_series_int_at</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">series</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Series</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">object</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated._series_int_at" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated._yearly_cross_region_stats">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">_yearly_cross_region_stats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">year_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'year'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_regions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated._yearly_cross_region_stats" title="Link to this definition"></a></dt>
+<dd><p>Per-year mean and std of <em>value_col</em> across regions.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated.discover_inputs">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">discover_inputs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated.discover_inputs" title="Link to this definition"></a></dt>
+<dd><p>Scans results_dir for CSVs and groups them by crop_region key.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated.generate_html_table">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">generate_html_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stats_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated.generate_html_table" title="Link to this definition"></a></dt>
+<dd><p>Generates an HTML table with grouped headers using colspan.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated.generate_local_report_html">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">generate_local_report_html</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stats_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pdf_filename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated.generate_local_report_html" title="Link to this definition"></a></dt>
+<dd><p>Generate an interactive local HTML report.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated.generate_markdown_table">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">generate_markdown_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stats_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated.generate_markdown_table" title="Link to this definition"></a></dt>
+<dd><p>Generates a Markdown table across region-year, spatial, temporal, anomaly views.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated.load_and_clean_data">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">load_and_clean_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">csv_files</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_model_to_plot</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_years</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trust_collect_export</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">DataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated.load_and_clean_data" title="Link to this definition"></a></dt>
+<dd><p>Loads CSVs and applies strict filtering:
+1. Enforce numeric types for Target and ALL Models.
+2. Unless <code class="docutils literal notranslate"><span class="pre">trust_collect_export</span></code>, skip YEARS where &lt; 50% of regions have</p>
+<blockquote>
+<div><p>valid data (for all columns). Collect exports already QC-filtered rows;
+re-applying this step changes N and r relative to the dashboard table.</p>
+</div></blockquote>
+<ol class="arabic simple" start="3">
+<li><p>Drop remaining individual rows with missing data.</p></li>
+</ol>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated.main">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated.main" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated.parse_panels">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">parse_panels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated.parse_panels" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated.process_dataset">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">process_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">panels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('scatter',</span> <span class="pre">'temporal')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">results_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Figure</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Axes</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated.process_dataset" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.viz.visualize_results_aggregated.save_panel_images">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.viz.visualize_results_aggregated.</span></span><span class="sig-name descname"><span class="pre">save_panel_images</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fig</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Figure</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">panel_axes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Axes</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.runs.viz.visualize_results_aggregated.save_panel_images" title="Link to this definition"></a></dt>
+<dd><p>Save each subplot panel as a separate PNG and return absolute paths.</p>
+</dd></dl>
+
+</section>
+<section id="module-cybench.runs.viz">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-cybench.runs.viz" title="Link to this heading"></a></h2>
+<p>Plots and HTML dashboards for benchmark results.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Wageningen University and Research.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>  
+
+  <style>
+    /* Sidebar header (and topbar for mobile) */
+    .wy-side-nav-search, .wy-nav-top {
+      background: #28242c; */
+    }
+    /* Sidebar */
+    .wy-nav-side {
+      background: #124400;
+    }
+  </style>
+
+
+</body>
+</html>

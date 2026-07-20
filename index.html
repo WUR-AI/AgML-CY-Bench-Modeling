@@ -1,0 +1,222 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgML CY-Bench Modeling &mdash; AgML-crop-yield-forecasting  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9a2dae69"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            AgML-crop-yield-forecasting
+              <img src="_static/agml-logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">AgML CY-Bench Modeling</a><ul>
+<li><a class="reference internal" href="#summary-of-the-study">Summary of the study</a><ul>
+<li><a class="reference internal" href="#main-findings">Main findings</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#this-repository">This repository</a><ul>
+<li><a class="reference internal" href="#quick-start">Quick start</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#links">Links</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">AgML-crop-yield-forecasting</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">AgML CY-Bench Modeling</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <img alt="https://github.com/WUR-AI/AgML-CY-Bench/actions/workflows/test.yml/badge.svg" src="https://github.com/WUR-AI/AgML-CY-Bench/actions/workflows/test.yml/badge.svg" />
+<section id="agml-cy-bench-modeling">
+<h1>AgML CY-Bench Modeling<a class="headerlink" href="#agml-cy-bench-modeling" title="Link to this heading"></a></h1>
+<p>Code companion to:</p>
+<blockquote>
+<div><div class="line-block">
+<div class="line"><strong>Benchmarking the State of AI for Crop Yield Forecasting: A Global Assessment Across Modeling Paradigms</strong></div>
+<div class="line">Michiel Kallenberg, Philip Janz, Christoph Jörges, Vageesh Saxena, Pratishtha Poudel, Mohammed Musthafa Rafi, and Ioannis N. Athanasiadis</div>
+<div class="line">(submitted to KDD ’27)</div>
+</div>
+</div></blockquote>
+<p>Interactive results: <a class="reference external" href="https://wur-ai.github.io/AgML-CY-Bench-dashboard/">wur-ai.github.io/AgML-CY-Bench-dashboard</a>.</p>
+<p>The underlying subnational yield dataset is CY-Bench (<a class="reference external" href="https://essd.copernicus.org/articles/18/3997/2026/">Kallenberg et al., ESSD 2026</a>; <a class="reference external" href="https://doi.org/10.5281/zenodo.11502142">Zenodo</a>). Dataset and data-preparation code: <a class="reference external" href="https://github.com/WUR-AI/AgML-CY-Bench">WUR-AI/AgML-CY-Bench</a>.</p>
+<hr class="docutils" />
+<section id="summary-of-the-study">
+<h2>Summary of the study<a class="headerlink" href="#summary-of-the-study" title="Link to this heading"></a></h2>
+<p>Accurate crop yield forecasting matters for food security, agricultural policy, and commodity markets. Statistical, process-based, and machine learning approaches have all been proposed, but their relative strengths remain poorly understood without large-scale, standardized comparisons.</p>
+<p>This work benchmarks <strong>five modeling paradigms</strong> on CY-Bench—<strong>63 country–crop datasets</strong> (&gt;12,000 administrative regions) across six continents:</p>
+<ol class="arabic simple">
+<li><p>Statistical baselines</p></li>
+<li><p>Process-based models</p></li>
+<li><p>Conventional feature-engineered machine learning</p></li>
+<li><p>Tabular foundation models</p></li>
+<li><p>Deep sequence models</p></li>
+</ol>
+<p>Beyond pooled accuracy, the paper uses a multi-dimensional evaluation that separately quantifies <strong>overall</strong>, <strong>spatial</strong>, <strong>temporal</strong>, and <strong>anomaly</strong> prediction skill. Models are compared under a shared protocol with in-season forecast horizons (including mid-season and end-of-season).</p>
+<section id="main-findings">
+<h3>Main findings<a class="headerlink" href="#main-findings" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Feature-engineered ML and tabular foundation models achieve the strongest overall predictive performance, though gains over simple statistical baselines are modest: data-driven models reduce NRMSE in <strong>72%</strong> of maize countries and <strong>78%</strong> of wheat countries (median reductions <strong>8.8%</strong> and <strong>11.9%</strong>).</p></li>
+<li><p>Across all paradigms, <strong>spatial</strong> prediction is substantially easier than <strong>temporal</strong> and <strong>anomaly</strong> prediction.</p></li>
+<li><p>Data-driven models markedly improve temporal and anomaly prediction over statistical baselines, yet accurately forecasting <strong>year-to-year</strong> yield variability remains challenging.</p></li>
+<li><p>Progress at scale will depend more on better characterization of the environmental and management factors that drive inter-annual variability than on paradigm choice alone.</p></li>
+</ul>
+<p>Explore country-level and cross-country results in the <a class="reference external" href="https://wur-ai.github.io/AgML-CY-Bench-dashboard/">dashboard</a>.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="this-repository">
+<h2>This repository<a class="headerlink" href="#this-repository" title="Link to this heading"></a></h2>
+<p>Implementation of the modeling and evaluation pipeline behind the paper and dashboard (experiment configuration, model families above, screening and walk-forward evaluation, analysis and visualization).</p>
+<p>For results, prefer the <a class="reference external" href="https://wur-ai.github.io/AgML-CY-Bench-dashboard/">dashboard</a> over browsing the source tree.</p>
+<section id="quick-start">
+<h3>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>install
+<span class="c1"># put CY-Bench data under cybench/data/ (see Zenodo link above)</span>
+poetry<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>cybench/runs/run_experiments.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>dataset/crop<span class="o">=</span>maize<span class="w"> </span>dataset.country<span class="o">=</span>NL<span class="w"> </span><span class="nv">model</span><span class="o">=</span>ridge<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>dataset/temporal<span class="o">=</span>feature_design<span class="w"> </span><span class="nv">validation</span><span class="o">=</span>single<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>experiment.device<span class="o">=</span>cpu<span class="w"> </span>experiment.n_repetitions<span class="o">=</span><span class="m">1</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong>Models &amp; configs:</strong> <code class="docutils literal notranslate"><span class="pre">cybench/models/</span></code> (implementations) and <code class="docutils literal notranslate"><span class="pre">cybench/conf/model/</span></code> (Hydra configs; pick a model with <code class="docutils literal notranslate"><span class="pre">model=&lt;name&gt;</span></code>).</p></li>
+<li><p><strong>Entry point:</strong> <code class="docutils literal notranslate"><span class="pre">cybench/runs/run_experiments.py</span></code> (screening / walk-forward). Cluster jobs: <code class="docutils literal notranslate"><span class="pre">cybench/runs/slurm/</span></code>.</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="links">
+<h2>Links<a class="headerlink" href="#links" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Resource</p></th>
+<th class="head"><p>URL</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Results dashboard</p></td>
+<td><p><a class="reference external" href="https://wur-ai.github.io/AgML-CY-Bench-dashboard/">https://wur-ai.github.io/AgML-CY-Bench-dashboard/</a></p></td>
+</tr>
+<tr class="row-odd"><td><p>AgML</p></td>
+<td><p><a class="reference external" href="https://www.agml.org/">https://www.agml.org/</a></p></td>
+</tr>
+<tr class="row-even"><td><p>CY-Bench dataset (ESSD)</p></td>
+<td><p><a class="reference external" href="https://essd.copernicus.org/articles/18/3997/2026/">https://essd.copernicus.org/articles/18/3997/2026/</a></p></td>
+</tr>
+<tr class="row-odd"><td><p>Dataset release</p></td>
+<td><p><a class="reference external" href="https://doi.org/10.5281/zenodo.11502142">https://doi.org/10.5281/zenodo.11502142</a></p></td>
+</tr>
+<tr class="row-even"><td><p>Dataset / data-prep repository</p></td>
+<td><p><a class="reference external" href="https://github.com/WUR-AI/AgML-CY-Bench">https://github.com/WUR-AI/AgML-CY-Bench</a></p></td>
+</tr>
+</tbody>
+</table>
+<p>A citation for this modeling paper will be added when a preprint or proceedings version is available. Please cite the <a class="reference external" href="https://essd.copernicus.org/articles/18/3997/2026/">CY-Bench dataset paper</a> when using the data.</p>
+</section>
+</section>
+<section id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Link to this heading"></a></h1>
+<ul class="simple">
+<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
+<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
+</ul>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Wageningen University and Research.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>  
+
+  <style>
+    /* Sidebar header (and topbar for mobile) */
+    .wy-side-nav-search, .wy-nav-top {
+      background: #28242c; */
+    }
+    /* Sidebar */
+    .wy-nav-side {
+      background: #124400;
+    }
+  </style>
+
+
+</body>
+</html>

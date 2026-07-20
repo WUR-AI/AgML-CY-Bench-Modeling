@@ -1,0 +1,963 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cybench.runs package &mdash; AgML-crop-yield-forecasting  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9a2dae69"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            AgML-crop-yield-forecasting
+              <img src="_static/agml-logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">cybench.runs package</a><ul>
+<li><a class="reference internal" href="#subpackages">Subpackages</a></li>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#cybench-runs-compare-screening-walk-forward-module">cybench.runs.compare_screening_walk_forward module</a></li>
+<li><a class="reference internal" href="#module-cybench.runs.run_experiments">cybench.runs.run_experiments module</a><ul>
+<li><a class="reference internal" href="#cybench.runs.run_experiments._fit_model"><code class="docutils literal notranslate"><span class="pre">_fit_model()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.run_experiments._is_torch_model"><code class="docutils literal notranslate"><span class="pre">_is_torch_model()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.run_experiments._maybe_drop_temporal_for_standalone_models"><code class="docutils literal notranslate"><span class="pre">_maybe_drop_temporal_for_standalone_models()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.run_experiments._model_target"><code class="docutils literal notranslate"><span class="pre">_model_target()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.run_experiments._prepare_screening_final_nn_cfg"><code class="docutils literal notranslate"><span class="pre">_prepare_screening_final_nn_cfg()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.run_experiments._prepare_walk_forward_nn_cfg"><code class="docutils literal notranslate"><span class="pre">_prepare_walk_forward_nn_cfg()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.run_experiments._resolve_normalizer_fit_years"><code class="docutils literal notranslate"><span class="pre">_resolve_normalizer_fit_years()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.run_experiments._store_enabled"><code class="docutils literal notranslate"><span class="pre">_store_enabled()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.runs.run_experiments.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.runs">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">AgML-crop-yield-forecasting</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">cybench.runs package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/cybench.runs.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="cybench-runs-package">
+<h1>cybench.runs package<a class="headerlink" href="#cybench-runs-package" title="Link to this heading"></a></h1>
+<section id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="cybench.runs.analysis.html">cybench.runs.analysis package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.audit_benchmark_status">cybench.runs.analysis.audit_benchmark_status module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit"><code class="docutils literal notranslate"><span class="pre">CountryAudit</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.batch_folder"><code class="docutils literal notranslate"><span class="pre">CountryAudit.batch_folder</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.collect_html"><code class="docutils literal notranslate"><span class="pre">CountryAudit.collect_html</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.country"><code class="docutils literal notranslate"><span class="pre">CountryAudit.country</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.dashboard_ready"><code class="docutils literal notranslate"><span class="pre">CountryAudit.dashboard_ready</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.dashboard_reason"><code class="docutils literal notranslate"><span class="pre">CountryAudit.dashboard_reason</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.horizon"><code class="docutils literal notranslate"><span class="pre">CountryAudit.horizon</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.monolithic_dir"><code class="docutils literal notranslate"><span class="pre">CountryAudit.monolithic_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.monolithic_screening"><code class="docutils literal notranslate"><span class="pre">CountryAudit.monolithic_screening</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.monolithic_walk_forward"><code class="docutils literal notranslate"><span class="pre">CountryAudit.monolithic_walk_forward</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.monolithic_wf_complete"><code class="docutils literal notranslate"><span class="pre">CountryAudit.monolithic_wf_complete</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.per_country_dir"><code class="docutils literal notranslate"><span class="pre">CountryAudit.per_country_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.per_country_exists"><code class="docutils literal notranslate"><span class="pre">CountryAudit.per_country_exists</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.per_country_screening"><code class="docutils literal notranslate"><span class="pre">CountryAudit.per_country_screening</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.per_country_walk_forward"><code class="docutils literal notranslate"><span class="pre">CountryAudit.per_country_walk_forward</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.per_country_wf_complete"><code class="docutils literal notranslate"><span class="pre">CountryAudit.per_country_wf_complete</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.CountryAudit.published_html"><code class="docutils literal notranslate"><span class="pre">CountryAudit.published_html</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status._count_runs"><code class="docutils literal notranslate"><span class="pre">_count_runs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status._print_audit"><code class="docutils literal notranslate"><span class="pre">_print_audit()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status._verdict"><code class="docutils literal notranslate"><span class="pre">_verdict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.audit_country"><code class="docutils literal notranslate"><span class="pre">audit_country()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.audit_benchmark_status.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.benchmark_run_catalog">cybench.runs.analysis.benchmark_run_catalog module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.BenchmarkRun"><code class="docutils literal notranslate"><span class="pre">BenchmarkRun</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.BenchmarkRun.country"><code class="docutils literal notranslate"><span class="pre">BenchmarkRun.country</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.BenchmarkRun.crop"><code class="docutils literal notranslate"><span class="pre">BenchmarkRun.crop</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.BenchmarkRun.dataset"><code class="docutils literal notranslate"><span class="pre">BenchmarkRun.dataset</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.BenchmarkRun.dataset_key"><code class="docutils literal notranslate"><span class="pre">BenchmarkRun.dataset_key</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.BenchmarkRun.horizon"><code class="docutils literal notranslate"><span class="pre">BenchmarkRun.horizon</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.BenchmarkRun.match_key"><code class="docutils literal notranslate"><span class="pre">BenchmarkRun.match_key</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.BenchmarkRun.model"><code class="docutils literal notranslate"><span class="pre">BenchmarkRun.model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.BenchmarkRun.path"><code class="docutils literal notranslate"><span class="pre">BenchmarkRun.path</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.BenchmarkRun.phase"><code class="docutils literal notranslate"><span class="pre">BenchmarkRun.phase</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.BenchmarkRun.timestamp"><code class="docutils literal notranslate"><span class="pre">BenchmarkRun.timestamp</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog._metrics_from_report_yaml"><code class="docutils literal notranslate"><span class="pre">_metrics_from_report_yaml()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog._screening_metrics_path"><code class="docutils literal notranslate"><span class="pre">_screening_metrics_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.discover_benchmark_runs"><code class="docutils literal notranslate"><span class="pre">discover_benchmark_runs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.flatten_report_metrics"><code class="docutils literal notranslate"><span class="pre">flatten_report_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.load_run_metrics"><code class="docutils literal notranslate"><span class="pre">load_run_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.parse_benchmark_run_dir"><code class="docutils literal notranslate"><span class="pre">parse_benchmark_run_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.benchmark_run_catalog.parse_group_spec"><code class="docutils literal notranslate"><span class="pre">parse_group_spec()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.build_global_insights_dashboard">cybench.runs.analysis.build_global_insights_dashboard module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.build_global_insights_dashboard.build_insights_html"><code class="docutils literal notranslate"><span class="pre">build_insights_html()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.build_global_insights_dashboard.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.build_global_insights_dashboard.write_insights_dashboard"><code class="docutils literal notranslate"><span class="pre">write_insights_dashboard()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.build_model_family_radar_dashboard">cybench.runs.analysis.build_model_family_radar_dashboard module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.build_model_family_radar_dashboard.build_radar_html"><code class="docutils literal notranslate"><span class="pre">build_radar_html()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.build_model_family_radar_dashboard.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.build_model_family_radar_dashboard.write_model_family_radar_dashboard"><code class="docutils literal notranslate"><span class="pre">write_model_family_radar_dashboard()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.collect_shap_importance">cybench.runs.analysis.collect_shap_importance module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_shap_importance._collect_case"><code class="docutils literal notranslate"><span class="pre">_collect_case()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_shap_importance._collect_discovered"><code class="docutils literal notranslate"><span class="pre">_collect_discovered()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_shap_importance._parse_models"><code class="docutils literal notranslate"><span class="pre">_parse_models()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_shap_importance._resolve_baselines_dir"><code class="docutils literal notranslate"><span class="pre">_resolve_baselines_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_shap_importance.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.collect_walk_forward_results">cybench.runs.analysis.collect_walk_forward_results module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results._apply_quality_filter"><code class="docutils literal notranslate"><span class="pre">_apply_quality_filter()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results._filter_runs"><code class="docutils literal notranslate"><span class="pre">_filter_runs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results._load_split_preds"><code class="docutils literal notranslate"><span class="pre">_load_split_preds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results._model_column_from_hydra"><code class="docutils literal notranslate"><span class="pre">_model_column_from_hydra()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results._model_column_from_repo_config"><code class="docutils literal notranslate"><span class="pre">_model_column_from_repo_config()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results._n_train_from_run_log"><code class="docutils literal notranslate"><span class="pre">_n_train_from_run_log()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results._n_train_from_split_metrics"><code class="docutils literal notranslate"><span class="pre">_n_train_from_split_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results._panel_images_for_dataset"><code class="docutils literal notranslate"><span class="pre">_panel_images_for_dataset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results._panel_search_dirs"><code class="docutils literal notranslate"><span class="pre">_panel_search_dirs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results._run_matches_horizon"><code class="docutils literal notranslate"><span class="pre">_run_matches_horizon()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.aggregate_flat_metrics_across_seeds"><code class="docutils literal notranslate"><span class="pre">aggregate_flat_metrics_across_seeds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.collect_walk_forward_run"><code class="docutils literal notranslate"><span class="pre">collect_walk_forward_run()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.discover_run_seeds"><code class="docutils literal notranslate"><span class="pre">discover_run_seeds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.export_year_csvs"><code class="docutils literal notranslate"><span class="pre">export_year_csvs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.format_aggregated_metrics"><code class="docutils literal notranslate"><span class="pre">format_aggregated_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.load_pooled_predictions"><code class="docutils literal notranslate"><span class="pre">load_pooled_predictions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.load_walk_forward_summary_metrics"><code class="docutils literal notranslate"><span class="pre">load_walk_forward_summary_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.resolve_model_column"><code class="docutils literal notranslate"><span class="pre">resolve_model_column()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.run_visualize"><code class="docutils literal notranslate"><span class="pre">run_visualize()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.summarize_walk_forward_n_train"><code class="docutils literal notranslate"><span class="pre">summarize_walk_forward_n_train()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.summary_rows_to_dashboard_records"><code class="docutils literal notranslate"><span class="pre">summary_rows_to_dashboard_records()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.walk_forward_missing_years"><code class="docutils literal notranslate"><span class="pre">walk_forward_missing_years()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.walk_forward_years_for_seed"><code class="docutils literal notranslate"><span class="pre">walk_forward_years_for_seed()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.write_dashboard_metrics_overlay"><code class="docutils literal notranslate"><span class="pre">write_dashboard_metrics_overlay()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.collect_walk_forward_results.write_model_comparison_dashboard"><code class="docutils literal notranslate"><span class="pre">write_model_comparison_dashboard()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.compare_benchmark_runs">cybench.runs.analysis.compare_benchmark_runs module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.compare_benchmark_runs._build_group_index"><code class="docutils literal notranslate"><span class="pre">_build_group_index()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.compare_benchmark_runs._diagnose_empty_comparison"><code class="docutils literal notranslate"><span class="pre">_diagnose_empty_comparison()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.compare_benchmark_runs._print_preview"><code class="docutils literal notranslate"><span class="pre">_print_preview()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.compare_benchmark_runs._print_summary"><code class="docutils literal notranslate"><span class="pre">_print_summary()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.compare_benchmark_runs.compare_groups"><code class="docutils literal notranslate"><span class="pre">compare_groups()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.compare_benchmark_runs.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.compute_shap_importance">cybench.runs.analysis.compute_shap_importance module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.compute_shap_importance._parse_models"><code class="docutils literal notranslate"><span class="pre">_parse_models()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.compute_shap_importance._parse_origins"><code class="docutils literal notranslate"><span class="pre">_parse_origins()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.compute_shap_importance.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.country_significance_lib">cybench.runs.analysis.country_significance_lib module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib._country_metric_median"><code class="docutils literal notranslate"><span class="pre">_country_metric_median()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib._fmt_ci"><code class="docutils literal notranslate"><span class="pre">_fmt_ci()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib._fmt_nrmse_pct"><code class="docutils literal notranslate"><span class="pre">_fmt_nrmse_pct()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib._fmt_num"><code class="docutils literal notranslate"><span class="pre">_fmt_num()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib._fmt_pct_rate"><code class="docutils literal notranslate"><span class="pre">_fmt_pct_rate()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib._percentile_ci"><code class="docutils literal notranslate"><span class="pre">_percentile_ci()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib._resolve_metric_column"><code class="docutils literal notranslate"><span class="pre">_resolve_metric_column()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib._seed_averaged_country_metrics"><code class="docutils literal notranslate"><span class="pre">_seed_averaged_country_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.analyze_all_crops"><code class="docutils literal notranslate"><span class="pre">analyze_all_crops()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.analyze_country_ai_benefit"><code class="docutils literal notranslate"><span class="pre">analyze_country_ai_benefit()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.bootstrap_country_ai_metrics"><code class="docutils literal notranslate"><span class="pre">bootstrap_country_ai_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.bootstrap_family_vs_naive_stats"><code class="docutils literal notranslate"><span class="pre">bootstrap_family_vs_naive_stats()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.bootstrap_one_sided_significant"><code class="docutils literal notranslate"><span class="pre">bootstrap_one_sided_significant()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.bootstrap_stats_json"><code class="docutils literal notranslate"><span class="pre">bootstrap_stats_json()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.build_country_bootstrap_payload"><code class="docutils literal notranslate"><span class="pre">build_country_bootstrap_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.build_family_vs_naive_significance"><code class="docutils literal notranslate"><span class="pre">build_family_vs_naive_significance()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.country_ai_benefit_frame"><code class="docutils literal notranslate"><span class="pre">country_ai_benefit_frame()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.empty_family_vs_naive_stats"><code class="docutils literal notranslate"><span class="pre">empty_family_vs_naive_stats()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.family_vs_naive_country_deltas"><code class="docutils literal notranslate"><span class="pre">family_vs_naive_country_deltas()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.format_results_latex_sentence"><code class="docutils literal notranslate"><span class="pre">format_results_latex_sentence()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.format_results_latex_table"><code class="docutils literal notranslate"><span class="pre">format_results_latex_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.format_results_markdown_table"><code class="docutils literal notranslate"><span class="pre">format_results_markdown_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.prepare_work_for_family_vs_naive"><code class="docutils literal notranslate"><span class="pre">prepare_work_for_family_vs_naive()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_lib.wilcoxon_two_sided_pvalue"><code class="docutils literal notranslate"><span class="pre">wilcoxon_two_sided_pvalue()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.country_significance_tests">cybench.runs.analysis.country_significance_tests module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.country_significance_tests.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.export_family_models_horizon_table">cybench.runs.analysis.export_family_models_horizon_table module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_family_models_horizon_table._format_cell"><code class="docutils literal notranslate"><span class="pre">_format_cell()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_family_models_horizon_table.build_markdown_table"><code class="docutils literal notranslate"><span class="pre">build_markdown_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_family_models_horizon_table.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.export_family_table_latex">cybench.runs.analysis.export_family_table_latex module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_family_table_latex.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.export_wide_predictions">cybench.runs.analysis.export_wide_predictions module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.CollectBundle"><code class="docutils literal notranslate"><span class="pre">CollectBundle</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.CollectBundle.country"><code class="docutils literal notranslate"><span class="pre">CollectBundle.country</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.CollectBundle.horizon"><code class="docutils literal notranslate"><span class="pre">CollectBundle.horizon</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.CollectBundle.path"><code class="docutils literal notranslate"><span class="pre">CollectBundle.path</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.CollectBundle.version"><code class="docutils literal notranslate"><span class="pre">CollectBundle.version</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions._finalize_model_frame"><code class="docutils literal notranslate"><span class="pre">_finalize_model_frame()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions._loc_column"><code class="docutils literal notranslate"><span class="pre">_loc_column()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions._target_column"><code class="docutils literal notranslate"><span class="pre">_target_column()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions._year_column"><code class="docutils literal notranslate"><span class="pre">_year_column()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions._year_csv_files"><code class="docutils literal notranslate"><span class="pre">_year_csv_files()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.build_wide_table"><code class="docutils literal notranslate"><span class="pre">build_wide_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.dedupe_prediction_rows"><code class="docutils literal notranslate"><span class="pre">dedupe_prediction_rows()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.diagnose_model_predictions"><code class="docutils literal notranslate"><span class="pre">diagnose_model_predictions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.discover_collect_bundles"><code class="docutils literal notranslate"><span class="pre">discover_collect_bundles()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.export_bundle"><code class="docutils literal notranslate"><span class="pre">export_bundle()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.load_model_predictions"><code class="docutils literal notranslate"><span class="pre">load_model_predictions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.normalize_prediction_frame"><code class="docutils literal notranslate"><span class="pre">normalize_prediction_frame()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.output_basename"><code class="docutils literal notranslate"><span class="pre">output_basename()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.print_collect_diagnosis"><code class="docutils literal notranslate"><span class="pre">print_collect_diagnosis()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.write_readme"><code class="docutils literal notranslate"><span class="pre">write_readme()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.write_wide_csv"><code class="docutils literal notranslate"><span class="pre">write_wide_csv()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.export_wide_predictions.zip_exports"><code class="docutils literal notranslate"><span class="pre">zip_exports()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.generate_collect_manifest">cybench.runs.analysis.generate_collect_manifest module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.generate_collect_manifest._resolve_targets_fast"><code class="docutils literal notranslate"><span class="pre">_resolve_targets_fast()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.generate_collect_manifest.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.global_insights_lib">cybench.runs.analysis.global_insights_lib module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._axis_metrics_for_group"><code class="docutils literal notranslate"><span class="pre">_axis_metrics_for_group()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._beat_baseline_rate"><code class="docutils literal notranslate"><span class="pre">_beat_baseline_rate()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._build_all_model_horizon_entries"><code class="docutils literal notranslate"><span class="pre">_build_all_model_horizon_entries()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._build_model_horizon_entry"><code class="docutils literal notranslate"><span class="pre">_build_model_horizon_entry()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._build_model_horizon_entry_independent"><code class="docutils literal notranslate"><span class="pre">_build_model_horizon_entry_independent()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._continent_region_id"><code class="docutils literal notranslate"><span class="pre">_continent_region_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._country_to_continent"><code class="docutils literal notranslate"><span class="pre">_country_to_continent()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._country_values_for_model"><code class="docutils literal notranslate"><span class="pre">_country_values_for_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._crop_keys"><code class="docutils literal notranslate"><span class="pre">_crop_keys()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._crop_pair_delta"><code class="docutils literal notranslate"><span class="pre">_crop_pair_delta()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._df_records"><code class="docutils literal notranslate"><span class="pre">_df_records()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._eos_only_family_points"><code class="docutils literal notranslate"><span class="pre">_eos_only_family_points()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._family_curve_points"><code class="docutils literal notranslate"><span class="pre">_family_curve_points()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._filter_summary_work"><code class="docutils literal notranslate"><span class="pre">_filter_summary_work()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._filter_work_to_countries"><code class="docutils literal notranslate"><span class="pre">_filter_work_to_countries()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._horizon_improvement_delta"><code class="docutils literal notranslate"><span class="pre">_horizon_improvement_delta()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._horizon_points_per_model_independent"><code class="docutils literal notranslate"><span class="pre">_horizon_points_per_model_independent()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._horizon_skill_axes"><code class="docutils literal notranslate"><span class="pre">_horizon_skill_axes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._median_in_group"><code class="docutils literal notranslate"><span class="pre">_median_in_group()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._median_iqr_stats"><code class="docutils literal notranslate"><span class="pre">_median_iqr_stats()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._model_country_count"><code class="docutils literal notranslate"><span class="pre">_model_country_count()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._model_family_lookup"><code class="docutils literal notranslate"><span class="pre">_model_family_lookup()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._model_median_by_country"><code class="docutils literal notranslate"><span class="pre">_model_median_by_country()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._overall_crop_pair_stats"><code class="docutils literal notranslate"><span class="pre">_overall_crop_pair_stats()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._point_metrics_from_wide_rows"><code class="docutils literal notranslate"><span class="pre">_point_metrics_from_wide_rows()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._region_country_sets"><code class="docutils literal notranslate"><span class="pre">_region_country_sets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._series_for_matrix_column"><code class="docutils literal notranslate"><span class="pre">_series_for_matrix_column()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._weighted_mean"><code class="docutils literal notranslate"><span class="pre">_weighted_mean()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._wide_country_model_crop_metrics"><code class="docutils literal notranslate"><span class="pre">_wide_country_model_crop_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib._wide_country_model_horizon_metrics"><code class="docutils literal notranslate"><span class="pre">_wide_country_model_horizon_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.aggregate_model_leaderboard"><code class="docutils literal notranslate"><span class="pre">aggregate_model_leaderboard()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.attach_baseline_metrics"><code class="docutils literal notranslate"><span class="pre">attach_baseline_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.build_continent_horizon_payload"><code class="docutils literal notranslate"><span class="pre">build_continent_horizon_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.build_continent_horizon_table"><code class="docutils literal notranslate"><span class="pre">build_continent_horizon_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.build_crop_comparison_payload"><code class="docutils literal notranslate"><span class="pre">build_crop_comparison_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.build_crop_comparison_table_payload"><code class="docutils literal notranslate"><span class="pre">build_crop_comparison_table_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.build_dashboard_hrefs"><code class="docutils literal notranslate"><span class="pre">build_dashboard_hrefs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.build_family_models_horizon_table"><code class="docutils literal notranslate"><span class="pre">build_family_models_horizon_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.build_horizon_improvement_table_payload"><code class="docutils literal notranslate"><span class="pre">build_horizon_improvement_table_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.build_horizon_skill_curves_payload"><code class="docutils literal notranslate"><span class="pre">build_horizon_skill_curves_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.build_insights_payload"><code class="docutils literal notranslate"><span class="pre">build_insights_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.build_leaderboards_by_crop"><code class="docutils literal notranslate"><span class="pre">build_leaderboards_by_crop()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.build_model_country_by_crop"><code class="docutils literal notranslate"><span class="pre">build_model_country_by_crop()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.build_model_country_matrix"><code class="docutils literal notranslate"><span class="pre">build_model_country_matrix()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.compare_crops_pairwise"><code class="docutils literal notranslate"><span class="pre">compare_crops_pairwise()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.compare_horizons"><code class="docutils literal notranslate"><span class="pre">compare_horizons()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.compat_legacy_summary_columns"><code class="docutils literal notranslate"><span class="pre">compat_legacy_summary_columns()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.dashboard_href_for_paper_dir"><code class="docutils literal notranslate"><span class="pre">dashboard_href_for_paper_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.discover_summary_tables"><code class="docutils literal notranslate"><span class="pre">discover_summary_tables()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.horizons_in_data"><code class="docutils literal notranslate"><span class="pre">horizons_in_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.is_baseline_model"><code class="docutils literal notranslate"><span class="pre">is_baseline_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.is_excluded_dashboard_model"><code class="docutils literal notranslate"><span class="pre">is_excluded_dashboard_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.load_summary_frame"><code class="docutils literal notranslate"><span class="pre">load_summary_frame()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.matrix_axes_payload"><code class="docutils literal notranslate"><span class="pre">matrix_axes_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.median_model_metrics_across_countries"><code class="docutils literal notranslate"><span class="pre">median_model_metrics_across_countries()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.parse_paper_dir_name"><code class="docutils literal notranslate"><span class="pre">parse_paper_dir_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.published_horizons_in_data"><code class="docutils literal notranslate"><span class="pre">published_horizons_in_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.quantile_model_metrics_across_countries"><code class="docutils literal notranslate"><span class="pre">quantile_model_metrics_across_countries()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.global_insights_lib.report_model_horizon_pairs"><code class="docutils literal notranslate"><span class="pre">report_model_horizon_pairs()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.index_map_lib">cybench.runs.analysis.index_map_lib module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.index_map_lib._horizon_key_from_slug"><code class="docutils literal notranslate"><span class="pre">_horizon_key_from_slug()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.index_map_lib._scale_from_shape_path"><code class="docutils literal notranslate"><span class="pre">_scale_from_shape_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.index_map_lib._version_from_slug"><code class="docutils literal notranslate"><span class="pre">_version_from_slug()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.index_map_lib.build_index_map_html"><code class="docutils literal notranslate"><span class="pre">build_index_map_html()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.index_map_lib.build_index_map_payload"><code class="docutils literal notranslate"><span class="pre">build_index_map_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.index_map_lib.build_landing_stats"><code class="docutils literal notranslate"><span class="pre">build_landing_stats()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.index_map_lib.country_display_name"><code class="docutils literal notranslate"><span class="pre">country_display_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.index_map_lib.ensure_agml_logo"><code class="docutils literal notranslate"><span class="pre">ensure_agml_logo()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.index_map_lib.ensure_world_geojson"><code class="docutils literal notranslate"><span class="pre">ensure_world_geojson()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.index_map_lib.export_world_geojson"><code class="docutils literal notranslate"><span class="pre">export_world_geojson()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.index_map_lib.group_walk_forward_entries"><code class="docutils literal notranslate"><span class="pre">group_walk_forward_entries()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.index_map_lib.map_iso_for_cybencH"><code class="docutils literal notranslate"><span class="pre">map_iso_for_cybencH()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.model_family_radar_lib">cybench.runs.analysis.model_family_radar_lib module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib._ai_benefit_map_slice"><code class="docutils literal notranslate"><span class="pre">_ai_benefit_map_slice()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib._attach_table_median_gaps"><code class="docutils literal notranslate"><span class="pre">_attach_table_median_gaps()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib._country_family_candidates"><code class="docutils literal notranslate"><span class="pre">_country_family_candidates()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib._country_median_metric"><code class="docutils literal notranslate"><span class="pre">_country_median_metric()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib._family_records"><code class="docutils literal notranslate"><span class="pre">_family_records()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib._format_metric_latex_iqr"><code class="docutils literal notranslate"><span class="pre">_format_metric_latex_iqr()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib._latex_display_name"><code class="docutils literal notranslate"><span class="pre">_latex_display_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib._latex_escape"><code class="docutils literal notranslate"><span class="pre">_latex_escape()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib._metric_cell"><code class="docutils literal notranslate"><span class="pre">_metric_cell()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib._metric_higher_is_better"><code class="docutils literal notranslate"><span class="pre">_metric_higher_is_better()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib._records_from_medians"><code class="docutils literal notranslate"><span class="pre">_records_from_medians()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib._winner_map_slice"><code class="docutils literal notranslate"><span class="pre">_winner_map_slice()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.absolute_scores"><code class="docutils literal notranslate"><span class="pre">absolute_scores()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.ai_error_reduction_pct"><code class="docutils literal notranslate"><span class="pre">ai_error_reduction_pct()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.build_ai_benefit_map_payload"><code class="docutils literal notranslate"><span class="pre">build_ai_benefit_map_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.build_family_dataset_rows"><code class="docutils literal notranslate"><span class="pre">build_family_dataset_rows()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.build_paper_family_table_latex"><code class="docutils literal notranslate"><span class="pre">build_paper_family_table_latex()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.build_paper_family_table_slice"><code class="docutils literal notranslate"><span class="pre">build_paper_family_table_slice()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.build_radar_payload"><code class="docutils literal notranslate"><span class="pre">build_radar_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.build_radar_slice"><code class="docutils literal notranslate"><span class="pre">build_radar_slice()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.build_sample_scatter_payload"><code class="docutils literal notranslate"><span class="pre">build_sample_scatter_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.build_sample_scatter_slice"><code class="docutils literal notranslate"><span class="pre">build_sample_scatter_slice()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.build_winner_map_payload"><code class="docutils literal notranslate"><span class="pre">build_winner_map_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.family_for_model"><code class="docutils literal notranslate"><span class="pre">family_for_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.is_naive_radar_model"><code class="docutils literal notranslate"><span class="pre">is_naive_radar_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.pick_representatives"><code class="docutils literal notranslate"><span class="pre">pick_representatives()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.radar_scales_payload"><code class="docutils literal notranslate"><span class="pre">radar_scales_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.relative_scores"><code class="docutils literal notranslate"><span class="pre">relative_scores()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.model_family_radar_lib.summarize_sample_scatter"><code class="docutils literal notranslate"><span class="pre">summarize_sample_scatter()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.orchestrate_dashboard_publish">cybench.runs.analysis.orchestrate_dashboard_publish module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.orchestrate_dashboard_publish._parse_force_stages"><code class="docutils literal notranslate"><span class="pre">_parse_force_stages()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.orchestrate_dashboard_publish._parse_stages"><code class="docutils literal notranslate"><span class="pre">_parse_stages()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.orchestrate_dashboard_publish.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.plot_shap_importance">cybench.runs.analysis.plot_shap_importance module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.plot_shap_importance._parse_models"><code class="docutils literal notranslate"><span class="pre">_parse_models()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.plot_shap_importance.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.publish_dashboard_bundle">cybench.runs.analysis.publish_dashboard_bundle module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.IndexEntry"><code class="docutils literal notranslate"><span class="pre">IndexEntry</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.IndexEntry.country_code"><code class="docutils literal notranslate"><span class="pre">IndexEntry.country_code</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.IndexEntry.href"><code class="docutils literal notranslate"><span class="pre">IndexEntry.href</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.IndexEntry.kind"><code class="docutils literal notranslate"><span class="pre">IndexEntry.kind</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.IndexEntry.slug"><code class="docutils literal notranslate"><span class="pre">IndexEntry.slug</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.IndexEntry.subtitle"><code class="docutils literal notranslate"><span class="pre">IndexEntry.subtitle</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.IndexEntry.title"><code class="docutils literal notranslate"><span class="pre">IndexEntry.title</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle._copy_assets"><code class="docutils literal notranslate"><span class="pre">_copy_assets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle._label_from_slug"><code class="docutils literal notranslate"><span class="pre">_label_from_slug()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle._readme_title"><code class="docutils literal notranslate"><span class="pre">_readme_title()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle._resolve_html_and_assets"><code class="docutils literal notranslate"><span class="pre">_resolve_html_and_assets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle._subtitle_from_slug"><code class="docutils literal notranslate"><span class="pre">_subtitle_from_slug()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle._version_from_slug"><code class="docutils literal notranslate"><span class="pre">_version_from_slug()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.build_index_html"><code class="docutils literal notranslate"><span class="pre">build_index_html()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.build_index_html_cards"><code class="docutils literal notranslate"><span class="pre">build_index_html_cards()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.discover_index_entries"><code class="docutils literal notranslate"><span class="pre">discover_index_entries()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.estimate_publish_bundle_size"><code class="docutils literal notranslate"><span class="pre">estimate_publish_bundle_size()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.parse_publish_slug"><code class="docutils literal notranslate"><span class="pre">parse_publish_slug()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.prune_obsolete_dashboard_dirs"><code class="docutils literal notranslate"><span class="pre">prune_obsolete_dashboard_dirs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.publish_bundle"><code class="docutils literal notranslate"><span class="pre">publish_bundle()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.report_publish_bundle_size"><code class="docutils literal notranslate"><span class="pre">report_publish_bundle_size()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_dashboard_bundle.update_index"><code class="docutils literal notranslate"><span class="pre">update_index()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.publish_pipeline_lib">cybench.runs.analysis.publish_pipeline_lib module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PipelineDefaults"><code class="docutils literal notranslate"><span class="pre">PipelineDefaults</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PipelineDefaults.min_run_fraction"><code class="docutils literal notranslate"><span class="pre">PipelineDefaults.min_run_fraction</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PipelineDefaults.output_root"><code class="docutils literal notranslate"><span class="pre">PipelineDefaults.output_root</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PipelineDefaults.publish_root"><code class="docutils literal notranslate"><span class="pre">PipelineDefaults.publish_root</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PipelineDefaults.repo_root"><code class="docutils literal notranslate"><span class="pre">PipelineDefaults.repo_root</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PipelineDefaults.version"><code class="docutils literal notranslate"><span class="pre">PipelineDefaults.version</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget"><code class="docutils literal notranslate"><span class="pre">PublishTarget</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.baselines_dir"><code class="docutils literal notranslate"><span class="pre">PublishTarget.baselines_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.batch_horizon"><code class="docutils literal notranslate"><span class="pre">PublishTarget.batch_horizon</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.batch_name"><code class="docutils literal notranslate"><span class="pre">PublishTarget.batch_name</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.collect_dir"><code class="docutils literal notranslate"><span class="pre">PublishTarget.collect_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.country"><code class="docutils literal notranslate"><span class="pre">PublishTarget.country</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.country_lower"><code class="docutils literal notranslate"><span class="pre">PublishTarget.country_lower</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.country_upper"><code class="docutils literal notranslate"><span class="pre">PublishTarget.country_upper</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.default_title"><code class="docutils literal notranslate"><span class="pre">PublishTarget.default_title()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.horizon_tags"><code class="docutils literal notranslate"><span class="pre">PublishTarget.horizon_tags</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.min_run_fraction"><code class="docutils literal notranslate"><span class="pre">PublishTarget.min_run_fraction</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.output_root"><code class="docutils literal notranslate"><span class="pre">PublishTarget.output_root</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.publish_dir"><code class="docutils literal notranslate"><span class="pre">PublishTarget.publish_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.publish_root"><code class="docutils literal notranslate"><span class="pre">PublishTarget.publish_root</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.publish_slug"><code class="docutils literal notranslate"><span class="pre">PublishTarget.publish_slug</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.repo_root"><code class="docutils literal notranslate"><span class="pre">PublishTarget.repo_root</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.title"><code class="docutils literal notranslate"><span class="pre">PublishTarget.title</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.PublishTarget.version"><code class="docutils literal notranslate"><span class="pre">PublishTarget.version</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.ReadinessReport"><code class="docutils literal notranslate"><span class="pre">ReadinessReport</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.ReadinessReport.complete_runs"><code class="docutils literal notranslate"><span class="pre">ReadinessReport.complete_runs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.ReadinessReport.expected_runs"><code class="docutils literal notranslate"><span class="pre">ReadinessReport.expected_runs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.ReadinessReport.ready"><code class="docutils literal notranslate"><span class="pre">ReadinessReport.ready</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.ReadinessReport.reason"><code class="docutils literal notranslate"><span class="pre">ReadinessReport.reason</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.ReadinessReport.target"><code class="docutils literal notranslate"><span class="pre">ReadinessReport.target</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.StageStatus"><code class="docutils literal notranslate"><span class="pre">StageStatus</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.StageStatus.message"><code class="docutils literal notranslate"><span class="pre">StageStatus.message</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.StageStatus.skipped"><code class="docutils literal notranslate"><span class="pre">StageStatus.skipped</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.StageStatus.stage"><code class="docutils literal notranslate"><span class="pre">StageStatus.stage</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib._complete_walk_forward_runs"><code class="docutils literal notranslate"><span class="pre">_complete_walk_forward_runs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib._explicit_targets_from_config"><code class="docutils literal notranslate"><span class="pre">_explicit_targets_from_config()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib._read_json"><code class="docutils literal notranslate"><span class="pre">_read_json()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib._summary_row_count"><code class="docutils literal notranslate"><span class="pre">_summary_row_count()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib._utc_now_iso"><code class="docutils literal notranslate"><span class="pre">_utc_now_iso()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib._write_json"><code class="docutils literal notranslate"><span class="pre">_write_json()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.assess_publish_readiness"><code class="docutils literal notranslate"><span class="pre">assess_publish_readiness()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.assess_readiness"><code class="docutils literal notranslate"><span class="pre">assess_readiness()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.baselines_fingerprint"><code class="docutils literal notranslate"><span class="pre">baselines_fingerprint()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.collect_state_path"><code class="docutils literal notranslate"><span class="pre">collect_state_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.count_complete_walk_forward_runs"><code class="docutils literal notranslate"><span class="pre">count_complete_walk_forward_runs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.discover_baselines_batches"><code class="docutils literal notranslate"><span class="pre">discover_baselines_batches()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.discover_baselines_batches_fast"><code class="docutils literal notranslate"><span class="pre">discover_baselines_batches_fast()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.discover_paper_walk_forward_targets"><code class="docutils literal notranslate"><span class="pre">discover_paper_walk_forward_targets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.expected_job_count"><code class="docutils literal notranslate"><span class="pre">expected_job_count()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.filter_publish_targets"><code class="docutils literal notranslate"><span class="pre">filter_publish_targets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.filter_ready_targets"><code class="docutils literal notranslate"><span class="pre">filter_ready_targets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.git_commit_all"><code class="docutils literal notranslate"><span class="pre">git_commit_all()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.git_commit_paths"><code class="docutils literal notranslate"><span class="pre">git_commit_paths()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.has_walk_forward_runs_fast"><code class="docutils literal notranslate"><span class="pre">has_walk_forward_runs_fast()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.horizon_to_batch_suffix"><code class="docutils literal notranslate"><span class="pre">horizon_to_batch_suffix()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.load_pipeline_defaults"><code class="docutils literal notranslate"><span class="pre">load_pipeline_defaults()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.load_targets_from_config"><code class="docutils literal notranslate"><span class="pre">load_targets_from_config()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.needs_collect"><code class="docutils literal notranslate"><span class="pre">needs_collect()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.needs_publish"><code class="docutils literal notranslate"><span class="pre">needs_publish()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.parse_batch_dir_name"><code class="docutils literal notranslate"><span class="pre">parse_batch_dir_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.publish_state_path"><code class="docutils literal notranslate"><span class="pre">publish_state_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.resolve_collect_baselines_dir"><code class="docutils literal notranslate"><span class="pre">resolve_collect_baselines_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.resolve_targets"><code class="docutils literal notranslate"><span class="pre">resolve_targets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.run_collect_stage"><code class="docutils literal notranslate"><span class="pre">run_collect_stage()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.run_collect_subprocess"><code class="docutils literal notranslate"><span class="pre">run_collect_subprocess()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.run_commit_stage"><code class="docutils literal notranslate"><span class="pre">run_commit_stage()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.run_index_stage"><code class="docutils literal notranslate"><span class="pre">run_index_stage()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.publish_pipeline_lib.run_publish_stage"><code class="docutils literal notranslate"><span class="pre">run_publish_stage()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.refresh_dashboard_views">cybench.runs.analysis.refresh_dashboard_views module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.refresh_dashboard_views.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.refresh_dashboard_views.paper_dirs"><code class="docutils literal notranslate"><span class="pre">paper_dirs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.refresh_dashboard_views.publish_slug"><code class="docutils literal notranslate"><span class="pre">publish_slug()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.refresh_dashboard_views.refresh_one"><code class="docutils literal notranslate"><span class="pre">refresh_one()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.report_model_horizons">cybench.runs.analysis.report_model_horizons module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.report_model_horizons._print_report"><code class="docutils literal notranslate"><span class="pre">_print_report()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.report_model_horizons.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.shap_dashboard_lib">cybench.runs.analysis.shap_dashboard_lib module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardEntry"><code class="docutils literal notranslate"><span class="pre">ShapDashboardEntry</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardEntry.country"><code class="docutils literal notranslate"><span class="pre">ShapDashboardEntry.country</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardEntry.crop"><code class="docutils literal notranslate"><span class="pre">ShapDashboardEntry.crop</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardEntry.dataset"><code class="docutils literal notranslate"><span class="pre">ShapDashboardEntry.dataset</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardEntry.explainer"><code class="docutils literal notranslate"><span class="pre">ShapDashboardEntry.explainer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardEntry.horizon"><code class="docutils literal notranslate"><span class="pre">ShapDashboardEntry.horizon</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardEntry.meta_groups"><code class="docutils literal notranslate"><span class="pre">ShapDashboardEntry.meta_groups</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardEntry.model"><code class="docutils literal notranslate"><span class="pre">ShapDashboardEntry.model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardEntry.model_label"><code class="docutils literal notranslate"><span class="pre">ShapDashboardEntry.model_label</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardEntry.n_origins"><code class="docutils literal notranslate"><span class="pre">ShapDashboardEntry.n_origins</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardEntry.top_features"><code class="docutils literal notranslate"><span class="pre">ShapDashboardEntry.top_features</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardPayload"><code class="docutils literal notranslate"><span class="pre">ShapDashboardPayload</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardPayload.available"><code class="docutils literal notranslate"><span class="pre">ShapDashboardPayload.available</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardPayload.by_key"><code class="docutils literal notranslate"><span class="pre">ShapDashboardPayload.by_key</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapDashboardPayload.shap_dir"><code class="docutils literal notranslate"><span class="pre">ShapDashboardPayload.shap_dir</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapFeatureEntry"><code class="docutils literal notranslate"><span class="pre">ShapFeatureEntry</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapFeatureEntry.mean_abs_shap"><code class="docutils literal notranslate"><span class="pre">ShapFeatureEntry.mean_abs_shap</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapFeatureEntry.name"><code class="docutils literal notranslate"><span class="pre">ShapFeatureEntry.name</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapFeatureEntry.rank"><code class="docutils literal notranslate"><span class="pre">ShapFeatureEntry.rank</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapMetaGroupEntry"><code class="docutils literal notranslate"><span class="pre">ShapMetaGroupEntry</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapMetaGroupEntry.name"><code class="docutils literal notranslate"><span class="pre">ShapMetaGroupEntry.name</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.ShapMetaGroupEntry.share_pct"><code class="docutils literal notranslate"><span class="pre">ShapMetaGroupEntry.share_pct</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib._aggregate_top_features"><code class="docutils literal notranslate"><span class="pre">_aggregate_top_features()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib._batch_dir_name"><code class="docutils literal notranslate"><span class="pre">_batch_dir_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib._dashboard_key"><code class="docutils literal notranslate"><span class="pre">_dashboard_key()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib._explainer_from_summary"><code class="docutils literal notranslate"><span class="pre">_explainer_from_summary()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib._find_summary_path"><code class="docutils literal notranslate"><span class="pre">_find_summary_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib._summary_path"><code class="docutils literal notranslate"><span class="pre">_summary_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.build_shap_dashboard_payload"><code class="docutils literal notranslate"><span class="pre">build_shap_dashboard_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.resolve_shap_input_dir"><code class="docutils literal notranslate"><span class="pre">resolve_shap_input_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.resolve_shap_input_dirs"><code class="docutils literal notranslate"><span class="pre">resolve_shap_input_dirs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_dashboard_lib.write_shap_sidecar"><code class="docutils literal notranslate"><span class="pre">write_shap_sidecar()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.shap_importance_lib">cybench.runs.analysis.shap_importance_lib module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.FeatureRank"><code class="docutils literal notranslate"><span class="pre">FeatureRank</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.FeatureRank.mean_abs_shap"><code class="docutils literal notranslate"><span class="pre">FeatureRank.mean_abs_shap</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.FeatureRank.name"><code class="docutils literal notranslate"><span class="pre">FeatureRank.name</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.FeatureRank.rank"><code class="docutils literal notranslate"><span class="pre">FeatureRank.rank</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.InterpretabilitySpec"><code class="docutils literal notranslate"><span class="pre">InterpretabilitySpec</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.InterpretabilitySpec.explainer_label"><code class="docutils literal notranslate"><span class="pre">InterpretabilitySpec.explainer_label</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.InterpretabilitySpec.method"><code class="docutils literal notranslate"><span class="pre">InterpretabilitySpec.method</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ModelManifestEntry"><code class="docutils literal notranslate"><span class="pre">ModelManifestEntry</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ModelManifestEntry.feature_design"><code class="docutils literal notranslate"><span class="pre">ModelManifestEntry.feature_design</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ModelManifestEntry.framework"><code class="docutils literal notranslate"><span class="pre">ModelManifestEntry.framework</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ModelManifestEntry.needs_gpu"><code class="docutils literal notranslate"><span class="pre">ModelManifestEntry.needs_gpu</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.PandasShapPayload"><code class="docutils literal notranslate"><span class="pre">PandasShapPayload</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.PandasShapPayload.explainer"><code class="docutils literal notranslate"><span class="pre">PandasShapPayload.explainer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.PandasShapPayload.features"><code class="docutils literal notranslate"><span class="pre">PandasShapPayload.features</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.PandasShapPayload.model"><code class="docutils literal notranslate"><span class="pre">PandasShapPayload.model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.PandasShapPayload.native_importance"><code class="docutils literal notranslate"><span class="pre">PandasShapPayload.native_importance</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproduceOriginRecord"><code class="docutils literal notranslate"><span class="pre">ReproduceOriginRecord</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproduceOriginRecord.country"><code class="docutils literal notranslate"><span class="pre">ReproduceOriginRecord.country</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproduceOriginRecord.crop"><code class="docutils literal notranslate"><span class="pre">ReproduceOriginRecord.crop</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproduceOriginRecord.from_scratch"><code class="docutils literal notranslate"><span class="pre">ReproduceOriginRecord.from_scratch</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproduceOriginRecord.horizon"><code class="docutils literal notranslate"><span class="pre">ReproduceOriginRecord.horizon</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproduceOriginRecord.model"><code class="docutils literal notranslate"><span class="pre">ReproduceOriginRecord.model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproduceOriginRecord.n_test"><code class="docutils literal notranslate"><span class="pre">ReproduceOriginRecord.n_test</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproduceOriginRecord.n_train"><code class="docutils literal notranslate"><span class="pre">ReproduceOriginRecord.n_train</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproduceOriginRecord.reproduction"><code class="docutils literal notranslate"><span class="pre">ReproduceOriginRecord.reproduction</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproduceOriginRecord.seed"><code class="docutils literal notranslate"><span class="pre">ReproduceOriginRecord.seed</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproduceOriginRecord.test_years"><code class="docutils literal notranslate"><span class="pre">ReproduceOriginRecord.test_years</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproduceOriginRecord.train_years"><code class="docutils literal notranslate"><span class="pre">ReproduceOriginRecord.train_years</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproduceOriginRecord.within_run"><code class="docutils literal notranslate"><span class="pre">ReproduceOriginRecord.within_run</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproductionStats"><code class="docutils literal notranslate"><span class="pre">ReproductionStats</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproductionStats.corr_saved_preds"><code class="docutils literal notranslate"><span class="pre">ReproductionStats.corr_saved_preds</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ReproductionStats.max_abs_pred_diff"><code class="docutils literal notranslate"><span class="pre">ReproductionStats.max_abs_pred_diff</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCaseSummary"><code class="docutils literal notranslate"><span class="pre">ShapCaseSummary</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCaseSummary.country"><code class="docutils literal notranslate"><span class="pre">ShapCaseSummary.country</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCaseSummary.crop"><code class="docutils literal notranslate"><span class="pre">ShapCaseSummary.crop</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCaseSummary.frozen_screening_dir"><code class="docutils literal notranslate"><span class="pre">ShapCaseSummary.frozen_screening_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCaseSummary.horizon"><code class="docutils literal notranslate"><span class="pre">ShapCaseSummary.horizon</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCaseSummary.model"><code class="docutils literal notranslate"><span class="pre">ShapCaseSummary.model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCaseSummary.n_origins"><code class="docutils literal notranslate"><span class="pre">ShapCaseSummary.n_origins</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCaseSummary.origins"><code class="docutils literal notranslate"><span class="pre">ShapCaseSummary.origins</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCaseSummary.seed"><code class="docutils literal notranslate"><span class="pre">ShapCaseSummary.seed</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCaseSummary.walk_forward_run_dir"><code class="docutils literal notranslate"><span class="pre">ShapCaseSummary.walk_forward_run_dir</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCollectCase"><code class="docutils literal notranslate"><span class="pre">ShapCollectCase</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCollectCase.country"><code class="docutils literal notranslate"><span class="pre">ShapCollectCase.country</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCollectCase.crop"><code class="docutils literal notranslate"><span class="pre">ShapCollectCase.crop</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCollectCase.horizon_tag"><code class="docutils literal notranslate"><span class="pre">ShapCollectCase.horizon_tag</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCollectCase.models"><code class="docutils literal notranslate"><span class="pre">ShapCollectCase.models</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCollectCase.n_origins"><code class="docutils literal notranslate"><span class="pre">ShapCollectCase.n_origins</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapCollectCase.output_dir"><code class="docutils literal notranslate"><span class="pre">ShapCollectCase.output_dir</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.country"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.country</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.crop"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.crop</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.explainer"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.explainer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.features"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.features</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.horizon"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.horizon</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.model"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.n_test"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.n_test</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.n_train"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.n_train</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.native_importance"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.native_importance</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.reproduction"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.reproduction</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.seed"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.seed</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.temporal_aggregation"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.temporal_aggregation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.test_years"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.test_years</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapOriginRecord.train_years"><code class="docutils literal notranslate"><span class="pre">ShapOriginRecord.train_years</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.baselines_dir"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.baselines_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.country"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.country</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.crop"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.crop</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.force_cpu"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.force_cpu</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.horizon"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.horizon</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.max_background"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.max_background</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.max_eval_samples"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.max_eval_samples</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.model"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.model</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.permutation_repeats"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.permutation_repeats</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.screening_split_dir"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.screening_split_dir</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.seed"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.seed</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.shapiq_budget"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.shapiq_budget</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.test_years"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.test_years</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.use_cache"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.use_cache</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.ShapRunSpec.walk_forward_run_dir"><code class="docutils literal notranslate"><span class="pre">ShapRunSpec.walk_forward_run_dir</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.TorchShapPayload"><code class="docutils literal notranslate"><span class="pre">TorchShapPayload</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.TorchShapPayload.explainer"><code class="docutils literal notranslate"><span class="pre">TorchShapPayload.explainer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.TorchShapPayload.features"><code class="docutils literal notranslate"><span class="pre">TorchShapPayload.features</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.TorchShapPayload.temporal_aggregation"><code class="docutils literal notranslate"><span class="pre">TorchShapPayload.temporal_aggregation</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.WithinRunStats"><code class="docutils literal notranslate"><span class="pre">WithinRunStats</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.WithinRunStats.max_abs_pred_diff"><code class="docutils literal notranslate"><span class="pre">WithinRunStats.max_abs_pred_diff</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.WithinRunStats.mean_abs_pred_diff"><code class="docutils literal notranslate"><span class="pre">WithinRunStats.mean_abs_pred_diff</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.WithinRunStats.repeats"><code class="docutils literal notranslate"><span class="pre">WithinRunStats.repeats</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._aggregate_shapiq_first_order"><code class="docutils literal notranslate"><span class="pre">_aggregate_shapiq_first_order()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._collapse_abs_shap"><code class="docutils literal notranslate"><span class="pre">_collapse_abs_shap()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._compute_sklearn_permutation_importance"><code class="docutils literal notranslate"><span class="pre">_compute_sklearn_permutation_importance()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._compute_tabpfn_shapley_importance"><code class="docutils literal notranslate"><span class="pre">_compute_tabpfn_shapley_importance()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._dataset_row_indices"><code class="docutils literal notranslate"><span class="pre">_dataset_row_indices()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._fit_and_predict_at_origin"><code class="docutils literal notranslate"><span class="pre">_fit_and_predict_at_origin()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._horizon_tag"><code class="docutils literal notranslate"><span class="pre">_horizon_tag()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._is_torch_model"><code class="docutils literal notranslate"><span class="pre">_is_torch_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._mean_abs_feature_importance"><code class="docutils literal notranslate"><span class="pre">_mean_abs_feature_importance()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._native_rf_importance"><code class="docutils literal notranslate"><span class="pre">_native_rf_importance()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._prepare_model_cfg"><code class="docutils literal notranslate"><span class="pre">_prepare_model_cfg()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._rank_features"><code class="docutils literal notranslate"><span class="pre">_rank_features()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._require_tabular_train_arrays"><code class="docutils literal notranslate"><span class="pre">_require_tabular_train_arrays()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._subsample_indices"><code class="docutils literal notranslate"><span class="pre">_subsample_indices()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib._sum_abs_over_time_feature_importance"><code class="docutils literal notranslate"><span class="pre">_sum_abs_over_time_feature_importance()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.aggregate_feature_importance"><code class="docutils literal notranslate"><span class="pre">aggregate_feature_importance()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.build_dataset"><code class="docutils literal notranslate"><span class="pre">build_dataset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.coalesce_onehot_feature_name"><code class="docutils literal notranslate"><span class="pre">coalesce_onehot_feature_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.coalesce_onehot_shap_ranks"><code class="docutils literal notranslate"><span class="pre">coalesce_onehot_shap_ranks()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.collect_shap_case_dir"><code class="docutils literal notranslate"><span class="pre">collect_shap_case_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.collect_shap_output_dir"><code class="docutils literal notranslate"><span class="pre">collect_shap_output_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.compose_dataset_overrides"><code class="docutils literal notranslate"><span class="pre">compose_dataset_overrides()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.compute_shap_pandas"><code class="docutils literal notranslate"><span class="pre">compute_shap_pandas()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.compute_shap_torch"><code class="docutils literal notranslate"><span class="pre">compute_shap_torch()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.configure_shap_job_logging"><code class="docutils literal notranslate"><span class="pre">configure_shap_job_logging()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.discover_origin_record_paths"><code class="docutils literal notranslate"><span class="pre">discover_origin_record_paths()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.discover_shap_collect_cases"><code class="docutils literal notranslate"><span class="pre">discover_shap_collect_cases()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.find_saved_model_artifact"><code class="docutils literal notranslate"><span class="pre">find_saved_model_artifact()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.find_screening_split_dir"><code class="docutils literal notranslate"><span class="pre">find_screening_split_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.find_walk_forward_run_dir"><code class="docutils literal notranslate"><span class="pre">find_walk_forward_run_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.fit_at_origin"><code class="docutils literal notranslate"><span class="pre">fit_at_origin()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.gather_origin_records"><code class="docutils literal notranslate"><span class="pre">gather_origin_records()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.interpretability_for_model"><code class="docutils literal notranslate"><span class="pre">interpretability_for_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.iter_walk_forward_origins"><code class="docutils literal notranslate"><span class="pre">iter_walk_forward_origins()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.load_origin_record"><code class="docutils literal notranslate"><span class="pre">load_origin_record()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.load_saved_walk_forward_model"><code class="docutils literal notranslate"><span class="pre">load_saved_walk_forward_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.model_run_name"><code class="docutils literal notranslate"><span class="pre">model_run_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.reproduce_walk_forward_origin"><code class="docutils literal notranslate"><span class="pre">reproduce_walk_forward_origin()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.resolve_model_at_origin"><code class="docutils literal notranslate"><span class="pre">resolve_model_at_origin()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.resolve_shap_paths"><code class="docutils literal notranslate"><span class="pre">resolve_shap_paths()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.resolve_shap_sample_limits"><code class="docutils literal notranslate"><span class="pre">resolve_shap_sample_limits()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.run_origin_shap"><code class="docutils literal notranslate"><span class="pre">run_origin_shap()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.run_shap_case"><code class="docutils literal notranslate"><span class="pre">run_shap_case()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.verify_predictions"><code class="docutils literal notranslate"><span class="pre">verify_predictions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_importance_lib.write_model_shap_summary"><code class="docutils literal notranslate"><span class="pre">write_model_shap_summary()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.shap_plot_lib">cybench.runs.analysis.shap_plot_lib module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.ParsedFeature"><code class="docutils literal notranslate"><span class="pre">ParsedFeature</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.ParsedFeature.channel"><code class="docutils literal notranslate"><span class="pre">ParsedFeature.channel</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.ParsedFeature.meta_group"><code class="docutils literal notranslate"><span class="pre">ParsedFeature.meta_group</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.ParsedFeature.raw"><code class="docutils literal notranslate"><span class="pre">ParsedFeature.raw</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.ParsedFeature.statistic"><code class="docutils literal notranslate"><span class="pre">ParsedFeature.statistic</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.ParsedFeature.variable_group"><code class="docutils literal notranslate"><span class="pre">ParsedFeature.variable_group</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.ParsedFeature.window"><code class="docutils literal notranslate"><span class="pre">ParsedFeature.window</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib._median_by_keys"><code class="docutils literal notranslate"><span class="pre">_median_by_keys()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib._model_panel_order"><code class="docutils literal notranslate"><span class="pre">_model_panel_order()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.chrono_window_columns"><code class="docutils literal notranslate"><span class="pre">chrono_window_columns()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.discover_shap_summaries"><code class="docutils literal notranslate"><span class="pre">discover_shap_summaries()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.export_tables"><code class="docutils literal notranslate"><span class="pre">export_tables()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.feature_rows_from_summary"><code class="docutils literal notranslate"><span class="pre">feature_rows_from_summary()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.load_feature_table"><code class="docutils literal notranslate"><span class="pre">load_feature_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.load_shap_summary"><code class="docutils literal notranslate"><span class="pre">load_shap_summary()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.meta_group_consistency"><code class="docutils literal notranslate"><span class="pre">meta_group_consistency()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.meta_group_shares"><code class="docutils literal notranslate"><span class="pre">meta_group_shares()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.parse_feature_name"><code class="docutils literal notranslate"><span class="pre">parse_feature_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.plot_meta_group_families"><code class="docutils literal notranslate"><span class="pre">plot_meta_group_families()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.plot_timing_heatmaps"><code class="docutils literal notranslate"><span class="pre">plot_timing_heatmaps()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.timing_table"><code class="docutils literal notranslate"><span class="pre">timing_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.shap_plot_lib.window_relative_to_eos"><code class="docutils literal notranslate"><span class="pre">window_relative_to_eos()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.single_origin_multi_year_eval">cybench.runs.analysis.single_origin_multi_year_eval module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.single_origin_multi_year_eval._flatten_metrics"><code class="docutils literal notranslate"><span class="pre">_flatten_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.single_origin_multi_year_eval._normalize_horizon"><code class="docutils literal notranslate"><span class="pre">_normalize_horizon()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.single_origin_multi_year_eval._preds_dataframe"><code class="docutils literal notranslate"><span class="pre">_preds_dataframe()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.single_origin_multi_year_eval._print_comparison"><code class="docutils literal notranslate"><span class="pre">_print_comparison()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.single_origin_multi_year_eval.evaluate_single_origin"><code class="docutils literal notranslate"><span class="pre">evaluate_single_origin()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.single_origin_multi_year_eval.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis.verify_walk_forward_reproduction">cybench.runs.analysis.verify_walk_forward_reproduction module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.analysis.html#cybench.runs.analysis.verify_walk_forward_reproduction.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.analysis.html#module-cybench.runs.analysis">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cybench.runs.legacy.html">cybench.runs.legacy package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.legacy.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.legacy.html#module-cybench.runs.legacy.benchmark_summary">cybench.runs.legacy.benchmark_summary module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.legacy.html#cybench.runs.legacy.benchmark_summary._load_dataset"><code class="docutils literal notranslate"><span class="pre">_load_dataset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.legacy.html#cybench.runs.legacy.benchmark_summary.dataset_summary"><code class="docutils literal notranslate"><span class="pre">dataset_summary()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.legacy.html#cybench.runs.legacy.benchmark_summary.run_benchmark_summary"><code class="docutils literal notranslate"><span class="pre">run_benchmark_summary()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.legacy.html#cybench-runs-legacy-process-results-module">cybench.runs.legacy.process_results module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.legacy.html#cybench-runs-legacy-results-plots-module">cybench.runs.legacy.results_plots module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.legacy.html#cybench-runs-legacy-visualize-results-module">cybench.runs.legacy.visualize_results module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.legacy.html#module-cybench.runs.legacy">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cybench.runs.viz.html">cybench.runs.viz package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.viz.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.viz.html#module-cybench.runs.viz.build_results_dashboard">cybench.runs.viz.build_results_dashboard module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.SourceConfig"><code class="docutils literal notranslate"><span class="pre">SourceConfig</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.SourceConfig.model_name"><code class="docutils literal notranslate"><span class="pre">SourceConfig.model_name</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.SourceConfig.results_dir"><code class="docutils literal notranslate"><span class="pre">SourceConfig.results_dir</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard._extract_js_json_assignment"><code class="docutils literal notranslate"><span class="pre">_extract_js_json_assignment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard._view_metric_values_from_report"><code class="docutils literal notranslate"><span class="pre">_view_metric_values_from_report()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard._view_metric_values_from_stats"><code class="docutils literal notranslate"><span class="pre">_view_metric_values_from_stats()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.build_html"><code class="docutils literal notranslate"><span class="pre">build_html()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.bundle_referenced_assets"><code class="docutils literal notranslate"><span class="pre">bundle_referenced_assets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.calc_nrmse"><code class="docutils literal notranslate"><span class="pre">calc_nrmse()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.calc_r_r2"><code class="docutils literal notranslate"><span class="pre">calc_r_r2()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.discover_run_dirs"><code class="docutils literal notranslate"><span class="pre">discover_run_dirs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.discover_stats_json"><code class="docutils literal notranslate"><span class="pre">discover_stats_json()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.generate_assets_for_runs"><code class="docutils literal notranslate"><span class="pre">generate_assets_for_runs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.get_prediction_column"><code class="docutils literal notranslate"><span class="pre">get_prediction_column()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.infer_prediction_col_for_run"><code class="docutils literal notranslate"><span class="pre">infer_prediction_col_for_run()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.load_records"><code class="docutils literal notranslate"><span class="pre">load_records()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.load_records_from_runs_root"><code class="docutils literal notranslate"><span class="pre">load_records_from_runs_root()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.parse_run_dir_name"><code class="docutils literal notranslate"><span class="pre">parse_run_dir_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.parse_source"><code class="docutils literal notranslate"><span class="pre">parse_source()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.restamp_dashboard_html"><code class="docutils literal notranslate"><span class="pre">restamp_dashboard_html()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.build_results_dashboard.safe_float"><code class="docutils literal notranslate"><span class="pre">safe_float()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.viz.html#module-cybench.runs.viz.region_map_lib">cybench.runs.viz.region_map_lib module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.region_map_lib.benchmark_locs_by_country"><code class="docutils literal notranslate"><span class="pre">benchmark_locs_by_country()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.region_map_lib.build_region_map_payload"><code class="docutils literal notranslate"><span class="pre">build_region_map_payload()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.region_map_lib.bundle_region_map_assets"><code class="docutils literal notranslate"><span class="pre">bundle_region_map_assets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.region_map_lib.dataset_country_code"><code class="docutils literal notranslate"><span class="pre">dataset_country_code()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.region_map_lib.dataset_crop"><code class="docutils literal notranslate"><span class="pre">dataset_crop()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.region_map_lib.export_region_geojson"><code class="docutils literal notranslate"><span class="pre">export_region_geojson()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.region_map_lib.infer_pred_column"><code class="docutils literal notranslate"><span class="pre">infer_pred_column()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.region_map_lib.load_dataset_year_csvs"><code class="docutils literal notranslate"><span class="pre">load_dataset_year_csvs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.region_map_lib.preds_dir_for_row"><code class="docutils literal notranslate"><span class="pre">preds_dir_for_row()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.region_map_lib.prepare_geometry_for_geojson"><code class="docutils literal notranslate"><span class="pre">prepare_geometry_for_geojson()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.region_map_lib.region_means"><code class="docutils literal notranslate"><span class="pre">region_means()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.region_map_lib.region_values_by_year"><code class="docutils literal notranslate"><span class="pre">region_values_by_year()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.region_map_lib.write_region_map_sidecar"><code class="docutils literal notranslate"><span class="pre">write_region_map_sidecar()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.viz.html#module-cybench.runs.viz.visualize_results_aggregated">cybench.runs.viz.visualize_results_aggregated module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated._as_float_array"><code class="docutils literal notranslate"><span class="pre">_as_float_array()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated._complete_rows_mask"><code class="docutils literal notranslate"><span class="pre">_complete_rows_mask()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated._index_as_list"><code class="docutils literal notranslate"><span class="pre">_index_as_list()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated._load_dashboard_metrics_overlay"><code class="docutils literal notranslate"><span class="pre">_load_dashboard_metrics_overlay()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated._panel_export_bbox"><code class="docutils literal notranslate"><span class="pre">_panel_export_bbox()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated._plot_mean_std_band"><code class="docutils literal notranslate"><span class="pre">_plot_mean_std_band()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated._plot_scatter_panel"><code class="docutils literal notranslate"><span class="pre">_plot_scatter_panel()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated._region_year_metrics_from_overlay"><code class="docutils literal notranslate"><span class="pre">_region_year_metrics_from_overlay()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated._series_int_at"><code class="docutils literal notranslate"><span class="pre">_series_int_at()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated._yearly_cross_region_stats"><code class="docutils literal notranslate"><span class="pre">_yearly_cross_region_stats()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated.discover_inputs"><code class="docutils literal notranslate"><span class="pre">discover_inputs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated.generate_html_table"><code class="docutils literal notranslate"><span class="pre">generate_html_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated.generate_local_report_html"><code class="docutils literal notranslate"><span class="pre">generate_local_report_html()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated.generate_markdown_table"><code class="docutils literal notranslate"><span class="pre">generate_markdown_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated.load_and_clean_data"><code class="docutils literal notranslate"><span class="pre">load_and_clean_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated.parse_panels"><code class="docutils literal notranslate"><span class="pre">parse_panels()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated.process_dataset"><code class="docutils literal notranslate"><span class="pre">process_dataset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="cybench.runs.viz.html#cybench.runs.viz.visualize_results_aggregated.save_panel_images"><code class="docutils literal notranslate"><span class="pre">save_panel_images()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cybench.runs.viz.html#module-cybench.runs.viz">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="cybench-runs-compare-screening-walk-forward-module">
+<h2>cybench.runs.compare_screening_walk_forward module<a class="headerlink" href="#cybench-runs-compare-screening-walk-forward-module" title="Link to this heading"></a></h2>
+</section>
+<section id="module-cybench.runs.run_experiments">
+<span id="cybench-runs-run-experiments-module"></span><h2>cybench.runs.run_experiments module<a class="headerlink" href="#module-cybench.runs.run_experiments" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.run_experiments._fit_model">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.run_experiments.</span></span><span class="sig-name descname"><span class="pre">_fit_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_dataset</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">walk_forward_nn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cybench.runs.run_experiments._fit_model" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.run_experiments._is_torch_model">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.run_experiments.</span></span><span class="sig-name descname"><span class="pre">_is_torch_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_cfg</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cybench.runs.run_experiments._is_torch_model" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.run_experiments._maybe_drop_temporal_for_standalone_models">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.run_experiments.</span></span><span class="sig-name descname"><span class="pre">_maybe_drop_temporal_for_standalone_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.run_experiments._maybe_drop_temporal_for_standalone_models" title="Link to this definition"></a></dt>
+<dd><p>Standalone baselines (average yield, LPJmL) do not use time-series predictors.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.run_experiments._model_target">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.run_experiments.</span></span><span class="sig-name descname"><span class="pre">_model_target</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cybench.runs.run_experiments._model_target" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.run_experiments._prepare_screening_final_nn_cfg">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.run_experiments.</span></span><span class="sig-name descname"><span class="pre">_prepare_screening_final_nn_cfg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">E_star</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DictConfig</span></span></span><a class="headerlink" href="#cybench.runs.run_experiments._prepare_screening_final_nn_cfg" title="Link to this definition"></a></dt>
+<dd><p>Screening final fit: train on train+val for exactly E* epochs (no val early stopping).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.run_experiments._prepare_walk_forward_nn_cfg">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.run_experiments.</span></span><span class="sig-name descname"><span class="pre">_prepare_walk_forward_nn_cfg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">E_star</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DictConfig</span></span></span><a class="headerlink" href="#cybench.runs.run_experiments._prepare_walk_forward_nn_cfg" title="Link to this definition"></a></dt>
+<dd><p>Walk-forward: at most E* epochs, early stop on training loss if converged.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.run_experiments._resolve_normalizer_fit_years">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.run_experiments.</span></span><span class="sig-name descname"><span class="pre">_resolve_normalizer_fit_years</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.runs.run_experiments._resolve_normalizer_fit_years" title="Link to this definition"></a></dt>
+<dd><p>Fit normalization on screening train ∪ val only (exclude test block).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.run_experiments._store_enabled">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.run_experiments.</span></span><span class="sig-name descname"><span class="pre">_store_enabled</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cybench.runs.run_experiments._store_enabled" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.runs.run_experiments.main">
+<span class="sig-prename descclassname"><span class="pre">cybench.runs.run_experiments.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cybench.runs.run_experiments.main" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-cybench.runs">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-cybench.runs" title="Link to this heading"></a></h2>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Wageningen University and Research.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>  
+
+  <style>
+    /* Sidebar header (and topbar for mobile) */
+    .wy-side-nav-search, .wy-nav-top {
+      background: #28242c; */
+    }
+    /* Sidebar */
+    .wy-nav-side {
+      background: #124400;
+    }
+  </style>
+
+
+</body>
+</html>

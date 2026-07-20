@@ -1,0 +1,45 @@
+cybench.runs.legacy package
+===========================
+
+Submodules
+----------
+
+cybench.runs.legacy.benchmark\_summary module
+---------------------------------------------
+
+.. automodule:: cybench.runs.legacy.benchmark_summary
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.legacy.process\_results module
+-------------------------------------------
+
+.. automodule:: cybench.runs.legacy.process_results
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.legacy.results\_plots module
+-----------------------------------------
+
+.. automodule:: cybench.runs.legacy.results_plots
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.legacy.visualize\_results module
+---------------------------------------------
+
+.. automodule:: cybench.runs.legacy.visualize_results
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: cybench.runs.legacy
+   :members:
+   :undoc-members:
+   :show-inheritance:

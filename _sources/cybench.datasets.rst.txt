@@ -1,0 +1,77 @@
+cybench.datasets package
+========================
+
+Submodules
+----------
+
+cybench.datasets.alignment module
+---------------------------------
+
+.. automodule:: cybench.datasets.alignment
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.datasets.data\_factory module
+-------------------------------------
+
+.. automodule:: cybench.datasets.data_factory
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.datasets.dataset module
+-------------------------------
+
+.. automodule:: cybench.datasets.dataset
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.datasets.feature\_design module
+---------------------------------------
+
+.. automodule:: cybench.datasets.feature_design
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.datasets.feature\_transformation module
+-----------------------------------------------
+
+.. automodule:: cybench.datasets.feature_transformation
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.datasets.normalizer module
+----------------------------------
+
+.. automodule:: cybench.datasets.normalizer
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.datasets.torch\_dataset module
+--------------------------------------
+
+.. automodule:: cybench.datasets.torch_dataset
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.datasets.yield\_quality module
+--------------------------------------
+
+.. automodule:: cybench.datasets.yield_quality
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: cybench.datasets
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -1,0 +1,101 @@
+cybench.models package
+======================
+
+Submodules
+----------
+
+cybench.models.baseline\_csv\_paths module
+------------------------------------------
+
+.. automodule:: cybench.models.baseline_csv_paths
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.models.gradient\_boosting\_models module
+------------------------------------------------
+
+.. automodule:: cybench.models.gradient_boosting_models
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.models.lpjml\_model module
+----------------------------------
+
+.. automodule:: cybench.models.lpjml_model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.models.model module
+---------------------------
+
+.. automodule:: cybench.models.model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.models.naive\_models module
+-----------------------------------
+
+.. automodule:: cybench.models.naive_models
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.models.persistence module
+---------------------------------
+
+.. automodule:: cybench.models.persistence
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.models.sklearn\_models module
+-------------------------------------
+
+.. automodule:: cybench.models.sklearn_models
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.models.tabpfn\_model module
+-----------------------------------
+
+.. automodule:: cybench.models.tabpfn_model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.models.tabular\_foundation\_model module
+------------------------------------------------
+
+.. automodule:: cybench.models.tabular_foundation_model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.models.trend\_models module
+-----------------------------------
+
+.. automodule:: cybench.models.trend_models
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.models.twso\_model module
+---------------------------------
+
+.. automodule:: cybench.models.twso_model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: cybench.models
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -1,0 +1,237 @@
+cybench.runs.analysis package
+=============================
+
+Submodules
+----------
+
+cybench.runs.analysis.audit\_benchmark\_status module
+-----------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.audit_benchmark_status
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.benchmark\_run\_catalog module
+----------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.benchmark_run_catalog
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.build\_global\_insights\_dashboard module
+---------------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.build_global_insights_dashboard
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.build\_model\_family\_radar\_dashboard module
+-------------------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.build_model_family_radar_dashboard
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.collect\_shap\_importance module
+------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.collect_shap_importance
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.collect\_walk\_forward\_results module
+------------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.collect_walk_forward_results
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.compare\_benchmark\_runs module
+-----------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.compare_benchmark_runs
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.compute\_shap\_importance module
+------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.compute_shap_importance
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.country\_significance\_lib module
+-------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.country_significance_lib
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.country\_significance\_tests module
+---------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.country_significance_tests
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.export\_family\_models\_horizon\_table module
+-------------------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.export_family_models_horizon_table
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.export\_family\_table\_latex module
+---------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.export_family_table_latex
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.export\_wide\_predictions module
+------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.export_wide_predictions
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.generate\_collect\_manifest module
+--------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.generate_collect_manifest
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.global\_insights\_lib module
+--------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.global_insights_lib
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.index\_map\_lib module
+--------------------------------------------
+
+.. automodule:: cybench.runs.analysis.index_map_lib
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.model\_family\_radar\_lib module
+------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.model_family_radar_lib
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.orchestrate\_dashboard\_publish module
+------------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.orchestrate_dashboard_publish
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.plot\_shap\_importance module
+---------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.plot_shap_importance
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.publish\_dashboard\_bundle module
+-------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.publish_dashboard_bundle
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.publish\_pipeline\_lib module
+---------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.publish_pipeline_lib
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.refresh\_dashboard\_views module
+------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.refresh_dashboard_views
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.report\_model\_horizons module
+----------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.report_model_horizons
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.shap\_dashboard\_lib module
+-------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.shap_dashboard_lib
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.shap\_importance\_lib module
+--------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.shap_importance_lib
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.shap\_plot\_lib module
+--------------------------------------------
+
+.. automodule:: cybench.runs.analysis.shap_plot_lib
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.single\_origin\_multi\_year\_eval module
+--------------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.single_origin_multi_year_eval
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.analysis.verify\_walk\_forward\_reproduction module
+----------------------------------------------------------------
+
+.. automodule:: cybench.runs.analysis.verify_walk_forward_reproduction
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: cybench.runs.analysis
+   :members:
+   :undoc-members:
+   :show-inheritance:

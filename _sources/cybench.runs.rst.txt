@@ -1,0 +1,39 @@
+cybench.runs package
+====================
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   cybench.runs.analysis
+   cybench.runs.legacy
+   cybench.runs.viz
+
+Submodules
+----------
+
+cybench.runs.compare\_screening\_walk\_forward module
+-----------------------------------------------------
+
+.. automodule:: cybench.runs.compare_screening_walk_forward
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.runs.run\_experiments module
+------------------------------------
+
+.. automodule:: cybench.runs.run_experiments
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: cybench.runs
+   :members:
+   :undoc-members:
+   :show-inheritance:

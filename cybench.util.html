@@ -1,0 +1,797 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cybench.util package &mdash; AgML-crop-yield-forecasting  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.png"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9a2dae69"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            AgML-crop-yield-forecasting
+              <img src="_static/agml-logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">cybench.util package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-cybench.util.benchmark_scope">cybench.util.benchmark_scope module</a><ul>
+<li><a class="reference internal" href="#cybench.util.benchmark_scope._full_screening_ok_cached"><code class="docutils literal notranslate"><span class="pre">_full_screening_ok_cached()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.benchmark_scope._load_yield_years"><code class="docutils literal notranslate"><span class="pre">_load_yield_years()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.benchmark_scope.benchmark_crop_country_key"><code class="docutils literal notranslate"><span class="pre">benchmark_crop_country_key()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.benchmark_scope.benchmark_evaluation_exclusion_reason"><code class="docutils literal notranslate"><span class="pre">benchmark_evaluation_exclusion_reason()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.benchmark_scope.is_benchmark_evaluation_country"><code class="docutils literal notranslate"><span class="pre">is_benchmark_evaluation_country()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.benchmark_scope.is_benchmark_evaluation_crop_country"><code class="docutils literal notranslate"><span class="pre">is_benchmark_evaluation_crop_country()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.util.config_utils">cybench.util.config_utils module</a><ul>
+<li><a class="reference internal" href="#cybench.util.config_utils.adjust_model_cfg_to_dataset"><code class="docutils literal notranslate"><span class="pre">adjust_model_cfg_to_dataset()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.config_utils.apply_force_cpu_to_frozen_model_cfg"><code class="docutils literal notranslate"><span class="pre">apply_force_cpu_to_frozen_model_cfg()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.config_utils.deterministic_torch_training"><code class="docutils literal notranslate"><span class="pre">deterministic_torch_training()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.config_utils.get_run_description"><code class="docutils literal notranslate"><span class="pre">get_run_description()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.config_utils.is_cybench_force_cpu"><code class="docutils literal notranslate"><span class="pre">is_cybench_force_cpu()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.config_utils.reload_config_with_overrides"><code class="docutils literal notranslate"><span class="pre">reload_config_with_overrides()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.config_utils.remove_keys"><code class="docutils literal notranslate"><span class="pre">remove_keys()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.config_utils.remove_search_keys"><code class="docutils literal notranslate"><span class="pre">remove_search_keys()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.config_utils.set_seed"><code class="docutils literal notranslate"><span class="pre">set_seed()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.config_utils.walk_forward_force_cpu"><code class="docutils literal notranslate"><span class="pre">walk_forward_force_cpu()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.util.data">cybench.util.data module</a><ul>
+<li><a class="reference internal" href="#cybench.util.data.data_to_pandas"><code class="docutils literal notranslate"><span class="pre">data_to_pandas()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.data.trim_time_series_data"><code class="docutils literal notranslate"><span class="pre">trim_time_series_data()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.util.feature_selection">cybench.util.feature_selection module</a><ul>
+<li><a class="reference internal" href="#cybench.util.feature_selection._drop_zero_variance_columns"><code class="docutils literal notranslate"><span class="pre">_drop_zero_variance_columns()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.feature_selection._filter_columns_by_coverage"><code class="docutils literal notranslate"><span class="pre">_filter_columns_by_coverage()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.feature_selection._target_series"><code class="docutils literal notranslate"><span class="pre">_target_series()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.feature_selection.apply_mrmr_at_origin"><code class="docutils literal notranslate"><span class="pre">apply_mrmr_at_origin()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.feature_selection.fit_mrmr_on_years"><code class="docutils literal notranslate"><span class="pre">fit_mrmr_on_years()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.feature_selection.resolved_feature_selection_cfg"><code class="docutils literal notranslate"><span class="pre">resolved_feature_selection_cfg()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.feature_selection.save_selected_features"><code class="docutils literal notranslate"><span class="pre">save_selected_features()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.feature_selection.select_mrmr_features"><code class="docutils literal notranslate"><span class="pre">select_mrmr_features()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.util.geo">cybench.util.geo module</a><ul>
+<li><a class="reference internal" href="#cybench.util.geo._explode_metropolitan_map_units"><code class="docutils literal notranslate"><span class="pre">_explode_metropolitan_map_units()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.geo._normalize_world_iso"><code class="docutils literal notranslate"><span class="pre">_normalize_world_iso()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.geo.explode_metropolitan_map_units"><code class="docutils literal notranslate"><span class="pre">explode_metropolitan_map_units()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.geo.filter_gdf_to_mainland"><code class="docutils literal notranslate"><span class="pre">filter_gdf_to_mainland()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.geo.get_country_border_gdf"><code class="docutils literal notranslate"><span class="pre">get_country_border_gdf()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.geo.get_shapes_from_polygons"><code class="docutils literal notranslate"><span class="pre">get_shapes_from_polygons()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.geo.mainland_bbox_for_country"><code class="docutils literal notranslate"><span class="pre">mainland_bbox_for_country()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.geo.map_iso_for_country"><code class="docutils literal notranslate"><span class="pre">map_iso_for_country()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.geo.world_shape_path"><code class="docutils literal notranslate"><span class="pre">world_shape_path()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.util.optuna_hyper_opt">cybench.util.optuna_hyper_opt module</a><ul>
+<li><a class="reference internal" href="#cybench.util.optuna_hyper_opt.OptunaOptimizer"><code class="docutils literal notranslate"><span class="pre">OptunaOptimizer</span></code></a><ul>
+<li><a class="reference internal" href="#cybench.util.optuna_hyper_opt.OptunaOptimizer._assign_gpu"><code class="docutils literal notranslate"><span class="pre">OptunaOptimizer._assign_gpu()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.optuna_hyper_opt.OptunaOptimizer._objective"><code class="docutils literal notranslate"><span class="pre">OptunaOptimizer._objective()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.optuna_hyper_opt.OptunaOptimizer._release_gpu"><code class="docutils literal notranslate"><span class="pre">OptunaOptimizer._release_gpu()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.optuna_hyper_opt.OptunaOptimizer._resolve_search_space"><code class="docutils literal notranslate"><span class="pre">OptunaOptimizer._resolve_search_space()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.optuna_hyper_opt.OptunaOptimizer.optimize"><code class="docutils literal notranslate"><span class="pre">OptunaOptimizer.optimize()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#cybench.util.optuna_hyper_opt.SequentialPruner"><code class="docutils literal notranslate"><span class="pre">SequentialPruner</span></code></a><ul>
+<li><a class="reference internal" href="#cybench.util.optuna_hyper_opt.SequentialPruner._abc_impl"><code class="docutils literal notranslate"><span class="pre">SequentialPruner._abc_impl</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.optuna_hyper_opt.SequentialPruner.prune"><code class="docutils literal notranslate"><span class="pre">SequentialPruner.prune()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#cybench.util.optuna_hyper_opt._extract_search_space"><code class="docutils literal notranslate"><span class="pre">_extract_search_space()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.optuna_hyper_opt.build_pruner"><code class="docutils literal notranslate"><span class="pre">build_pruner()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.optuna_hyper_opt.load_previous_best_trials"><code class="docutils literal notranslate"><span class="pre">load_previous_best_trials()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.util.prediction_horizon">cybench.util.prediction_horizon module</a><ul>
+<li><a class="reference internal" href="#cybench.util.prediction_horizon.parse_run_name_suffix"><code class="docutils literal notranslate"><span class="pre">parse_run_name_suffix()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.prediction_horizon.prediction_horizon_tag"><code class="docutils literal notranslate"><span class="pre">prediction_horizon_tag()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.util.screening_artifacts">cybench.util.screening_artifacts module</a><ul>
+<li><a class="reference internal" href="#cybench.util.screening_artifacts.load_frozen_screening_artifacts"><code class="docutils literal notranslate"><span class="pre">load_frozen_screening_artifacts()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.screening_artifacts.load_optimal_epochs"><code class="docutils literal notranslate"><span class="pre">load_optimal_epochs()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.screening_artifacts.save_optimal_epochs"><code class="docutils literal notranslate"><span class="pre">save_optimal_epochs()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.util.store_and_cache">cybench.util.store_and_cache module</a><ul>
+<li><a class="reference internal" href="#cybench.util.store_and_cache._dataset_indices"><code class="docutils literal notranslate"><span class="pre">_dataset_indices()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.store_and_cache.cfg_to_hash"><code class="docutils literal notranslate"><span class="pre">cfg_to_hash()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.store_and_cache.make_folder"><code class="docutils literal notranslate"><span class="pre">make_folder()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.store_and_cache.save_meta_dict"><code class="docutils literal notranslate"><span class="pre">save_meta_dict()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.store_and_cache.save_preds"><code class="docutils literal notranslate"><span class="pre">save_preds()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.util.validation">cybench.util.validation module</a><ul>
+<li><a class="reference internal" href="#cybench.util.validation._as_python_years"><code class="docutils literal notranslate"><span class="pre">_as_python_years()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.validation._resolve_hold_out_years"><code class="docutils literal notranslate"><span class="pre">_resolve_hold_out_years()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.validation._sorted_years"><code class="docutils literal notranslate"><span class="pre">_sorted_years()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.validation._val_window_size"><code class="docutils literal notranslate"><span class="pre">_val_window_size()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.validation.check_full_benchmark_screening_years"><code class="docutils literal notranslate"><span class="pre">check_full_benchmark_screening_years()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.validation.check_screening_years"><code class="docutils literal notranslate"><span class="pre">check_screening_years()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.validation.default_screening_validation_cfg"><code class="docutils literal notranslate"><span class="pre">default_screening_validation_cfg()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.validation.default_walk_forward_validation_cfg"><code class="docutils literal notranslate"><span class="pre">default_walk_forward_validation_cfg()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.validation.expected_walk_forward_test_years"><code class="docutils literal notranslate"><span class="pre">expected_walk_forward_test_years()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.validation.get_screening_partitions"><code class="docutils literal notranslate"><span class="pre">get_screening_partitions()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.validation.get_screening_pre_test_years"><code class="docutils literal notranslate"><span class="pre">get_screening_pre_test_years()</span></code></a></li>
+<li><a class="reference internal" href="#cybench.util.validation.get_splits"><code class="docutils literal notranslate"><span class="pre">get_splits()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-cybench.util">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">AgML-crop-yield-forecasting</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">cybench.util package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/cybench.util.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="cybench-util-package">
+<h1>cybench.util package<a class="headerlink" href="#cybench-util-package" title="Link to this heading"></a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="module-cybench.util.benchmark_scope">
+<span id="cybench-util-benchmark-scope-module"></span><h2>cybench.util.benchmark_scope module<a class="headerlink" href="#module-cybench.util.benchmark_scope" title="Link to this heading"></a></h2>
+<p>Crop×country pairs included in benchmark evaluation outputs.</p>
+<p>Pairs must support the full screening layout (5 test + 2 val + ≥1 train years).</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.benchmark_scope._full_screening_ok_cached">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.benchmark_scope.</span></span><span class="sig-name descname"><span class="pre">_full_screening_ok_cached</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">crop</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">country</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cybench.util.benchmark_scope._full_screening_ok_cached" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.benchmark_scope._load_yield_years">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.benchmark_scope.</span></span><span class="sig-name descname"><span class="pre">_load_yield_years</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">crop</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">country</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_year</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_year</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2024</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">set</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.benchmark_scope._load_yield_years" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.benchmark_scope.benchmark_crop_country_key">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.benchmark_scope.</span></span><span class="sig-name descname"><span class="pre">benchmark_crop_country_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">crop</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">country</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.benchmark_scope.benchmark_crop_country_key" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.benchmark_scope.benchmark_evaluation_exclusion_reason">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.benchmark_scope.</span></span><span class="sig-name descname"><span class="pre">benchmark_evaluation_exclusion_reason</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">crop</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">country</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">years</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">set</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.util.benchmark_scope.benchmark_evaluation_exclusion_reason" title="Link to this definition"></a></dt>
+<dd><p>Human-readable reason when a pair is excluded; None if included.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.benchmark_scope.is_benchmark_evaluation_country">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.benchmark_scope.</span></span><span class="sig-name descname"><span class="pre">is_benchmark_evaluation_country</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">country</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cybench.util.benchmark_scope.is_benchmark_evaluation_country" title="Link to this definition"></a></dt>
+<dd><p>True when a country has at least one included crop×country pair.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.benchmark_scope.is_benchmark_evaluation_crop_country">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.benchmark_scope.</span></span><span class="sig-name descname"><span class="pre">is_benchmark_evaluation_crop_country</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">crop</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">country</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">years</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">set</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cybench.util.benchmark_scope.is_benchmark_evaluation_crop_country" title="Link to this definition"></a></dt>
+<dd><p>Return True when crop×country has the full benchmark screening test window.</p>
+<p>When yield tables are missing on disk, returns True (cannot verify exclusion).</p>
+</dd></dl>
+
+</section>
+<section id="module-cybench.util.config_utils">
+<span id="cybench-util-config-utils-module"></span><h2>cybench.util.config_utils module<a class="headerlink" href="#module-cybench.util.config_utils" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.config_utils.adjust_model_cfg_to_dataset">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.config_utils.</span></span><span class="sig-name descname"><span class="pre">adjust_model_cfg_to_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="cybench.datasets.html#cybench.datasets.dataset.BaseDataset" title="cybench.datasets.dataset.BaseDataset"><span class="pre">BaseDataset</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DictConfig</span></span></span><a class="headerlink" href="#cybench.util.config_utils.adjust_model_cfg_to_dataset" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.config_utils.apply_force_cpu_to_frozen_model_cfg">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.config_utils.</span></span><span class="sig-name descname"><span class="pre">apply_force_cpu_to_frozen_model_cfg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DictConfig</span></span></span><a class="headerlink" href="#cybench.util.config_utils.apply_force_cpu_to_frozen_model_cfg" title="Link to this definition"></a></dt>
+<dd><p>Override device fields baked into screening optimal_model.yaml for CPU runs.</p>
+<p>Walk-forward loads the frozen config wholesale; without this, TabDPT and other
+GPU-screened models keep device=cuda even on the main partition.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.config_utils.deterministic_torch_training">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.config_utils.</span></span><span class="sig-name descname"><span class="pre">deterministic_torch_training</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.config_utils.deterministic_torch_training" title="Link to this definition"></a></dt>
+<dd><p>Tighten PyTorch determinism for the training loop only.</p>
+<p>Uses warn_only=True so unsupported ops keep working. Single-threaded CPU
+matmuls avoid BLAS races; cost is small on typical CY-Bench batch sizes.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.config_utils.get_run_description">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.config_utils.</span></span><span class="sig-name descname"><span class="pre">get_run_description</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overrides_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cybench.util.config_utils.get_run_description" title="Link to this definition"></a></dt>
+<dd><p>Loads and formats the list of Hydra overrides into a unique string.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.config_utils.is_cybench_force_cpu">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.config_utils.</span></span><span class="sig-name descname"><span class="pre">is_cybench_force_cpu</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cybench.util.config_utils.is_cybench_force_cpu" title="Link to this definition"></a></dt>
+<dd><p>True when Slurm submit_array.sh –cpu exported CYBENCH_FORCE_CPU=1.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.config_utils.reload_config_with_overrides">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.config_utils.</span></span><span class="sig-name descname"><span class="pre">reload_config_with_overrides</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overrides</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DictConfig</span></span></span><a class="headerlink" href="#cybench.util.config_utils.reload_config_with_overrides" title="Link to this definition"></a></dt>
+<dd><p>Reload Hydra config with new overrides (e.g., processor=lstm).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config_dir</strong> – Path to config directory</p></li>
+<li><p><strong>config_name</strong> – Name of main config file</p></li>
+<li><p><strong>overrides</strong> – List of Hydra overrides like [“model/processor=lstm”]</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.config_utils.remove_keys">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.config_utils.</span></span><span class="sig-name descname"><span class="pre">remove_keys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'_search_'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DictConfig</span></span></span><a class="headerlink" href="#cybench.util.config_utils.remove_keys" title="Link to this definition"></a></dt>
+<dd><p>Recursively remove _search_ keys from config before instantiation. Only important for hyperparameter search.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.config_utils.remove_search_keys">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.config_utils.</span></span><span class="sig-name descname"><span class="pre">remove_search_keys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DictConfig</span></span></span><a class="headerlink" href="#cybench.util.config_utils.remove_search_keys" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.config_utils.set_seed">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.config_utils.</span></span><span class="sig-name descname"><span class="pre">set_seed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">42</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cybench.util.config_utils.set_seed" title="Link to this definition"></a></dt>
+<dd><p>Seed Python/NumPy/PyTorch RNGs for reproducible training.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.config_utils.walk_forward_force_cpu">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.config_utils.</span></span><span class="sig-name descname"><span class="pre">walk_forward_force_cpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cybench.util.config_utils.walk_forward_force_cpu" title="Link to this definition"></a></dt>
+<dd><p>Whether walk-forward should override device in frozen optimal_model.yaml.</p>
+</dd></dl>
+
+</section>
+<section id="module-cybench.util.data">
+<span id="cybench-util-data-module"></span><h2>cybench.util.data module<a class="headerlink" href="#module-cybench.util.data" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.data.data_to_pandas">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.data.</span></span><span class="sig-name descname"><span class="pre">data_to_pandas</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_items</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_cols</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cybench.util.data.data_to_pandas" title="Link to this definition"></a></dt>
+<dd><p>Convert data items as dict to pandas DataFrame</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data_items</strong> – list of data items, each of which is a dict</p></li>
+<li><p><strong>data_cols</strong> – list of keys to include as columns</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.data.trim_time_series_data">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.data.</span></span><span class="sig-name descname"><span class="pre">trim_time_series_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sample</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_time_steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_series_keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cybench.util.data.trim_time_series_data" title="Link to this definition"></a></dt>
+<dd><p>Trims time series data to provided number of time steps</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sample</strong> (<em>dict</em>) – key is name, value is np.ndarray</p></li>
+<li><p><strong>num_time_steps</strong> (<em>int</em>) – number of time steps to keep</p></li>
+<li><p><strong>time_series_keys</strong> (<em>list</em>) – keys for time series data</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the same sample with modified data</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-cybench.util.feature_selection">
+<span id="cybench-util-feature-selection-module"></span><h2>cybench.util.feature_selection module<a class="headerlink" href="#module-cybench.util.feature_selection" title="Link to this heading"></a></h2>
+<p>Feature selection utilities (mRMR at each forecast origin).</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.feature_selection._drop_zero_variance_columns">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.feature_selection.</span></span><span class="sig-name descname"><span class="pre">_drop_zero_variance_columns</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#cybench.util.feature_selection._drop_zero_variance_columns" title="Link to this definition"></a></dt>
+<dd><p>Drop columns with zero variance on the given training rows.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.feature_selection._filter_columns_by_coverage">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.feature_selection.</span></span><span class="sig-name descname"><span class="pre">_filter_columns_by_coverage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_nan_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#cybench.util.feature_selection._filter_columns_by_coverage" title="Link to this definition"></a></dt>
+<dd><p>Keep columns with at most <code class="docutils literal notranslate"><span class="pre">max_nan_rate</span></code> missing values in this training slice.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.feature_selection._target_series">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.feature_selection.</span></span><span class="sig-name descname"><span class="pre">_target_series</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Series</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">DataFrame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Series</span></span></span><a class="headerlink" href="#cybench.util.feature_selection._target_series" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.feature_selection.apply_mrmr_at_origin">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.feature_selection.</span></span><span class="sig-name descname"><span class="pre">apply_mrmr_at_origin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="cybench.datasets.html#cybench.datasets.dataset.PandasDataset" title="cybench.datasets.dataset.PandasDataset"><span class="pre">PandasDataset</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_years</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fs_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="cybench.datasets.html#cybench.datasets.dataset.PandasDataset" title="cybench.datasets.dataset.PandasDataset"><span class="pre">PandasDataset</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">eval_dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="cybench.datasets.html#cybench.datasets.dataset.PandasDataset" title="cybench.datasets.dataset.PandasDataset"><span class="pre">PandasDataset</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="cybench.datasets.html#cybench.datasets.dataset.PandasDataset" title="cybench.datasets.dataset.PandasDataset"><span class="pre">PandasDataset</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="cybench.datasets.html#cybench.datasets.dataset.PandasDataset" title="cybench.datasets.dataset.PandasDataset"><span class="pre">PandasDataset</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.feature_selection.apply_mrmr_at_origin" title="Link to this definition"></a></dt>
+<dd><p>Fit mRMR on the current training window; subset train and eval pools.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.feature_selection.fit_mrmr_on_years">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.feature_selection.</span></span><span class="sig-name descname"><span class="pre">fit_mrmr_on_years</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="cybench.datasets.html#cybench.datasets.dataset.PandasDataset" title="cybench.datasets.dataset.PandasDataset"><span class="pre">PandasDataset</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_years</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fs_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.feature_selection.fit_mrmr_on_years" title="Link to this definition"></a></dt>
+<dd><p>Fit mRMR using only rows from <code class="docutils literal notranslate"><span class="pre">train_years</span></code> (supervised selection).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.feature_selection.resolved_feature_selection_cfg">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.feature_selection.</span></span><span class="sig-name descname"><span class="pre">resolved_feature_selection_cfg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DictConfig</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.util.feature_selection.resolved_feature_selection_cfg" title="Link to this definition"></a></dt>
+<dd><p>Return feature-selection config with any <code class="docutils literal notranslate"><span class="pre">_search_</span></code> keys stripped.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.feature_selection.save_selected_features">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.feature_selection.</span></span><span class="sig-name descname"><span class="pre">save_selected_features</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">selected</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fs_cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_years</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.util.feature_selection.save_selected_features" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.feature_selection.select_mrmr_features">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.feature_selection.</span></span><span class="sig-name descname"><span class="pre">select_mrmr_features</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Series</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'FCD'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_nan_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.05</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.feature_selection.select_mrmr_features" title="Link to this definition"></a></dt>
+<dd><p>Run feature-engine MRMR and return selected column names in selection order.</p>
+</dd></dl>
+
+</section>
+<section id="module-cybench.util.geo">
+<span id="cybench-util-geo-module"></span><h2>cybench.util.geo module<a class="headerlink" href="#module-cybench.util.geo" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.geo._explode_metropolitan_map_units">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.geo.</span></span><span class="sig-name descname"><span class="pre">_explode_metropolitan_map_units</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">frame</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">GeoDataFrame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">GeoDataFrame</span></span></span><a class="headerlink" href="#cybench.util.geo._explode_metropolitan_map_units" title="Link to this definition"></a></dt>
+<dd><p>Explode multipolygons; re-tag overseas parts so they are not included in borders.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.geo._normalize_world_iso">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.geo.</span></span><span class="sig-name descname"><span class="pre">_normalize_world_iso</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">world</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">GeoDataFrame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">GeoDataFrame</span></span></span><a class="headerlink" href="#cybench.util.geo._normalize_world_iso" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.geo.explode_metropolitan_map_units">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.geo.</span></span><span class="sig-name descname"><span class="pre">explode_metropolitan_map_units</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">frame</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">GeoDataFrame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">GeoDataFrame</span></span></span><a class="headerlink" href="#cybench.util.geo.explode_metropolitan_map_units" title="Link to this definition"></a></dt>
+<dd><p>Explode multipolygons; re-tag overseas parts (e.g. Alaska, French Guiana) as XX.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.geo.filter_gdf_to_mainland">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.geo.</span></span><span class="sig-name descname"><span class="pre">filter_gdf_to_mainland</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">GeoDataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">country_code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">GeoDataFrame</span></span></span><a class="headerlink" href="#cybench.util.geo.filter_gdf_to_mainland" title="Link to this definition"></a></dt>
+<dd><p>Keep admin units whose centroid lies in the metropolitan map extent.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.geo.get_country_border_gdf">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.geo.</span></span><span class="sig-name descname"><span class="pre">get_country_border_gdf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">country_code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'110'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">GeoDataFrame</span></span></span><a class="headerlink" href="#cybench.util.geo.get_country_border_gdf" title="Link to this definition"></a></dt>
+<dd><p>Natural Earth admin-0 outline for one CY-Bench country (metropolitan where applicable).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.geo.get_shapes_from_polygons">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.geo.</span></span><span class="sig-name descname"><span class="pre">get_shapes_from_polygons</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">region</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cybench.util.geo.get_shapes_from_polygons" title="Link to this definition"></a></dt>
+<dd><p>Load administrative boundaries from the polygons folder.</p>
+<dl class="simple">
+<dt>Folder structure assumed:</dt><dd><p>POLYGONS_DIR/COUNTRY/COUNTRY.shp</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>region</strong> – 2-letter country code</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>GeoDataFrame with an ‘adm_id’ column</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.geo.mainland_bbox_for_country">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.geo.</span></span><span class="sig-name descname"><span class="pre">mainland_bbox_for_country</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">country_code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.util.geo.mainland_bbox_for_country" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.geo.map_iso_for_country">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.geo.</span></span><span class="sig-name descname"><span class="pre">map_iso_for_country</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">country_code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cybench.util.geo.map_iso_for_country" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.geo.world_shape_path">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.geo.</span></span><span class="sig-name descname"><span class="pre">world_shape_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cybench.util.geo.world_shape_path" title="Link to this definition"></a></dt>
+<dd><p>Natural Earth admin-0 outline for map backgrounds (grey context behind regions).</p>
+<blockquote>
+<div><p>Default preference: 50m, then 10m, then 110m. Override with <em>scale</em> or</p>
+</div></blockquote>
+<p>CYBENCH_WORLD_MAP_SCALE (50 | 10 | 110).</p>
+</dd></dl>
+
+</section>
+<section id="module-cybench.util.optuna_hyper_opt">
+<span id="cybench-util-optuna-hyper-opt-module"></span><h2>cybench.util.optuna_hyper_opt module<a class="headerlink" href="#module-cybench.util.optuna_hyper_opt" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="cybench.util.optuna_hyper_opt.OptunaOptimizer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cybench.util.optuna_hyper_opt.</span></span><span class="sig-name descname"><span class="pre">OptunaOptimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="cybench.datasets.html#cybench.datasets.dataset.BaseDataset" title="cybench.datasets.dataset.BaseDataset"><span class="pre">BaseDataset</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">study_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_dataset_years</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">set</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cybench.util.optuna_hyper_opt.OptunaOptimizer" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Hyperparameter Optimizer using Optuna.</p>
+<p>This class handles the creation of an Optuna study, the definition of the
+objective function based on a Hydra configuration with recursive <cite>_search_</cite>
+keys, and the storage of the optimal configuration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cfg</strong> – Configuration containing hp_config (Optuna settings), val_cfg (for val-splitting) &amp;
+model_cfg (model plus <cite>_search_</cite> keys to be optimized)</p></li>
+<li><p><strong>dataset</strong> (<a class="reference internal" href="cybench.datasets.html#cybench.datasets.dataset.BaseDataset" title="cybench.datasets.dataset.BaseDataset"><em>BaseDataset</em></a>) – The dataset instance to be used for optimization.</p></li>
+<li><p><strong>path</strong> (<em>str</em>) – Directory path where the <cite>optimal_model.yaml</cite> will be stored.</p></li>
+<li><p><strong>study_name</strong> (<em>str</em>) – Unique identifier for the Optuna study.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="cybench.util.optuna_hyper_opt.OptunaOptimizer._assign_gpu">
+<span class="sig-name descname"><span class="pre">_assign_gpu</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cybench.util.optuna_hyper_opt.OptunaOptimizer._assign_gpu" title="Link to this definition"></a></dt>
+<dd><p>Pick the GPU with the fewest active trials.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cybench.util.optuna_hyper_opt.OptunaOptimizer._objective">
+<span class="sig-name descname"><span class="pre">_objective</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trial</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Trial</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#cybench.util.optuna_hyper_opt.OptunaOptimizer._objective" title="Link to this definition"></a></dt>
+<dd><p>The objective function for Optuna.
+1. Clones the base config.
+2. Samples parameters using the trial.
+3. Instantiates the model.
+4. Performs validation (CV or Hold-out).
+5. Returns the mean validation metric.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cybench.util.optuna_hyper_opt.OptunaOptimizer._release_gpu">
+<span class="sig-name descname"><span class="pre">_release_gpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.util.optuna_hyper_opt.OptunaOptimizer._release_gpu" title="Link to this definition"></a></dt>
+<dd><p>Decrement counter when trial finishes or fails.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cybench.util.optuna_hyper_opt.OptunaOptimizer._resolve_search_space">
+<span class="sig-name descname"><span class="pre">_resolve_search_space</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trial</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Trial</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">FixedTrial</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.util.optuna_hyper_opt.OptunaOptimizer._resolve_search_space" title="Link to this definition"></a></dt>
+<dd><p>Recursively traverses the config, finds <cite>_search_</cite> keys, samples values
+from Optuna, updates the config in-place, and removes the <cite>_search_</cite> key.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cybench.util.optuna_hyper_opt.OptunaOptimizer.optimize">
+<span class="sig-name descname"><span class="pre">optimize</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DictConfig</span></span></span><a class="headerlink" href="#cybench.util.optuna_hyper_opt.OptunaOptimizer.optimize" title="Link to this definition"></a></dt>
+<dd><p>Runs the Optuna optimization process.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>The best model configuration found, with <cite>_search_</cite> keys</dt><dd><p>resolved to their optimal values.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>DictConfig</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cybench.util.optuna_hyper_opt.SequentialPruner">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">cybench.util.optuna_hyper_opt.</span></span><span class="sig-name descname"><span class="pre">SequentialPruner</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pruners</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cybench.util.optuna_hyper_opt.SequentialPruner" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BasePruner</span></code></p>
+<p>Apply pruners in order; first one that wants to prune wins.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cybench.util.optuna_hyper_opt.SequentialPruner._abc_impl">
+<span class="sig-name descname"><span class="pre">_abc_impl</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;_abc._abc_data</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#cybench.util.optuna_hyper_opt.SequentialPruner._abc_impl" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cybench.util.optuna_hyper_opt.SequentialPruner.prune">
+<span class="sig-name descname"><span class="pre">prune</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">study</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trial</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cybench.util.optuna_hyper_opt.SequentialPruner.prune" title="Link to this definition"></a></dt>
+<dd><p>Judge whether the trial should be pruned based on the reported values.</p>
+<p>Note that this method is not supposed to be called by library users. Instead,
+<code class="xref py py-func docutils literal notranslate"><span class="pre">optuna.trial.Trial.report()</span></code> and <code class="xref py py-func docutils literal notranslate"><span class="pre">optuna.trial.Trial.should_prune()</span></code> provide
+user interfaces to implement pruning mechanism in an objective function.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>study</strong> – Study object of the target study.</p></li>
+<li><p><strong>trial</strong> – FrozenTrial object of the target trial.
+Take a copy before modifying this object.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A boolean value representing whether the trial should be pruned.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.optuna_hyper_opt._extract_search_space">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.optuna_hyper_opt.</span></span><span class="sig-name descname"><span class="pre">_extract_search_space</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.optuna_hyper_opt._extract_search_space" title="Link to this definition"></a></dt>
+<dd><p>Recursively extract all _search_: definitions from a config, keyed by their
+dotted parameter path (e.g. “epochs”, “dataloader.batch_size”).
+Returns a flat dict suitable for saving as search_space.yaml.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.optuna_hyper_opt.build_pruner">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.optuna_hyper_opt.</span></span><span class="sig-name descname"><span class="pre">build_pruner</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg_pruner</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cybench.util.optuna_hyper_opt.build_pruner" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.optuna_hyper_opt.load_previous_best_trials">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.optuna_hyper_opt.</span></span><span class="sig-name descname"><span class="pre">load_previous_best_trials</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_study_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_best</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">FrozenTrial</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.util.optuna_hyper_opt.load_previous_best_trials" title="Link to this definition"></a></dt>
+<dd><p>Load a previously saved study (t-1) from storage if it exists, filtering for the best trials.
+Regex logic: Looks strictly at the LAST 4 digits as the year, treating everything before as the prefix.</p>
+</dd></dl>
+
+</section>
+<section id="module-cybench.util.prediction_horizon">
+<span id="cybench-util-prediction-horizon-module"></span><h2>cybench.util.prediction_horizon module<a class="headerlink" href="#module-cybench.util.prediction_horizon" title="Link to this heading"></a></h2>
+<p>Filesystem-safe tags for crop-calendar forecast horizons (lead times).</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.prediction_horizon.parse_run_name_suffix">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.prediction_horizon.</span></span><span class="sig-name descname"><span class="pre">parse_run_name_suffix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">suffix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.prediction_horizon.parse_run_name_suffix" title="Link to this definition"></a></dt>
+<dd><p>Parse <code class="docutils literal notranslate"><span class="pre">&lt;horizon&gt;_&lt;timestamp&gt;</span></code> after the validation phase token.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.prediction_horizon.prediction_horizon_tag">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.prediction_horizon.</span></span><span class="sig-name descname"><span class="pre">prediction_horizon_tag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">end_of_sequence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cybench.util.prediction_horizon.prediction_horizon_tag" title="Link to this definition"></a></dt>
+<dd><p>Map <code class="docutils literal notranslate"><span class="pre">end_of_sequence</span></code> to a short, path-safe label for run / file names.</p>
+</dd></dl>
+
+</section>
+<section id="module-cybench.util.screening_artifacts">
+<span id="cybench-util-screening-artifacts-module"></span><h2>cybench.util.screening_artifacts module<a class="headerlink" href="#module-cybench.util.screening_artifacts" title="Link to this heading"></a></h2>
+<p>Load and save frozen artifacts from the screening phase.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.screening_artifacts.load_frozen_screening_artifacts">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.screening_artifacts.</span></span><span class="sig-name descname"><span class="pre">load_frozen_screening_artifacts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">screening_split_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">DictConfig</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">DictConfig</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.screening_artifacts.load_frozen_screening_artifacts" title="Link to this definition"></a></dt>
+<dd><p>Load optimal model / feature-selection / E* configs from a screening split folder.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.screening_artifacts.load_optimal_epochs">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.screening_artifacts.</span></span><span class="sig-name descname"><span class="pre">load_optimal_epochs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.util.screening_artifacts.load_optimal_epochs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.screening_artifacts.save_optimal_epochs">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.screening_artifacts.</span></span><span class="sig-name descname"><span class="pre">save_optimal_epochs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">E_star</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_epochs_budget</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">best_val_loss</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cybench.util.screening_artifacts.save_optimal_epochs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-cybench.util.store_and_cache">
+<span id="cybench-util-store-and-cache-module"></span><h2>cybench.util.store_and_cache module<a class="headerlink" href="#module-cybench.util.store_and_cache" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.store_and_cache._dataset_indices">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.store_and_cache.</span></span><span class="sig-name descname"><span class="pre">_dataset_indices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="cybench.datasets.html#cybench.datasets.dataset.BaseDataset" title="cybench.datasets.dataset.BaseDataset"><span class="pre">BaseDataset</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#cybench.util.store_and_cache._dataset_indices" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.store_and_cache.cfg_to_hash">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.store_and_cache.</span></span><span class="sig-name descname"><span class="pre">cfg_to_hash</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">add_str</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cybench.util.store_and_cache.cfg_to_hash" title="Link to this definition"></a></dt>
+<dd><p>Create a deterministic hash from a DatasetConfig, to use it as a keys e.g. in caching</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cfg</strong> – The dataset configuration</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A hex string hash that uniquely identifies this configuration</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.store_and_cache.make_folder">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.store_and_cache.</span></span><span class="sig-name descname"><span class="pre">make_folder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Path</span></span></span><a class="headerlink" href="#cybench.util.store_and_cache.make_folder" title="Link to this definition"></a></dt>
+<dd><p>Creates a folder in a cross-platform way.
+Returns the absolute path as a Path.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.store_and_cache.save_meta_dict">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.store_and_cache.</span></span><span class="sig-name descname"><span class="pre">save_meta_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cybench.util.store_and_cache.save_meta_dict" title="Link to this definition"></a></dt>
+<dd><p>Save a dict of any metadata after training.
+:param path:
+:param dict:</p>
+<p>Returns: Nichts</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.store_and_cache.save_preds">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.store_and_cache.</span></span><span class="sig-name descname"><span class="pre">save_preds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="cybench.datasets.html#cybench.datasets.dataset.BaseDataset" title="cybench.datasets.dataset.BaseDataset"><span class="pre">BaseDataset</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">preds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cybench.util.store_and_cache.save_preds" title="Link to this definition"></a></dt>
+<dd><p>Save predictions to a csv file.
+:param path:
+:param dataset: Dataset to get targets and indices from.
+:param preds: Predicted targets.</p>
+<p>Returns: Nada</p>
+</dd></dl>
+
+</section>
+<section id="module-cybench.util.validation">
+<span id="cybench-util-validation-module"></span><h2>cybench.util.validation module<a class="headerlink" href="#module-cybench.util.validation" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.validation._as_python_years">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.validation.</span></span><span class="sig-name descname"><span class="pre">_as_python_years</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">years</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.validation._as_python_years" title="Link to this definition"></a></dt>
+<dd><p>OmegaConf and YAML serializers require native int, not numpy int64.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.validation._resolve_hold_out_years">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.validation.</span></span><span class="sig-name descname"><span class="pre">_resolve_hold_out_years</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">split_years</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">years_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">which</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cfg</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.validation._resolve_hold_out_years" title="Link to this definition"></a></dt>
+<dd><p>Resolve a hold-out year list from config (shared by all validation modes).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.validation._sorted_years">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.validation.</span></span><span class="sig-name descname"><span class="pre">_sorted_years</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_years</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.validation._sorted_years" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.validation._val_window_size">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.validation.</span></span><span class="sig-name descname"><span class="pre">_val_window_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">val_years</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#cybench.util.validation._val_window_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.validation.check_full_benchmark_screening_years">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.validation.</span></span><span class="sig-name descname"><span class="pre">check_full_benchmark_screening_years</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">years</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">set</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.validation.check_full_benchmark_screening_years" title="Link to this definition"></a></dt>
+<dd><p>Require the intended 5-last test + 2-last val + ≥1 train screening layout.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.validation.check_screening_years">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.validation.</span></span><span class="sig-name descname"><span class="pre">check_screening_years</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">years</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">set</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.validation.check_screening_years" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.validation.default_screening_validation_cfg">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.validation.</span></span><span class="sig-name descname"><span class="pre">default_screening_validation_cfg</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DictConfig</span></span></span><a class="headerlink" href="#cybench.util.validation.default_screening_validation_cfg" title="Link to this definition"></a></dt>
+<dd><p>Load <code class="docutils literal notranslate"><span class="pre">cybench/conf/validation/screening.yaml</span></code> (benchmark screening split).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.validation.default_walk_forward_validation_cfg">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.validation.</span></span><span class="sig-name descname"><span class="pre">default_walk_forward_validation_cfg</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DictConfig</span></span></span><a class="headerlink" href="#cybench.util.validation.default_walk_forward_validation_cfg" title="Link to this definition"></a></dt>
+<dd><p>Load <code class="docutils literal notranslate"><span class="pre">cybench/conf/validation/walk_forward.yaml</span></code> (benchmark walk-forward split).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.validation.expected_walk_forward_test_years">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.validation.</span></span><span class="sig-name descname"><span class="pre">expected_walk_forward_test_years</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_years</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">set</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cfg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DictConfig</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.validation.expected_walk_forward_test_years" title="Link to this definition"></a></dt>
+<dd><p>Forecast-origin test years for walk-forward (one rolling split per year).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.validation.get_screening_partitions">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.validation.</span></span><span class="sig-name descname"><span class="pre">get_screening_partitions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_years</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">set</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">42</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.validation.get_screening_partitions" title="Link to this definition"></a></dt>
+<dd><p>Fixed screening split: earliest years -&gt; train, then val window, then test hold-out.</p>
+<p>Returns (train_years, val_years, test_years).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.validation.get_screening_pre_test_years">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.validation.</span></span><span class="sig-name descname"><span class="pre">get_screening_pre_test_years</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_years</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">set</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cfg</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.validation.get_screening_pre_test_years" title="Link to this definition"></a></dt>
+<dd><p>Screening train ∪ val years — used to fit normalization (excludes test block).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cybench.util.validation.get_splits">
+<span class="sig-prename descclassname"><span class="pre">cybench.util.validation.</span></span><span class="sig-name descname"><span class="pre">get_splits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">which</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_years</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">set</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">42</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cybench.util.validation.get_splits" title="Link to this definition"></a></dt>
+<dd><p>Builds an iterator over test or val years based on a validation config file, see /conf/validation/…
+Yields (train_years, val_years) tuples</p>
+<dl class="simple">
+<dt>Params:</dt><dd><p>cfg:
+which: either ‘test’ or ‘val’
+dataset_years: the set of available years in the dataset to be split
+seed: random seed for all splitting requiring randomness</p>
+</dd>
+<dt>Usage:</dt><dd><dl class="simple">
+<dt>for train, val in get_train_val_splits(cfg.validation, dataset.years):</dt><dd><p>train_ds, val_ds = dataset.split_on_years((train, val))</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-cybench.util">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-cybench.util" title="Link to this heading"></a></h2>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Wageningen University and Research.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>  
+
+  <style>
+    /* Sidebar header (and topbar for mobile) */
+    .wy-side-nav-search, .wy-nav-top {
+      background: #28242c; */
+    }
+    /* Sidebar */
+    .wy-nav-side {
+      background: #124400;
+    }
+  </style>
+
+
+</body>
+</html>

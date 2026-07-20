@@ -1,0 +1,29 @@
+cybench.evaluation package
+==========================
+
+Submodules
+----------
+
+cybench.evaluation.aggregated\_metrics module
+---------------------------------------------
+
+.. automodule:: cybench.evaluation.aggregated_metrics
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+cybench.evaluation.eval module
+------------------------------
+
+.. automodule:: cybench.evaluation.eval
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: cybench.evaluation
+   :members:
+   :undoc-members:
+   :show-inheritance:
