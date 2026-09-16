@@ -1,0 +1,4 @@
+# EXAONE Tabular only (subset of models.txt).
+# Use with orchestrate_benchmark_submit.sh / submit_benchmark.sh --models.
+# Columns: model  framework  hp_search  feature_design  needs_gpu
+exaone_tabular   pandas  yes  yes  yes
