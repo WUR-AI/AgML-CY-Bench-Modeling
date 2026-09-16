@@ -1,7 +1,17 @@
 # Dashboard publish pipeline — paths only (anunna / lustre).
 #
-# GitHub Pages clone: WUR-AI/AgML-CY-Bench-dashboard
+# Paper GitHub Pages (do not overwrite while the paper is under review):
+#   WUR-AI/AgML-CY-Bench-dashboard
 #   https://wur-ai.github.io/AgML-CY-Bench-dashboard/
+#
+# In-review / extra models (EXAONE, …) go to the personal clone instead:
+#   poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \
+#       --destination personal --mode ready --stages publish,index --commit --push
+#   → https://michielkallenberg.github.io/CY-Bench-dashboard/
+#   git clone (anunna, if missing):
+#     git clone git@github.com:michielkallenberg/CY-Bench-dashboard.git \
+#       /lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard-personal
+#   `--push` to the paper remote is blocked unless you pass --allow-official-push.
 #
 # Targets are discovered from:
 #   {output_root}/baselines_{CC}_{eos|mid|qtr}_v{N}/   (per-country SLURM batches)

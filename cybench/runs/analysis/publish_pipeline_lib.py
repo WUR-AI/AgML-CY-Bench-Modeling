@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,8 +30,39 @@ from cybench.runs.slurm.benchmark_submit_lib import (
 
 Mode = Literal["planned", "ready", "all-available"]
 StageName = Literal["collect", "publish", "index", "commit"]
+DestinationName = Literal["personal", "official"]
 
 MONOLITHIC_BASELINES_DIR = "baselines"
+
+OFFICIAL_DASHBOARD_PAGES_URL = "https://wur-ai.github.io/AgML-CY-Bench-dashboard/"
+PERSONAL_DASHBOARD_PAGES_URL = "https://michielkallenberg.github.io/CY-Bench-dashboard/"
+OFFICIAL_DASHBOARD_CLONE_URL = "git@github.com:WUR-AI/AgML-CY-Bench-dashboard.git"
+PERSONAL_DASHBOARD_CLONE_URL = "git@github.com:michielkallenberg/CY-Bench-dashboard.git"
+
+# Normalized (lowercase, no .git) origin URL fragments.
+_OFFICIAL_DASHBOARD_REMOTE_NEEDLES = (
+    "github.com/wur-ai/agml-cy-bench-dashboard",
+    "github.com:wur-ai/agml-cy-bench-dashboard",
+)
+_PERSONAL_DASHBOARD_REMOTE_NEEDLES = (
+    "github.com/michielkallenberg/cy-bench-dashboard",
+    "github.com:michielkallenberg/cy-bench-dashboard",
+)
+
+OFFICIAL_PUBLISH_ROOT_CANDIDATES: tuple[Path, ...] = (
+    Path("/lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-dashboard"),
+    Path.home() / "WUR" / "AgML-CY-Bench-dashboard",
+    Path.home() / "AgML-CY-Bench-dashboard",
+)
+PERSONAL_PUBLISH_ROOT_CANDIDATES: tuple[Path, ...] = (
+    Path("/lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard-personal"),
+    Path.home() / "WUR" / "dashboard-publish",
+    Path.home() / "CY-Bench-dashboard-personal",
+)
+PERSONAL_DASHBOARD_CLONE_HINT = (
+    "git clone git@github.com:michielkallenberg/CY-Bench-dashboard.git "
+    "/lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard-personal"
+)
 
 _BATCH_RE = re.compile(
     r"^baselines_(?P<country>[A-Za-z]{2})_(?P<batch_hz>eos|mid|qtr|early)_v(?P<version>\d+)$"
@@ -62,6 +94,124 @@ class PipelineDefaults:
     repo_root: Path = Path("/lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-AAAI")
     publish_root: Path = Path("/lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-dashboard")
     min_run_fraction: float = 1.0
+
+
+def normalize_git_remote_url(url: str) -> str:
+    return url.strip().lower().removesuffix(".git")
+
+
+def remote_url_matches(url: str, needles: Sequence[str]) -> bool:
+    normalized = normalize_git_remote_url(url)
+    return any(needle in normalized for needle in needles)
+
+
+def is_official_dashboard_remote(url: str) -> bool:
+    return remote_url_matches(url, _OFFICIAL_DASHBOARD_REMOTE_NEEDLES)
+
+
+def is_personal_dashboard_remote(url: str) -> bool:
+    return remote_url_matches(url, _PERSONAL_DASHBOARD_REMOTE_NEEDLES)
+
+
+def git_origin_url(publish_root: Path) -> str | None:
+    git_dir = publish_root / ".git"
+    if not git_dir.exists():
+        return None
+    proc = subprocess.run(
+        ["git", "-C", str(publish_root), "remote", "get-url", "origin"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    url = proc.stdout.strip()
+    return url or None
+
+
+def pages_url_for_origin(url: str | None) -> str | None:
+    if not url:
+        return None
+    if is_official_dashboard_remote(url):
+        return OFFICIAL_DASHBOARD_PAGES_URL
+    if is_personal_dashboard_remote(url):
+        return PERSONAL_DASHBOARD_PAGES_URL
+    return None
+
+
+def describe_publish_destination(publish_root: Path) -> str:
+    url = git_origin_url(publish_root)
+    pages = pages_url_for_origin(url)
+    parts = [f"publish-root={publish_root}"]
+    if url:
+        parts.append(f"origin={url}")
+    if pages:
+        parts.append(f"pages={pages}")
+    return " · ".join(parts)
+
+
+def resolve_destination_publish_root(
+    destination: DestinationName,
+    *,
+    candidates: Sequence[Path] | None = None,
+    origin_url_for: Callable[[Path], str | None] | None = None,
+) -> Path:
+    """Pick an existing git clone for the official or personal GitHub Pages site."""
+    origin_url_for = origin_url_for or git_origin_url
+    if destination == "official":
+        search = tuple(candidates) if candidates is not None else OFFICIAL_PUBLISH_ROOT_CANDIDATES
+        expected = is_official_dashboard_remote
+        pages = OFFICIAL_DASHBOARD_PAGES_URL
+        clone_url = OFFICIAL_DASHBOARD_CLONE_URL
+        clone_hint = f"git clone {clone_url} /lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-dashboard"
+    elif destination == "personal":
+        search = tuple(candidates) if candidates is not None else PERSONAL_PUBLISH_ROOT_CANDIDATES
+        expected = is_personal_dashboard_remote
+        pages = PERSONAL_DASHBOARD_PAGES_URL
+        clone_url = PERSONAL_DASHBOARD_CLONE_URL
+        clone_hint = PERSONAL_DASHBOARD_CLONE_HINT
+    else:
+        raise ValueError(f"Unknown destination: {destination}")
+
+    skipped_wrong_remote: list[str] = []
+    for path in search:
+        if not (path / ".git").exists():
+            continue
+        origin = origin_url_for(path)
+        if origin and not expected(origin):
+            skipped_wrong_remote.append(f"{path} ({origin})")
+            continue
+        return path
+
+    detail = ""
+    if skipped_wrong_remote:
+        detail = " Skipped clones with the wrong origin: " + "; ".join(skipped_wrong_remote) + "."
+    raise FileNotFoundError(
+        f"No {destination} dashboard git clone found (expected Pages at {pages}). "
+        f"Clone it with: {clone_hint} "
+        f"or pass --publish-root /path/to/clone.{detail}"
+    )
+
+
+def ensure_push_allowed(
+    publish_root: Path,
+    *,
+    push: bool,
+    allow_official_push: bool = False,
+    origin_url: str | None = None,
+) -> None:
+    """Refuse git push to the paper dashboard unless explicitly opted in."""
+    if not push:
+        return
+    url = origin_url if origin_url is not None else git_origin_url(publish_root)
+    if url and is_official_dashboard_remote(url) and not allow_official_push:
+        raise RuntimeError(
+            "Refusing to push to the paper dashboard "
+            f"({url} → {OFFICIAL_DASHBOARD_PAGES_URL}). "
+            "Use --destination personal to publish EXAONE / in-review results to "
+            f"{PERSONAL_DASHBOARD_PAGES_URL}, "
+            "or pass --allow-official-push if you really mean to update the WUR site."
+        )
 
 
 @dataclass
@@ -839,9 +989,10 @@ def run_commit_stage(
     *,
     dry_run: bool = False,
     push: bool = False,
+    allow_official_push: bool = False,
 ) -> StageStatus:
     publish_root = target.publish_root
-    if not (publish_root / ".git").is_dir():
+    if not (publish_root / ".git").exists():
         return StageStatus("commit", True, f"not a git repo: {publish_root}")
 
     rel_paths = [target.publish_slug, "index.html"]
@@ -861,6 +1012,7 @@ def run_commit_stage(
         message=message,
         push=push,
         dry_run=dry_run,
+        allow_official_push=allow_official_push,
     )
 
 
@@ -871,10 +1023,14 @@ def git_commit_paths(
     message: str,
     push: bool = False,
     dry_run: bool = False,
+    allow_official_push: bool = False,
 ) -> StageStatus:
     """Stage and commit changes under ``paths`` (plus deletions and new files)."""
-    if not (publish_root / ".git").is_dir():
+    if not (publish_root / ".git").exists():
         return StageStatus("commit", True, f"not a git repo: {publish_root}")
+    ensure_push_allowed(
+        publish_root, push=push, allow_official_push=allow_official_push
+    )
 
     status = subprocess.run(
         ["git", "-C", str(publish_root), "status", "--porcelain", "--", *paths],
@@ -910,10 +1066,14 @@ def git_commit_all(
     message: str,
     push: bool = False,
     dry_run: bool = False,
+    allow_official_push: bool = False,
 ) -> StageStatus:
     """``git add -A``, commit if anything staged, optionally push."""
-    if not (publish_root / ".git").is_dir():
+    if not (publish_root / ".git").exists():
         return StageStatus("commit", True, f"not a git repo: {publish_root}")
+    ensure_push_allowed(
+        publish_root, push=push, allow_official_push=allow_official_push
+    )
 
     if dry_run:
         print(f"[DRY-RUN] git add -A && git commit in {publish_root}: {message}")

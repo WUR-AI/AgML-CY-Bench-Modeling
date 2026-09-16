@@ -199,3 +199,76 @@ def test_discover_baselines_batches_from_monolithic(tmp_path: Path, monkeypatch)
     baselines_dir, note = resolve_collect_baselines_dir(target)
     assert baselines_dir == mono
     assert note is not None
+
+
+def test_is_official_and_personal_dashboard_remote():
+    from cybench.runs.analysis.publish_pipeline_lib import (
+        is_official_dashboard_remote,
+        is_personal_dashboard_remote,
+    )
+
+    official = "git@github.com:WUR-AI/AgML-CY-Bench-dashboard.git"
+    personal = "https://github.com/michielkallenberg/CY-Bench-dashboard"
+    assert is_official_dashboard_remote(official)
+    assert is_official_dashboard_remote("https://github.com/WUR-AI/AgML-CY-Bench-dashboard.git")
+    assert not is_official_dashboard_remote(personal)
+    assert is_personal_dashboard_remote(personal)
+    assert not is_personal_dashboard_remote(official)
+
+
+def test_ensure_push_allowed_blocks_official_remote(tmp_path: Path):
+    from cybench.runs.analysis.publish_pipeline_lib import ensure_push_allowed
+
+    ensure_push_allowed(tmp_path, push=False)  # no-op
+    ensure_push_allowed(
+        tmp_path,
+        push=True,
+        origin_url="git@github.com:michielkallenberg/CY-Bench-dashboard.git",
+    )
+    ensure_push_allowed(
+        tmp_path,
+        push=True,
+        allow_official_push=True,
+        origin_url="git@github.com:WUR-AI/AgML-CY-Bench-dashboard.git",
+    )
+    try:
+        ensure_push_allowed(
+            tmp_path,
+            push=True,
+            origin_url="git@github.com:WUR-AI/AgML-CY-Bench-dashboard.git",
+        )
+    except RuntimeError as exc:
+        assert "paper dashboard" in str(exc)
+        assert "destination personal" in str(exc)
+    else:
+        raise AssertionError("expected official push to be refused")
+
+
+def test_resolve_destination_publish_root_skips_wrong_remote(tmp_path: Path):
+    from cybench.runs.analysis.publish_pipeline_lib import resolve_destination_publish_root
+
+    official = tmp_path / "official"
+    personal = tmp_path / "personal"
+    (official / ".git").mkdir(parents=True)
+    (personal / ".git").mkdir(parents=True)
+    urls = {
+        official: "git@github.com:WUR-AI/AgML-CY-Bench-dashboard.git",
+        personal: "git@github.com:michielkallenberg/CY-Bench-dashboard.git",
+    }
+    resolved = resolve_destination_publish_root(
+        "personal",
+        candidates=[official, personal],
+        origin_url_for=urls.get,
+    )
+    assert resolved == personal
+
+    try:
+        resolve_destination_publish_root(
+            "personal",
+            candidates=[official],
+            origin_url_for=urls.get,
+        )
+    except FileNotFoundError as exc:
+        assert "michielkallenberg.github.io" in str(exc)
+    else:
+        raise AssertionError("expected missing personal clone")

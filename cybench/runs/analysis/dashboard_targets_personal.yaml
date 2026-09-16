@@ -1,0 +1,19 @@
+# Personal GitHub Pages (in-review / extra models such as EXAONE).
+#
+# https://michielkallenberg.github.io/CY-Bench-dashboard/
+# Clone: michielkallenberg/CY-Bench-dashboard
+#
+# Prefer:
+#   poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \
+#       --destination personal --mode ready --stages publish,index --commit --push
+# which auto-detects this clone or ~/WUR/dashboard-publish.
+#
+# Use this file only when you want the lustre path pinned:
+#   --config cybench/runs/analysis/dashboard_targets_personal.yaml
+
+defaults:
+  version: 4
+  output_root: /lustre/backup/SHARED/AIN/agml/output
+  repo_root: /lustre/backup/SHARED/AIN/agml/AgML-CY-Bench-AAAI
+  publish_root: /lustre/backup/SHARED/AIN/agml/CY-Bench-dashboard-personal
+  min_run_fraction: 1.0

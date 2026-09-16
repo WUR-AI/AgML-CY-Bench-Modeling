@@ -12,16 +12,16 @@ Examples (from repo root on anunna)::
 
     # Collect + publish + index (full pipeline, scans baselines_*)
     poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
-        --mode ready --commit --push
+        --mode ready --commit --push --destination personal
 
     # Publish-only (fast: uses paper_walk_forward_* only, no baselines scan)
     poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
-        --mode ready --stages publish,index --commit --push
+        --mode ready --stages publish,index --commit --push --destination personal
 
     # Parallel collect on compute nodes, then publish on login:
     cybench/runs/slurm/submit_collect.sh --no-plot --mode ready --submit
     poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
-        --mode ready --stages publish,index --commit --push
+        --mode ready --stages publish,index --commit --push --destination personal
 
     # Force republish one batch
     poetry run python cybench/runs/analysis/orchestrate_dashboard_publish.py \\
@@ -33,15 +33,20 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from cybench.runs.analysis.publish_pipeline_lib import (
-    PipelineDefaults,
     StageName,
     assess_publish_readiness,
     assess_readiness,
+    describe_publish_destination,
     discover_paper_walk_forward_targets,
+    ensure_push_allowed,
+    git_origin_url,
+    is_official_dashboard_remote,
     load_pipeline_defaults,
+    resolve_destination_publish_root,
     resolve_targets,
     run_collect_stage,
     run_commit_stage,
@@ -106,6 +111,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Override defaults.publish_root (git clone for GitHub Pages)",
     )
     parser.add_argument(
+        "--destination",
+        choices=["personal", "official"],
+        help=(
+            "Select a known GitHub Pages clone. 'personal' publishes to "
+            "michielkallenberg.github.io/CY-Bench-dashboard (in-review / EXAONE). "
+            "'official' is the paper site and requires --allow-official-push to git push."
+        ),
+    )
+    parser.add_argument(
         "--country",
         action="append",
         dest="countries",
@@ -153,6 +167,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Git push after commit (implies network access on the login/submit node)",
     )
     parser.add_argument(
+        "--allow-official-push",
+        action="store_true",
+        help=(
+            "Required with --push when publish-root origin is "
+            "WUR-AI/AgML-CY-Bench-dashboard (paper site under review)"
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print actions without running collect/publish/commit",
@@ -163,14 +185,49 @@ def main(argv: list[str] | None = None) -> int:
         help="List candidate targets and readiness, then exit",
     )
     args = parser.parse_args(argv)
+    if args.publish_root and args.destination:
+        print(
+            "[ERROR] Use either --publish-root or --destination, not both",
+            file=sys.stderr,
+        )
+        return 2
 
     config_path = args.config if args.config.is_file() else None
-    defaults = PipelineDefaults(
-        output_root=args.output_root or PipelineDefaults().output_root,
-        repo_root=args.repo_root or PipelineDefaults().repo_root,
-        publish_root=(args.publish_root or PipelineDefaults().publish_root).expanduser(),
-    )
-    defaults = load_pipeline_defaults(config_path, overrides=defaults)
+    defaults = load_pipeline_defaults(config_path)
+    if args.output_root:
+        defaults = replace(defaults, output_root=args.output_root)
+    if args.repo_root:
+        defaults = replace(defaults, repo_root=args.repo_root)
+    if args.publish_root:
+        defaults = replace(defaults, publish_root=args.publish_root.expanduser())
+    elif args.destination:
+        try:
+            defaults = replace(
+                defaults,
+                publish_root=resolve_destination_publish_root(args.destination),
+            )
+        except FileNotFoundError as exc:
+            print(f"[ERROR] {exc}", file=sys.stderr)
+            return 2
+
+    print(f"[INFO] {describe_publish_destination(defaults.publish_root)}", flush=True)
+    origin = git_origin_url(defaults.publish_root)
+    if origin and is_official_dashboard_remote(origin) and not args.allow_official_push:
+        print(
+            "[WARN] publish-root is the paper dashboard; "
+            "git push is blocked unless you pass --allow-official-push. "
+            "Use --destination personal for EXAONE / in-review results."
+        )
+    try:
+        ensure_push_allowed(
+            defaults.publish_root,
+            push=args.push,
+            allow_official_push=args.allow_official_push,
+            origin_url=origin,
+        )
+    except RuntimeError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        return 2
 
     stages = _parse_stages(args.stages)
     publish_only = "collect" not in stages
@@ -262,6 +319,7 @@ def main(argv: list[str] | None = None) -> int:
                     target,
                     dry_run=args.dry_run,
                     push=False,
+                    allow_official_push=args.allow_official_push,
                 )
                 print(f"[{'SKIP' if status.skipped else 'OK'}] commit: {status.message}")
         except (RuntimeError, subprocess.CalledProcessError, FileNotFoundError) as exc:
@@ -285,6 +343,7 @@ def main(argv: list[str] | None = None) -> int:
             message="Sync walk-forward dashboards",
             push=args.push,
             dry_run=args.dry_run,
+            allow_official_push=args.allow_official_push,
         )
         print(f"\n[{'SKIP' if status.skipped else 'OK'}] commit: {status.message}")
 
