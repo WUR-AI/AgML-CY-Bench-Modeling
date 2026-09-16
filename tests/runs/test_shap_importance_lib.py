@@ -129,6 +129,8 @@ def test_interpretability_for_model_families():
     assert interpretability_for_model("tabicl")["method"] == "sklearn_permutation"
     assert interpretability_for_model("tabicl")["explainer_label"] == "PermutationImportance"
     assert interpretability_for_model("tabdpt")["method"] == "sklearn_permutation"
+    assert interpretability_for_model("exaone_tabular")["method"] == "sklearn_permutation"
+    assert interpretability_for_model("exaone_tabular")["explainer_label"] == "PermutationImportance"
     unknown = interpretability_for_model("xgboost")
     assert unknown["method"] == "permutation_shap"
 
@@ -167,7 +169,7 @@ def test_resolve_shap_sample_limits_uses_all_rows_when_below_cap():
 
 
 def test_model_manifest_includes_tabular_foundation_models():
-    for slug in ("tabpfn", "tabicl", "tabdpt"):
+    for slug in ("tabpfn", "tabicl", "tabdpt", "exaone_tabular"):
         entry = MODEL_MANIFEST[slug]
         assert entry["framework"] == "pandas"
         assert entry["feature_design"] is True
@@ -175,7 +177,7 @@ def test_model_manifest_includes_tabular_foundation_models():
 
 
 def test_resolve_shap_sample_limits_tabicl_and_tabdpt():
-    for slug in ("tabicl", "tabdpt"):
+    for slug in ("tabicl", "tabdpt", "exaone_tabular"):
         bg, ev = resolve_shap_sample_limits(
             slug,
             max_background=500,

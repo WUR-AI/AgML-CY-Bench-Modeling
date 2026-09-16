@@ -59,6 +59,7 @@ shap_model_tag() {
     tabpfn) echo "tabpfn" ;;
     tabicl) echo "tabicl" ;;
     tabdpt) echo "tabdpt" ;;
+    exaone_tabular) echo "exaone" ;;
     *) echo "${1//_/-}" ;;
   esac
 }

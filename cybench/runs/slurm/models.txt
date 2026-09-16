@@ -15,6 +15,7 @@ lightgbm         pandas  yes  yes  no
 tabpfn           pandas  yes  yes  yes
 tabicl           pandas  yes  yes  yes
 tabdpt           pandas  yes  yes  yes
+exaone_tabular   pandas  yes  yes  yes
 cnn_lf           torch   yes  no   yes
 lstm_lf          torch   yes  no   yes
 transformer_lf   torch   yes  no   yes

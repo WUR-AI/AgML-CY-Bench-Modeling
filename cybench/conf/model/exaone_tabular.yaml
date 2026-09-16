@@ -1,0 +1,25 @@
+_target_: cybench.models.tabular_foundation_model.EXAONETabularModel
+name: exaone_tabular
+framework: pandas
+
+device: auto
+predict_batch_size: 256
+allow_cpu_fallback: true
+max_train_samples: null
+preprocess: none
+subsample: random
+subsample_bins: 10
+random_state: ${experiment.seed}
+verbose: false
+
+# forwarded to EXAONETabularRegressor.from_pretrained
+# GPU: float16 (default) | CPU: forced to float32 (FlashAttention has no fp32 CUDA kernel)
+ensemble_count: 8
+compute_dtype: auto
+
+_search_:
+  ensemble_count:
+    type: int
+    low: 4
+    high: 16
+    step: 4

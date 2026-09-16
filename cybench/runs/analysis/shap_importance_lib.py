@@ -151,13 +151,17 @@ INTERPRETABILITY_BY_MODEL: dict[str, InterpretabilitySpec] = {
         "method": "sklearn_permutation",
         "explainer_label": "PermutationImportance",
     },
+    "exaone_tabular": {
+        "method": "sklearn_permutation",
+        "explainer_label": "PermutationImportance",
+    },
     "transformer_lf": {
         "method": "gradient_shap",
         "explainer_label": "GradientSHAP",
     },
 }
 
-ICL_TABULAR_MODELS = frozenset({"tabpfn", "tabicl", "tabdpt"})
+ICL_TABULAR_MODELS = frozenset({"tabpfn", "tabicl", "tabdpt", "exaone_tabular"})
 
 # Subsample at most this many train (background) / test (eval) rows; use all rows when n < cap.
 DEFAULT_MAX_BACKGROUND = 500
@@ -258,6 +262,11 @@ MODEL_MANIFEST: dict[str, ModelManifestEntry] = {
         "needs_gpu": True,
     },
     "tabdpt": {
+        "framework": "pandas",
+        "feature_design": True,
+        "needs_gpu": True,
+    },
+    "exaone_tabular": {
         "framework": "pandas",
         "feature_design": True,
         "needs_gpu": True,

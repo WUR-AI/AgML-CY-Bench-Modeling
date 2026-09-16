@@ -7,7 +7,7 @@ See also [../README.md](../README.md) for the full `cybench/runs/` layout (analy
 
 | File | Purpose |
 |------|---------|
-| `models.txt` | Model catalogue (`needs_gpu=yes` for torch + TabPFN/TabICL/TabDPT) |
+| `models.txt` | Model catalogue (`needs_gpu=yes` for torch + TabPFN/TabICL/TabDPT/EXAONE) |
 | `generate_job_manifest.py` | Build full `crop × country × model` job list |
 | `benchmark_jobs.txt` | **Array manifest** (one row = one SLURM task) |
 | `benchmark_jobs.example.txt` | Small test subset |
@@ -245,7 +245,7 @@ export SLURM_GPU_TIME_LIMIT=2-00:00:00
 | `--cpus-per-task=8` | RF/XGB use all 8 cores **per trial** (`n_jobs=-1` in yaml) |
 | `--gpus=1` + `-p gpu` | GPU jobs (via `submit_array.sh` + GPU manifest) |
 
-**TabPFN, TabICL, and TabDPT** use `dataset.framework=pandas` + `feature_design` but set `model.device=cuda` (see `tabpfn.yaml`, `tabicl.yaml`, `tabdpt.yaml`). Schedule them in the **GPU array**, not the CPU one.
+**TabPFN, TabICL, TabDPT, and EXAONE Tabular** use `dataset.framework=pandas` + `feature_design` but set `model.device=cuda` (see `tabpfn.yaml`, `tabicl.yaml`, `tabdpt.yaml`, `exaone_tabular.yaml`). Schedule them in the **GPU array**, not the CPU one.
 
 ### GPU manifest on CPU (`--cpu`)
 

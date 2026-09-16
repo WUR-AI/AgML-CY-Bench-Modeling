@@ -148,6 +148,7 @@ slurm_shap_model_tag() {
     tabpfn) echo "tabpfn" ;;
     tabicl) echo "tabicl" ;;
     tabdpt) echo "tabdpt" ;;
+    exaone_tabular) echo "exaone" ;;
     *) echo "${1//_/-}" ;;
   esac
 }
@@ -303,7 +304,7 @@ slurm_validate_env() {
       echo "[WARN] CUDA probe failed on this node; forcing CPU for this task" >&2
       export CYBENCH_FORCE_CPU=1
     fi
-    if [[ -n "${model}" && "${model}" == "tabdpt" ]]; then
+    if [[ -n "${model}" && ("${model}" == "tabdpt" || "${model}" == "exaone_tabular") ]]; then
       if ! poetry run python "${SLURM_DIR}/check_env.py" --probe-tabular-fm "${model}"; then
         echo "[WARN] ${model} CUDA kernel probe failed; forcing CPU for this task" >&2
         export CYBENCH_FORCE_CPU=1

@@ -56,6 +56,7 @@ MODEL_LABELS: dict[str, str] = {
     "tabpfn": "TabPFN",
     "tabicl": "TabICL",
     "tabdpt": "TabDPT",
+    "exaone_tabular": "EXAONE Tabular",
     "transformer_lf": "Transformer",
 }
 

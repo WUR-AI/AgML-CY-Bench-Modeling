@@ -17,7 +17,7 @@ HF_TEMPORAL_MODELS = frozenset(
 )
 
 # Tabular foundation models probed for custom CUDA kernel support on the compute node.
-TABULAR_FM_CUDA_PROBE_MODELS = frozenset({"tabdpt"})
+TABULAR_FM_CUDA_PROBE_MODELS = frozenset({"tabdpt", "exaone_tabular"})
 
 # (torch major.minor, torchvision major.minor) pairs from PyTorch release notes.
 _TORCH_TV_PAIRS: Sequence[tuple[tuple[int, int], tuple[int, int]]] = (
@@ -110,7 +110,7 @@ def probe_cuda() -> None:
 
 
 def probe_tabular_foundation_cuda(model: str) -> None:
-    """Run a tiny TabDPT CUDA fit/predict.
+    """Run a tiny CUDA fit/predict for TabDPT / EXAONE Tabular.
 
     Catches ``RuntimeError: No available kernel`` on GPUs whose SM arch is not
     supported by bundled flash-attn / custom ops (common on shared clusters).
@@ -124,13 +124,25 @@ def probe_tabular_foundation_cuda(model: str) -> None:
     if not torch.cuda.is_available():
         return
 
-    from tabdpt import TabDPTRegressor
-
     rng = np.random.default_rng(0)
     n, n_features = 32, 4
     X = rng.standard_normal((n, n_features), dtype=np.float32)
     y = rng.standard_normal(n, dtype=np.float32)
-    est = TabDPTRegressor(device="cuda")
+    if model == "tabdpt":
+        from tabdpt import TabDPTRegressor
+
+        est = TabDPTRegressor(device="cuda")
+    elif model == "exaone_tabular":
+        from exaonetabular import EXAONETabularRegressor
+
+        est = EXAONETabularRegressor.from_pretrained(
+            device="cuda",
+            compute_dtype="float16",
+            ensemble_count=1,
+            seed=0,
+        )
+    else:
+        raise ValueError(f"Unsupported tabular foundation CUDA probe: {model}")
     est.fit(X, y)
     _ = est.predict(X[:4])
     torch.cuda.synchronize()
@@ -150,7 +162,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--probe-tabular-fm",
         metavar="MODEL",
-        help="Run a tiny CUDA fit/predict for tabdpt (catches kernel arch errors)",
+        help="Run a tiny CUDA fit/predict for tabdpt/exaone_tabular (catches kernel arch errors)",
     )
     parser.add_argument(
         "--check-torch-stack",

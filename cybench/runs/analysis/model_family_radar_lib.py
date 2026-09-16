@@ -83,7 +83,7 @@ MODEL_FAMILIES: dict[str, list[str]] = {
         "tst_lf",
         "cnn_lf",
     ],
-    "Tabular Foundation": ["tabpfn", "tabicl", "tabdpt"],
+    "Tabular Foundation": ["tabpfn", "tabicl", "tabdpt", "exaone_tabular"],
 }
 
 FAMILY_ORDER: tuple[str, ...] = tuple(MODEL_FAMILIES.keys())
@@ -131,6 +131,7 @@ MODEL_DISPLAY_NAMES: dict[str, str] = {
     "tabpfn": "TabPFN",
     "tabicl": "TabICL",
     "tabdpt": "TabDPT",
+    "exaone_tabular": "EXAONE Tabular",
     "trend": "Trend",
 }
 

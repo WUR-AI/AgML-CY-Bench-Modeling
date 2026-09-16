@@ -1,6 +1,11 @@
 import numpy as np
+from hydra import compose, initialize
 
-from cybench.models.tabular_foundation_model import TabularFoundationModel, TabularRegressor
+from cybench.models.tabular_foundation_model import (
+    TabularFoundationModel,
+    TabularRegressor,
+    _exaone_from_pretrained_kwargs,
+)
 
 
 class _DeviceTrackingEstimator:
@@ -50,3 +55,51 @@ def test_predict_on_cpu_uses_cpu_estimator_not_gpu():
     assert cpu_estimator.predict_calls == 2  # batch_size=2 over 3 rows
     assert gpu_estimator.predict_calls == 0
     np.testing.assert_array_equal(preds, np.ones(3))
+
+
+def test_exaone_from_pretrained_kwargs_cpu_forces_float32():
+    kwargs = _exaone_from_pretrained_kwargs(
+        device="cpu",
+        random_state=7,
+        estimator_kwargs={
+            "ensemble_count": 4,
+            "compute_dtype": "float16",
+            "max_vram_bytes": 8 << 30,
+            "n_estimators": 8,
+        },
+    )
+    assert kwargs["device"] == "cpu"
+    assert kwargs["compute_dtype"] == "float32"
+    assert kwargs["seed"] == 7
+    assert kwargs["ensemble_count"] == 4
+    assert "max_vram_bytes" not in kwargs
+    assert "n_estimators" not in kwargs
+
+
+def test_exaone_from_pretrained_kwargs_cuda_defaults_and_rejects_float32():
+    auto = _exaone_from_pretrained_kwargs(
+        device="cuda",
+        random_state=1,
+        estimator_kwargs={"compute_dtype": "auto"},
+    )
+    assert auto["compute_dtype"] == "float16"
+    assert auto["seed"] == 1
+
+    forced = _exaone_from_pretrained_kwargs(
+        device="cuda",
+        random_state=1,
+        estimator_kwargs={"compute_dtype": "float32", "seed": 99},
+    )
+    assert forced["compute_dtype"] == "float16"
+    assert forced["seed"] == 99
+
+
+def test_exaone_tabular_hydra_config_composes():
+    with initialize(version_base=None, config_path="../../cybench/conf"):
+        cfg = compose(config_name="config", overrides=["model=exaone_tabular"])
+    assert cfg.model.name == "exaone_tabular"
+    assert cfg.model.ensemble_count == 8
+    assert (
+        cfg.model._target_
+        == "cybench.models.tabular_foundation_model.EXAONETabularModel"
+    )

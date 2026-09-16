@@ -160,8 +160,51 @@ def _import_symbol(module: str, attr: str, install_hint: str) -> Any:
         raise ImportError(install_hint) from exc
 
 
+def _exaone_from_pretrained_kwargs(
+    *,
+    device: str,
+    random_state: int,
+    estimator_kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    """Build ``EXAONETabularRegressor.from_pretrained`` kwargs for a device."""
+    allowed = (
+        "weights",
+        "revision",
+        "cache_dir",
+        "filename",
+        "ensemble_count",
+        "compute_dtype",
+        "seed",
+        "max_vram_bytes",
+        "manifest",
+    )
+    kwargs = {
+        key: value
+        for key, value in estimator_kwargs.items()
+        if key in allowed and value is not None
+    }
+    kwargs["device"] = device
+    if "seed" not in kwargs:
+        kwargs["seed"] = random_state
+
+    compute_dtype = kwargs.get("compute_dtype")
+    if device == "cpu":
+        kwargs["compute_dtype"] = "float32"
+        kwargs.pop("max_vram_bytes", None)
+    elif compute_dtype in (None, "auto"):
+        kwargs["compute_dtype"] = "float16"
+    elif compute_dtype == "float32":
+        # FlashAttention kernels used on CUDA only implement fp16/bf16.
+        log.warning(
+            "EXAONE Tabular compute_dtype=float32 is CPU-only; using float16 on %s",
+            device,
+        )
+        kwargs["compute_dtype"] = "float16"
+    return kwargs
+
+
 class TabularFoundationModel(BaseModel):
-    """Shared CY-Bench wrapper for tabular foundation regressors (TabPFN, TabICL, TabDPT)."""
+    """Shared CY-Bench wrapper for tabular foundation regressors (TabPFN, TabICL, TabDPT, EXAONE)."""
 
     def __init__(
         self,
@@ -695,3 +738,105 @@ class TabDPTModel(TabularFoundationModel):
     @classmethod
     def load(cls, model_path: str, name: str = "tabdpt") -> TabDPTModel:
         return cast(TabDPTModel, super().load(model_path, name))
+
+
+_EXAONE_INSTALL_HINT = (
+    "EXAONE Tabular is not installed. Add the inference runtime with: "
+    'pip install "exaonetabular @ git+https://github.com/LGAI-Research/EXAONE-Tabular.git" '
+    "(Python >= 3.11). The package pins numpy>=2.3.5 and scikit-learn>=1.7.2; "
+    "if that conflicts with this environment, install with --no-deps after "
+    "huggingface_hub and safetensors. Released weights are non-commercial research "
+    "only and may require HF_TOKEN for LG-AI-Research/EXAONE-Tabular."
+)
+
+
+class EXAONETabularModel(TabularFoundationModel):
+    """EXAONE Tabular in-context regressor for pandas CY-Bench features.
+
+    Uses ``EXAONETabularRegressor.from_pretrained`` (no per-dataset gradient
+    updates). GPU inference uses fp16; CPU falls back to fp32 because the
+    CUDA attention kernels do not implement float32.
+    """
+
+    def __init__(
+        self,
+        name: str = "exaone_tabular",
+        verbose: bool = False,
+        framework: str | None = None,
+        device: str = "auto",
+        predict_batch_size: int = 256,
+        allow_cpu_fallback: bool = False,
+        max_train_samples: int | None = None,
+        subsample: SubsampleMode = "random",
+        subsample_bins: int = 10,
+        preprocess: PreprocessMode = "none",
+        random_state: int = 42,
+        **exaone_kwargs: Any,
+    ):
+        self.exaone_kwargs = exaone_kwargs
+        super().__init__(
+            name=name,
+            verbose=verbose,
+            framework=framework,
+            device=device,
+            predict_batch_size=predict_batch_size,
+            allow_cpu_fallback=allow_cpu_fallback,
+            max_train_samples=max_train_samples,
+            subsample=subsample,
+            subsample_bins=subsample_bins,
+            preprocess=preprocess,
+            random_state=random_state,
+            estimator_kwargs=exaone_kwargs,
+        )
+
+    @classmethod
+    def _check_import(cls) -> None:
+        _require_module("exaonetabular", _EXAONE_INSTALL_HINT)
+
+    def _make_estimator(self, device: str | None = None) -> TabularRegressor:
+        EXAONETabularRegressor = _import_symbol(
+            "exaonetabular",
+            "EXAONETabularRegressor",
+            _EXAONE_INSTALL_HINT,
+        )
+        kwargs = _exaone_from_pretrained_kwargs(
+            device=device or self.device,
+            random_state=self.random_state,
+            estimator_kwargs=self.exaone_kwargs,
+        )
+        return cast(TabularRegressor, EXAONETabularRegressor.from_pretrained(**kwargs))
+
+    def _prepare_training_data(
+        self,
+        X: npt.NDArray[Any],
+        y: npt.NDArray[Any],
+    ) -> tuple[npt.NDArray[Any], npt.NDArray[Any]]:
+        # EXAONE rejects DataFrames and non-finite targets; keep a contiguous ndarray.
+        X_arr = np.ascontiguousarray(X, dtype=np.float64)
+        y_arr = np.ascontiguousarray(y, dtype=np.float64).reshape(-1)
+        if y_arr.size == 0:
+            raise ValueError("EXAONE Tabular fit received an empty target vector.")
+        if not np.isfinite(y_arr).all():
+            raise ValueError("EXAONE Tabular requires finite targets (NaN/inf not allowed).")
+        return X_arr, y_arr
+
+    def _prepare_features(
+        self,
+        X_df: pd.DataFrame,
+        *,
+        fit: bool,
+    ) -> npt.NDArray[Any]:
+        X = super()._prepare_features(X_df, fit=fit)
+        return np.ascontiguousarray(X, dtype=np.float64)
+
+    def _call_predict(
+        self,
+        estimator: TabularRegressor,
+        X: npt.NDArray[Any],
+    ) -> npt.NDArray[Any]:
+        preds = estimator.predict(np.ascontiguousarray(X, dtype=np.float64))
+        return cast(npt.NDArray[Any], np.asarray(preds).reshape(-1))
+
+    @classmethod
+    def load(cls, model_path: str, name: str = "exaone_tabular") -> EXAONETabularModel:
+        return cast(EXAONETabularModel, super().load(model_path, name))
