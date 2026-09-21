@@ -1,0 +1,22 @@
+_target_: cybench.models.zeelin_trend_residual.ZeeLinTrendResidualEnsemble
+name: zeelin_trend_residual
+framework: pandas
+
+# Submitted ZeeLin Local-Decade Trend–Residual Ensemble v2 hyperparameters
+# (geqiulin/ZeeLin-CYBench-China-Maize). Fixed; do not HPO on the LOYO test years.
+random_state: 20260814
+local_window: 10
+trend_blend: 0.70
+n_jobs: -1
+n_estimators: null  # if set, overrides extra/rf/xgb n_estimators (tests / smoke runs)
+extra_trees_n_estimators: 700
+rf_n_estimators: 700
+xgb_n_estimators: 500
+residual_weights:
+  ridge: 0.15
+  extra: 0.35
+  rf: 0.20
+  xgb: 0.30
+
+# The local-decade trend uses the nearest training years on both sides of a
+# held-out year. That is valid under leave-one-year-out, not walk-forward.
