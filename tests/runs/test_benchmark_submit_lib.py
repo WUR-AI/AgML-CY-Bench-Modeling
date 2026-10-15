@@ -7,9 +7,12 @@ from pathlib import Path
 from cybench.runs.slurm.benchmark_submit_lib import (
     batch_name,
     build_submit_plans,
+    discover_nofeatsel_sources,
     filed_batches,
     horizon_batch_suffix,
+    nofeatsel_batch_name,
     normalize_horizon,
+    parse_batch_name,
 )
 
 
@@ -27,6 +30,23 @@ def test_batch_name():
     assert horizon_batch_suffix("middle-of-season") == "mid"
     assert horizon_batch_suffix("quarter-of-season") == "qtr"
     assert horizon_batch_suffix("qtr") == "qtr"
+
+
+def test_nofeatsel_batch_is_not_a_v4_batch(tmp_path: Path):
+    assert nofeatsel_batch_name("de", "eos") == "baselines_DE_eos_nofeatsel"
+    assert nofeatsel_batch_name("nl", "middle-of-season") == "baselines_NL_mid_nofeatsel"
+    assert parse_batch_name("baselines_DE_eos_nofeatsel") is None
+    assert parse_batch_name("baselines_DE_eos_v4") == ("DE", "eos", 4)
+
+    output = tmp_path / "out"
+    (output / "baselines_DE_eos_v4").mkdir(parents=True)
+    (output / "baselines_NL_eos_v4").mkdir()
+    (output / "baselines_DE_mid_v4").mkdir()
+    (output / "baselines_DE_eos_nofeatsel").mkdir()
+    found = discover_nofeatsel_sources(
+        output, horizon="eos", version=4, countries=["DE"]
+    )
+    assert found == [("DE", output / "baselines_DE_eos_v4", "baselines_DE_eos_nofeatsel")]
 
 
 def test_filed_batches(tmp_path: Path):

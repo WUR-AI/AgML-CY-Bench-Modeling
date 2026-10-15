@@ -9,7 +9,9 @@ from cybench.config import KEY_LOC, KEY_TARGET, KEY_YEAR
 from cybench.datasets.dataset import PandasDataset
 from cybench.util.feature_selection import (
     apply_mrmr_at_origin,
+    feature_selection_enabled,
     fit_mrmr_on_years,
+    resolve_run_feature_selection,
     resolved_feature_selection_cfg,
     select_mrmr_features,
 )
@@ -109,6 +111,31 @@ def test_resolved_feature_selection_cfg_strips_search():
     assert resolved is not None
     assert resolved.k == 50
     assert "_search_" not in resolved
+
+
+def test_nofeatsel_ignores_frozen_feature_selection():
+    frozen = OmegaConf.create({"name": "mrmr", "k": 40, "mrmr_method": "FCD"})
+    screened = OmegaConf.create(
+        {
+            "validation": {"apply_feature_selection": False},
+            "feature_selection": {"name": "mrmr", "k": 50},
+        }
+    )
+    assert feature_selection_enabled(screened) is False
+    assert resolve_run_feature_selection(
+        screened, is_walk_forward=True, frozen_fs_cfg=frozen
+    ) is None
+    assert resolved_feature_selection_cfg(screened) is None
+
+    keep = OmegaConf.create({"validation": {"name": "walk_forward"}})
+    resolved = resolve_run_feature_selection(
+        keep, is_walk_forward=True, frozen_fs_cfg=frozen
+    )
+    assert resolved is not None
+    assert int(resolved.k) == 40
+    assert resolve_run_feature_selection(
+        keep, is_walk_forward=True, frozen_fs_cfg=None
+    ) is None
 
 
 def test_mrmr_drops_sparse_columns_without_imputation():

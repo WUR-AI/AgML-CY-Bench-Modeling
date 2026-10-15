@@ -13,6 +13,10 @@ name: walk_forward
 # optimal_epochs.yaml) from the screening phase split folder.
 frozen_screening_dir: null
 
+# false: ignore optimal_feature_selection.yaml and fit on the full feature table.
+# Model hyperparameters still come from optimal_model.yaml (nofeatsel ablation).
+apply_feature_selection: true
+
 # Forecast years: one rolling split per year, train = all years strictly before it.
 # Use the same window as screening test (e.g. 5-last → 2019–2023 for maize/US).
 test_years: 5-last
