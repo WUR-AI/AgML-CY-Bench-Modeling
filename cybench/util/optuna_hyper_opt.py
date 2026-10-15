@@ -18,7 +18,11 @@ from tqdm import tqdm
 
 from cybench.util.config_utils import set_seed, remove_search_keys, adjust_model_cfg_to_dataset
 from cybench.datasets.dataset import BaseDataset, PandasDataset
-from cybench.util.feature_selection import apply_mrmr_at_origin, resolved_feature_selection_cfg
+from cybench.util.feature_selection import (
+    apply_mrmr_at_origin,
+    feature_selection_enabled,
+    resolved_feature_selection_cfg,
+)
 from cybench.util.screening_artifacts import save_optimal_epochs
 from cybench.util.validation import get_splits
 
@@ -301,7 +305,7 @@ class OptunaOptimizer:
         with open(output_file, "w") as f:
             OmegaConf.save(best_model_config, f)
 
-        if "feature_selection" in best_config:
+        if feature_selection_enabled(best_config) and "feature_selection" in best_config:
             fs_cfg = remove_search_keys(best_config.feature_selection)
             fs_file = self.path / "optimal_feature_selection.yaml"
             OmegaConf.save(fs_cfg, fs_file)
@@ -309,7 +313,7 @@ class OptunaOptimizer:
 
         # Save search space metadata for post-hoc boundary analysis
         search_space = _extract_search_space(self.cfg.model)
-        if "feature_selection" in self.cfg:
+        if feature_selection_enabled(self.cfg) and "feature_selection" in self.cfg:
             search_space.update(_extract_search_space(self.cfg.feature_selection, "feature_selection"))
         if search_space and bool(OmegaConf.select(self.cfg, "store.save_hpo_search_space", default=False)):
             ss_file = self.path / "search_space.yaml"
@@ -353,7 +357,7 @@ class OptunaOptimizer:
         trial_model_cfg = remove_search_keys(trial_model_cfg)
 
         fs_cfg = None
-        if "feature_selection" in cfg_copy:
+        if feature_selection_enabled(cfg_copy) and "feature_selection" in cfg_copy:
             if not isinstance(self.dataset, PandasDataset):
                 raise ValueError(
                     "feature_selection requires a PandasDataset "

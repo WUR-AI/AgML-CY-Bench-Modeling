@@ -418,12 +418,15 @@ append_extra_overrides_file() {
 }
 
 # Find .../<test_years>/optimal_model.yaml under the latest horizon-tagged screening run.
+# CYBENCH_SCREENING_BASELINES_DIR reads v4 (or another) screening while walk-forward
+# writes to a different CYBENCH_EXPERIMENT_NAME (nofeatsel).
 find_frozen_screening_dir() {
   local crop=$1 country=$2 model_slug=$3
-  local htag model_name run_dir frozen
+  local htag model_name run_dir frozen search_dir
   htag=$(horizon_tag)
   model_name=$(model_run_name "${model_slug}")
-  run_dir=$(ls -td "${BASELINES_DIR}/${crop}_${country}_${model_name}_screening_${htag}_"* 2>/dev/null | head -1 || true)
+  search_dir="${CYBENCH_SCREENING_BASELINES_DIR:-${BASELINES_DIR}}"
+  run_dir=$(ls -td "${search_dir}/${crop}_${country}_${model_name}_screening_${htag}_"* 2>/dev/null | head -1 || true)
   if [[ -z "${run_dir}" ]]; then
     echo "No screening run for ${crop}/${country}/${model_name} (model=${model_slug}) horizon=${PREDICTION_HORIZON} (tag=${htag})" >&2
     return 1

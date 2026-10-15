@@ -45,7 +45,8 @@ from cybench.util.optuna_hyper_opt import OptunaOptimizer
 from cybench.util.store_and_cache import make_folder, save_preds, save_meta_dict
 from cybench.util.feature_selection import (
     apply_mrmr_at_origin,
-    resolved_feature_selection_cfg,
+    feature_selection_enabled,
+    resolve_run_feature_selection,
     save_selected_features,
 )
 from cybench.util.screening_artifacts import (
@@ -245,11 +246,6 @@ def main(cfg):
                         "Walk-forward force CPU: frozen model device %s → cpu",
                         prev_device,
                     )
-            fs_cfg = (
-                cast(DictConfig, OmegaConf.create(OmegaConf.to_container(frozen_fs_cfg)))
-                if frozen_fs_cfg is not None
-                else None
-            )
             if _is_torch_model(model_cfg) and frozen_E_star is not None:
                 model_cfg = _prepare_walk_forward_nn_cfg(model_cfg, frozen_E_star)
         elif "hp_search" in cfg:
@@ -281,8 +277,26 @@ def main(cfg):
             # Always save for walk-forward chaining (incl. naive models without HPO).
             OmegaConf.save(config=model_cfg, f=split_path / "optimal_model.yaml")
 
-        if not is_walk_forward:
-            fs_cfg = resolved_feature_selection_cfg(cfg)
+        fs_cfg = resolve_run_feature_selection(
+            cfg,
+            is_walk_forward=is_walk_forward,
+            frozen_fs_cfg=frozen_fs_cfg,
+        )
+        if not feature_selection_enabled(cfg):
+            OmegaConf.save(
+                OmegaConf.create(
+                    {
+                        "applied": False,
+                        "protocol": "nofeatsel",
+                        "source": "validation.apply_feature_selection=false",
+                    }
+                ),
+                f=split_path / "feature_selection_applied.yaml",
+            )
+            log.info(
+                "Feature selection off (nofeatsel): full feature set, "
+                "screened model hyperparameters only."
+            )
         if fs_cfg is not None:
             if not isinstance(train_dataset, PandasDataset):
                 raise ValueError(

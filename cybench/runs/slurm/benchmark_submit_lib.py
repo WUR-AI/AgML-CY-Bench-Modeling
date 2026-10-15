@@ -71,6 +71,51 @@ def batch_name(country: str, horizon: str, version: int = 4) -> str:
     return f"baselines_{cc}_{hz}_v{version}"
 
 
+# Walk-forward ablation: screened model hyperparameters, no mRMR.
+# Distinct from ``baselines_*_v4`` so parse_batch_name / completion ignore it.
+NOFEATSEL_PROTOCOL = "nofeatsel"
+
+
+def nofeatsel_batch_name(country: str, horizon: str) -> str:
+    """Output batch for tabular foundation models fit on the full feature table."""
+    cc = country.upper()
+    hz = horizon_batch_suffix(horizon)
+    return f"baselines_{cc}_{hz}_{NOFEATSEL_PROTOCOL}"
+
+
+def discover_nofeatsel_sources(
+    output_root: Path,
+    *,
+    horizon: str,
+    version: int = 4,
+    countries: list[str] | None = None,
+) -> list[tuple[str, Path, str]]:
+    """Pair existing vN screening batches with a separate nofeatsel output name.
+
+    Returns ``(country, screening_dir, nofeatsel_batch_name)``. Folders named
+    ``baselines_*_nofeatsel`` are not screening sources.
+    """
+    root = Path(output_root)
+    if not root.is_dir():
+        return []
+    hz = horizon_batch_suffix(normalize_horizon(horizon))
+    wanted = {c.upper() for c in countries} if countries else None
+    found: list[tuple[str, Path, str]] = []
+    for entry in sorted(root.iterdir()):
+        if not entry.is_dir():
+            continue
+        parsed = parse_batch_name(entry.name)
+        if parsed is None:
+            continue
+        cc, batch_hz, ver = parsed
+        if batch_hz != hz or ver != version:
+            continue
+        if wanted is not None and cc not in wanted:
+            continue
+        found.append((cc, entry, nofeatsel_batch_name(cc, horizon)))
+    return found
+
+
 def parse_batch_name(name: str) -> tuple[str, str, int] | None:
     match = _BATCH_RE.match(name)
     if not match:

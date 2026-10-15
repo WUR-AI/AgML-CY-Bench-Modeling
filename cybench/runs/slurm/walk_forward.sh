@@ -80,6 +80,9 @@ elif [[ "${WF_RUN_REPS}" != "1" ]]; then
   seed_note=" | seeds=${WF_START_SEED}..$((WF_START_SEED + WF_RUN_REPS - 1))"
 fi
 echo "Walk-forward | ${CROP}/${COUNTRY} | model=${MODEL} | device=$(device_mode_label) | horizon=${PREDICTION_HORIZON} | batch=${CYBENCH_EXPERIMENT_NAME} | target_repetitions=${WF_REPETITIONS}${seed_note}${resume_note} | frozen=${FROZEN_DIR}"
+if [[ -n "${CYBENCH_SCREENING_BASELINES_DIR:-}" ]]; then
+  echo "Screening batch (read-only): ${CYBENCH_SCREENING_BASELINES_DIR}"
+fi
 
 COMMON=(
   "dataset/crop=${CROP}"
@@ -102,7 +105,10 @@ fi
 if [[ -n "${WF_RUN_DIR}" ]]; then
   EXTRA+=("hydra.run.dir=${WF_RUN_DIR}")
 fi
-if [[ "${FEATURE_DESIGN}" == "yes" && "${FRAMEWORK}" == "pandas" ]]; then
+if [[ "${CYBENCH_APPLY_FEATURE_SELECTION:-yes}" == "no" ]]; then
+  EXTRA+=(validation.apply_feature_selection=false)
+  echo "Feature selection off (nofeatsel): frozen model hyperparameters, full feature table"
+elif [[ "${FEATURE_DESIGN}" == "yes" && "${FRAMEWORK}" == "pandas" ]]; then
   EXTRA+=(+feature_selection=mrmr)
 fi
 append_extra_overrides_file EXTRA

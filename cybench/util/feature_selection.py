@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 from feature_engine.selection import MRMR
@@ -154,8 +155,46 @@ def save_selected_features(
     )
 
 
+def feature_selection_enabled(cfg) -> bool:
+    """Whether mRMR should run for this experiment.
+
+    Missing ``validation.apply_feature_selection`` keeps the historical default:
+    apply a feature-selection config or a frozen screening artifact when one exists.
+    Set the flag false to keep screened model hyperparameters and use the full
+    feature table (the ``nofeatsel`` ablation).
+    """
+    value = OmegaConf.select(cfg, "validation.apply_feature_selection", default=None)
+    if value is None:
+        return True
+    return bool(value)
+
+
 def resolved_feature_selection_cfg(cfg) -> DictConfig | None:
     """Return feature-selection config with any ``_search_`` keys stripped."""
+    if not feature_selection_enabled(cfg):
+        return None
     if "feature_selection" not in cfg:
         return None
     return remove_search_keys(cfg.feature_selection)
+
+
+def resolve_run_feature_selection(
+    cfg,
+    *,
+    is_walk_forward: bool,
+    frozen_fs_cfg: DictConfig | None,
+) -> DictConfig | None:
+    """Feature-selection config for one split, or None to keep every column.
+
+    Walk-forward normally freezes ``optimal_feature_selection.yaml`` from screening.
+    ``validation.apply_feature_selection=false`` ignores that artifact and does not
+    read a Hydra ``feature_selection`` group. Model hyperparameters stay on
+    ``optimal_model.yaml``.
+    """
+    if not feature_selection_enabled(cfg):
+        return None
+    if is_walk_forward:
+        if frozen_fs_cfg is None:
+            return None
+        return cast(DictConfig, OmegaConf.create(OmegaConf.to_container(frozen_fs_cfg)))
+    return resolved_feature_selection_cfg(cfg)

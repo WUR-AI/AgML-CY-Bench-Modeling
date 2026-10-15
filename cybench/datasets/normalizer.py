@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import numpy as np
@@ -7,6 +8,8 @@ import pandas as pd
 from omegaconf import OmegaConf
 
 from cybench.config import KEY_YEAR
+
+log = logging.getLogger(__name__)
 
 
 class Normalizer:
@@ -34,6 +37,27 @@ class Normalizer:
     def __init__(self, norm_cfg: dict[str, Any]):
         self.name = norm_cfg["name"]
         self.feature_cfg: dict[str, Any] = norm_cfg["features"]
+        if bool(norm_cfg.get("skip_standard")):
+            self._disable_standard_scaling()
+
+    def _disable_standard_scaling(self) -> None:
+        """Pass ``standard`` (z-score) features through unchanged.
+
+        ``logsinh`` and ``minmax`` stay. Used by the nofeatsel ablation so
+        tabular foundation models see the table before z-scoring.
+        """
+        skipped: list[str] = []
+        for feature, cfg in self.feature_cfg.items():
+            if cfg.get("type") != "standard":
+                continue
+            cfg["type"] = "none"
+            cfg["params"] = {}
+            skipped.append(str(feature))
+        log.info(
+            "Standard scaling disabled: %d feature(s) passed through (e.g. %s).",
+            len(skipped),
+            ", ".join(skipped[:8]),
+        )
 
     def _fit_feature(self, series: pd.Series, ftype: str):
         """Compute needed statistics depending on normalization type."""
