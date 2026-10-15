@@ -114,8 +114,10 @@ cybench/runs/slurm/submit_benchmark.sh all --horizon eos --dry-run
 ## Tabular foundation models without feature selection
 
 Ablation for TabPFN, TabICL, and TabDPT: keep the hyperparameters already stored in
-`optimal_model.yaml` from screening, and fit walk-forward on the full feature table
-(no mRMR). Screening is not rerun, so `k` is not retuned. v4 batches are read-only.
+`optimal_model.yaml` from screening, fit walk-forward on the full feature table
+(no mRMR), and skip dataset z-scoring (`normalizer` type `standard`). `logsinh`
+(precipitation, ET0, VPD, CWB) and the year min–max stay. Screening is not rerun,
+so `k` is not retuned. v4 batches are read-only.
 
 Output folders are `baselines_{CC}_{hz}_nofeatsel` (not a `v4` name, so completion
 and publish do not mix them with the paper runs).

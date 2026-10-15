@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
-# Walk-forward for tabular foundation models (tabpfn, tabicl, tabdpt) without mRMR.
-# Model hyperparameters are the ones already frozen in a v4 (or --version) screening
-# batch. Feature selection is not re-tuned and is not applied.
+# Walk-forward for tabular foundation models (tabpfn, tabicl, tabdpt) without mRMR
+# and without dataset z-scoring (normalizer type=standard). logsinh and year minmax
+# stay. Model hyperparameters are the ones already frozen in a v4 (or --version)
+# screening batch. Feature selection is not re-tuned and is not applied.
 #
 # Results are written to baselines_{CC}_{hz}_nofeatsel, next to the v4 batch but
 # not inside it. v4 folders are only read.
@@ -21,6 +22,7 @@ Usage: submit_nofeatsel.sh [options]
 Walk-forward only. Does not rerun screening or hyperparameter search.
 Reads optimal_model.yaml from baselines_{CC}_{hz}_v{version}.
 Writes predictions to baselines_{CC}_{hz}_nofeatsel.
+Skips mRMR and dataset z-scoring (standard). logsinh and year minmax stay.
 
 Options:
   --horizon H       eos | middle-of-season | quarter-of-season | early-season
@@ -228,6 +230,7 @@ for horizon in "${HORIZONS[@]}"; do
 hydra.run.dir=${out_dir}/\${run.name}
 hydra.sweep.dir=${out_dir}
 experiment.results_dir=${out_dir}
++dataset.normalizer.skip_standard=true
 EOF
     export CYBENCH_EXTRA_OVERRIDES_FILE="${overrides}"
     export CYBENCH_APPLY_FEATURE_SELECTION=no

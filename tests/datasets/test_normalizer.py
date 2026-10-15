@@ -1,5 +1,6 @@
 """Tests for feature normalization."""
 
+import numpy as np
 import pandas as pd
 
 from cybench.config import KEY_LOC, KEY_YEAR
@@ -104,3 +105,24 @@ def test_fit_normalize_prefers_aligned_non_temporal_when_sufficient():
     params = normalizer.feature_cfg["awc"]["params"]
     assert params["mean"] == 15.0
     assert params["std"] > 0
+
+
+def test_skip_standard_passes_zscore_features_through():
+    cfg = OmegaConf.create(
+        {
+            "name": "fit",
+            "skip_standard": True,
+            "features": {
+                "tavg": {"type": "standard", "params": None},
+                "prec": {"type": "logsinh", "params": None},
+                "year": {"type": "minmax", "params": {"min": 2000, "max": 2025}},
+            },
+        }
+    )
+    normalizer = Normalizer(cfg)
+    df = pd.DataFrame({"tavg": [10.0, 20.0], "prec": [0.0, 1.0], "year": [2000, 2025]})
+    out = normalizer.fit_normalize({"meteo": df})["meteo"]
+    assert normalizer.feature_cfg["tavg"]["type"] == "none"
+    assert out["tavg"].tolist() == [10.0, 20.0]
+    assert out["prec"].iloc[1] == np.arcsinh(1.0)
+    assert out["year"].iloc[0] != 2000
